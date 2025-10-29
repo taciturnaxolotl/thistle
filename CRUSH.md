@@ -10,6 +10,39 @@ This is a Bun-based transcription service using the [Bun fullstack pattern](http
 - Language: TypeScript with strict mode
 - Frontend: Vanilla HTML/CSS/JS with lightweight helpers on top of web components
 
+## Design System
+
+ALWAYS use the project's CSS variables for colors:
+
+```css
+:root {
+  /* Color palette */
+  --gunmetal: #2d3142ff;    /* dark blue-gray */
+  --paynes-gray: #4f5d75ff; /* medium blue-gray */
+  --silver: #bfc0c0ff;      /* light gray */
+  --white: #ffffffff;       /* white */
+  --coral: #ef8354ff;       /* warm orange */
+
+  /* Semantic color assignments */
+  --text: var(--gunmetal);
+  --background: var(--white);
+  --primary: var(--paynes-gray);
+  --secondary: var(--silver);
+  --accent: var(--coral);
+}
+```
+
+**Color usage:**
+- NEVER hardcode colors like `#4f46e5`, `white`, `red`, etc.
+- Always use semantic variables (`var(--primary)`, `var(--background)`, `var(--accent)`, etc.) or named color variables (`var(--gunmetal)`, `var(--coral)`, etc.)
+
+**Dimensions:**
+- Use `rem` for all sizes, spacing, and widths (not `px`)
+- Base font size is 16px (1rem = 16px)
+- Common values: `0.5rem` (8px), `1rem` (16px), `2rem` (32px), `3rem` (48px)
+- Max widths: `48rem` (768px) for content, `56rem` (896px) for forms/data
+- Spacing scale: `0.25rem`, `0.5rem`, `0.75rem`, `1rem`, `1.5rem`, `2rem`, `3rem`
+
 ## NO FRAMEWORKS
 
 NEVER use React, Vue, Svelte, or any heavy framework.
@@ -118,17 +151,38 @@ HTML files can directly import `.ts` or `.js` files:
 
 ```html
 <!DOCTYPE html>
-<html>
-  <head>
-    <link rel="stylesheet" href="./styles.css">
-  </head>
-  <body>
-    <h1>Hello, world!</h1>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Title - Thistle</title>
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🪻</text></svg>">
+  <link rel="stylesheet" href="../styles/main.css">
+</head>
+
+<body>
+  <auth-component></auth-component>
+  
+  <main>
+    <h1>Page Title</h1>
     <my-component></my-component>
-    <script type="module" src="./frontend.ts"></script>
-  </body>
+  </main>
+
+  <script type="module" src="../components/auth.ts"></script>
+  <script type="module" src="../components/my-component.ts"></script>
+</body>
+
 </html>
 ```
+
+**Standard HTML template:**
+- Always include the `<auth-component>` element for consistent login/logout UI
+- Always include the thistle emoji favicon
+- Always include proper meta tags (charset, viewport)
+- Structure: auth component, then main content, then scripts
+- Import `auth.ts` on every page for authentication UI
 
 Bun's bundler will transpile and bundle automatically. `<link>` tags pointing to stylesheets work with Bun's CSS bundler.
 

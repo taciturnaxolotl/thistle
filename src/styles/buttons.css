@@ -1,0 +1,59 @@
+/* Shared button styles for consistent UI across components */
+
+.btn {
+	padding: 0.75rem 1.5rem;
+	border-radius: 6px;
+	font-size: 1rem;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s;
+	font-family: inherit;
+	border: 2px solid;
+}
+
+.btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* Affirmative actions (submit, save, confirm) */
+.btn-affirmative {
+	background: var(--primary);
+	color: white;
+	border-color: var(--primary);
+}
+
+.btn-affirmative:hover:not(:disabled) {
+	background: transparent;
+	color: var(--primary);
+}
+
+/* Neutral actions (cancel, close) */
+.btn-neutral {
+	background: transparent;
+	color: var(--text);
+	border-color: var(--secondary);
+}
+
+.btn-neutral:hover:not(:disabled) {
+	border-color: var(--primary);
+	color: var(--primary);
+}
+
+/* Rejection/destructive actions (delete, logout) */
+.btn-rejection {
+	background: transparent;
+	color: var(--accent);
+	border-color: var(--accent);
+}
+
+.btn-rejection:hover:not(:disabled) {
+	background: var(--accent);
+	color: white;
+}
+
+/* Small button variant */
+.btn-small {
+	padding: 0.5rem 1rem;
+	font-size: 0.875rem;
+}

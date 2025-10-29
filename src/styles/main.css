@@ -1,9 +1,19 @@
+@import url('./buttons.css');
+
 :root {
-  --text: #5b6971;
-  --background: #fefbf1;
-  --primary: #8fa668;
-  --secondary: #d0cdf9;
-  --accent: #e59976;
+  /* Color palette */
+  --gunmetal: #2d3142ff;
+  --paynes-gray: #4f5d75ff;
+  --silver: #bfc0c0ff;
+  --off-white: #fcf6f1;
+  --coral: #ef8354ff;
+
+  /* Semantic color assignments */
+  --text: var(--gunmetal);
+  --background: var(--off-white);
+  --primary: var(--paynes-gray);
+  --secondary: var(--silver);
+  --accent: var(--coral);
 }
 
 body {
@@ -16,31 +26,54 @@ body {
   color: var(--text);
 }
 
-h1, h2, h3, h4, h5 {
+h1,
+h2,
+h3,
+h4,
+h5 {
   font-family: 'Charter', 'Bitstream Charter', 'Sitka Text', Cambria, serif;
   font-weight: 600;
   line-height: 1.2;
   color: var(--text);
 }
 
-html {font-size: 100%;} /* 16px */
+html {
+  font-size: 100%;
+}
+
+/* 16px */
 
 h1 {
-  font-size: 4.210rem; /* 67.36px */
+  font-size: 4.210rem;
+  /* 67.36px */
   margin-top: 0;
 }
 
-h2 {font-size: 3.158rem; /* 50.56px */}
+h2 {
+  font-size: 3.158rem;
+  /* 50.56px */
+}
 
-h3 {font-size: 2.369rem; /* 37.92px */}
+h3 {
+  font-size: 2.369rem;
+  /* 37.92px */
+}
 
-h4 {font-size: 1.777rem; /* 28.48px */}
+h4 {
+  font-size: 1.777rem;
+  /* 28.48px */
+}
 
-h5 {font-size: 1.333rem; /* 21.28px */}
+h5 {
+  font-size: 1.333rem;
+  /* 21.28px */
+}
 
-small {font-size: 0.750rem; /* 12px */}
+small {
+  font-size: 0.750rem;
+  /* 12px */
+}
 
 main {
-  max-width: 800px;
   margin: 0 auto;
 }

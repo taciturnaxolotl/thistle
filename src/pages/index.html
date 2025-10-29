@@ -8,17 +8,26 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🪻</text></svg>">
   <link rel="stylesheet" href="../styles/main.css">
+  <style>
+    main {
+      max-width: 48rem;
+    }
+  </style>
 </head>
 
 <body>
+  <auth-component></auth-component>
+
   <main>
     <h1>Thistle</h1>
+
     <p>Here is a basic counter to figure out the basics of web components</p>
 
     <counter-component></counter-component>
   </main>
 
   <script type="module" src="../components/counter.ts"></script>
+  <script type="module" src="../components/auth.ts"></script>
 </body>
 
 </html>

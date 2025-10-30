@@ -6,12 +6,16 @@
 ```bash
 .
 ├── public
-└── src
-    ├── components
-    ├── pages
-    └── styles
+├── src
+│   ├── components
+│   ├── pages
+│   └── styles
+└── whisper-server
+    ├── main.py
+    ├── requirements.txt
+    └── README.md
 
-6 directories
+9 directories, 3 files
 ```
 
 ## What's this?
@@ -30,6 +34,33 @@ bun dev
 ```
 
 Your server will be running at `http://localhost:3000` with hot module reloading. Just edit any `.ts`, `.html`, or `.css` file and watch it update in the browser.
+
+### Transcription Service
+
+Thistle requires a separate Whisper transcription server for audio processing. Set it up in the `whisper-server/` directory:
+
+```bash
+cd whisper-server
+./run.sh
+```
+
+Or manually:
+```bash
+cd whisper-server
+pip install -r requirements.txt
+python main.py
+```
+
+The Whisper server will run on `http://localhost:8000`. Make sure it's running before using transcription features.
+
+### Environment Setup
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+# Edit .env to set WHISPER_SERVICE_URL=http://localhost:8000
+```
 
 The tech stack is pretty minimal on purpose. Lit components (~8-10KB gzipped) for things that need reactivity, vanilla JS for simple stuff, and CSS variables for theming. The goal is to keep the total JS bundle as small as possible.
 

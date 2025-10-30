@@ -1,2 +1,4 @@
 node_modules
 thistle.db
+uploads/
+.env

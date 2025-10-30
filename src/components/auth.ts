@@ -306,6 +306,7 @@ export class AuthComponent extends LitElement {
 				this.user = await response.json();
 				this.closeModal();
 				await this.checkAuth();
+				window.dispatchEvent(new CustomEvent("auth-changed"));
 			} else {
 				const response = await fetch("/api/auth/login", {
 					method: "POST",
@@ -335,6 +336,7 @@ export class AuthComponent extends LitElement {
 				this.user = await response.json();
 				this.closeModal();
 				await this.checkAuth();
+				window.dispatchEvent(new CustomEvent("auth-changed"));
 			}
 		} finally {
 			this.isSubmitting = false;
@@ -345,6 +347,7 @@ export class AuthComponent extends LitElement {
 		try {
 			await fetch("/api/auth/logout", { method: "POST" });
 			this.user = null;
+			window.dispatchEvent(new CustomEvent("auth-changed"));
 		} catch {
 			// Silent fail
 		}
@@ -374,11 +377,12 @@ export class AuthComponent extends LitElement {
 					${
 						this.showModal
 							? html`
-								<div class="user-menu">
-									<a href="/settings" @click=${this.closeModal}>Settings</a>
-									<button @click=${this.handleLogout}>Logout</button>
-								</div>
-						  `
+							<div class="user-menu">
+							<a href="/transcribe" @click=${this.closeModal}>Transcribe</a>
+							<a href="/settings" @click=${this.closeModal}>Settings</a>
+							 <button @click=${this.handleLogout}>Logout</button>
+							</div>
+					  `
 							: ""
 					}
 				</div>

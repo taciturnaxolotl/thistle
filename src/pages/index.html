@@ -11,6 +11,75 @@
   <style>
     main {
       max-width: 48rem;
+      text-align: center;
+      padding: 4rem 2rem;
+    }
+
+    .hero-title {
+      font-size: 3rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 1rem;
+    }
+
+    .hero-subtitle {
+      font-size: 1.25rem;
+      color: var(--text);
+      opacity: 0.8;
+      margin-bottom: 2rem;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 2rem;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      border: 2px solid;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: transparent;
+      color: var(--primary);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--secondary);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    @media (max-width: 640px) {
+      .hero-title {
+        font-size: 2.5rem;
+      }
+
+      .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+      }
     }
   </style>
 </head>
@@ -19,14 +88,15 @@
   <auth-component></auth-component>
 
   <main>
-    <h1>Thistle</h1>
+    <h1 class="hero-title">Thistle</h1>
+    <p class="hero-subtitle">AI-powered audio transcription made simple</p>
 
-    <p>Here is a basic counter to figure out the basics of web components</p>
-
-    <counter-component></counter-component>
+    <div class="cta-buttons">
+      <a href="/transcribe" class="btn btn-primary">Start Transcribing</a>
+      <a href="/settings" class="btn btn-secondary">Settings</a>
+    </div>
   </main>
 
-  <script type="module" src="../components/counter.ts"></script>
   <script type="module" src="../components/auth.ts"></script>
 </body>
 

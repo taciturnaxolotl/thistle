@@ -1,50 +1,83 @@
+import db from "./db/schema";
 import {
-authenticateUser,
-cleanupExpiredSessions,
-createSession,
-createUser,
-deleteSession,
-deleteUser,
-getSession,
-getSessionFromRequest,
-getUserBySession,
-getUserSessionsForUser,
-updateUserAvatar,
-updateUserEmail,
-updateUserName,
+	authenticateUser,
+	cleanupExpiredSessions,
+	createSession,
+	createUser,
+	deleteSession,
+	deleteUser,
+	getSession,
+	getSessionFromRequest,
+	getUserBySession,
+	getUserSessionsForUser,
+	updateUserAvatar,
+	updateUserEmail,
+	updateUserName,
 	updateUserPassword,
 } from "./lib/auth";
+import { handleError, ValidationErrors } from "./lib/errors";
+import { requireAuth } from "./lib/middleware";
+import {
+	MAX_FILE_SIZE,
+	TranscriptionEventEmitter,
+	type TranscriptionUpdate,
+	WhisperServiceManager,
+} from "./lib/transcription";
 import indexHTML from "./pages/index.html";
 import settingsHTML from "./pages/settings.html";
+import transcribeHTML from "./pages/transcribe.html";
+
+// Environment variables
+const WHISPER_SERVICE_URL =
+	process.env.WHISPER_SERVICE_URL || "http://localhost:8000";
+
+// Create uploads directory if it doesn't exist
+await Bun.write("./uploads/.gitkeep", "");
+
+// Initialize transcription system
+const transcriptionEvents = new TranscriptionEventEmitter();
+const whisperService = new WhisperServiceManager(
+	WHISPER_SERVICE_URL,
+	db,
+	transcriptionEvents,
+);
 
 // Clean up expired sessions every hour
 setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
 
+// Sync with Whisper DB on startup
+await whisperService.syncWithWhisper();
+
+// Periodic sync every 5 minutes as backup (SSE handles real-time updates)
+setInterval(() => whisperService.syncWithWhisper(), 5 * 60 * 1000);
+
+// Clean up stale files daily
+setInterval(() => whisperService.cleanupStaleFiles(), 24 * 60 * 60 * 1000);
+
 const server = Bun.serve({
 	port: 3000,
+	idleTimeout: 120, // 120 seconds for SSE connections
 	routes: {
 		"/": indexHTML,
 		"/settings": settingsHTML,
+		"/transcribe": transcribeHTML,
 		"/api/auth/register": {
 			POST: async (req) => {
 				try {
 					const body = await req.json();
 					const { email, password, name } = body;
-
 					if (!email || !password) {
 						return Response.json(
 							{ error: "Email and password required" },
 							{ status: 400 },
 						);
 					}
-
 					if (password.length < 8) {
 						return Response.json(
 							{ error: "Password must be at least 8 characters" },
 							{ status: 400 },
 						);
 					}
-
 					const user = await createUser(email, password, name);
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
@@ -52,7 +85,6 @@ const server = Bun.serve({
 						"unknown";
 					const userAgent = req.headers.get("user-agent") ?? "unknown";
 					const sessionId = createSession(user.id, ipAddress, userAgent);
-
 					return Response.json(
 						{ user: { id: user.id, email: user.email } },
 						{
@@ -81,30 +113,25 @@ const server = Bun.serve({
 				try {
 					const body = await req.json();
 					const { email, password } = body;
-
 					if (!email || !password) {
 						return Response.json(
 							{ error: "Email and password required" },
 							{ status: 400 },
 						);
 					}
-
 					const user = await authenticateUser(email, password);
-
 					if (!user) {
 						return Response.json(
 							{ error: "Invalid email or password" },
 							{ status: 401 },
 						);
 					}
-
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
 						req.headers.get("x-real-ip") ??
 						"unknown";
 					const userAgent = req.headers.get("user-agent") ?? "unknown";
 					const sessionId = createSession(user.id, ipAddress, userAgent);
-
 					return Response.json(
 						{ user: { id: user.id, email: user.email } },
 						{
@@ -113,18 +140,17 @@ const server = Bun.serve({
 							},
 						},
 					);
-				} catch (_) {
+				} catch {
 					return Response.json({ error: "Login failed" }, { status: 500 });
 				}
 			},
 		},
 		"/api/auth/logout": {
-			POST: (req) => {
+			POST: async (req) => {
 				const sessionId = getSessionFromRequest(req);
 				if (sessionId) {
 					deleteSession(sessionId);
 				}
-
 				return Response.json(
 					{ success: true },
 					{
@@ -142,17 +168,14 @@ const server = Bun.serve({
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(sessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				return Response.json({
 					email: user.email,
 					name: user.name,
 					avatar: user.avatar,
-					created_at: user.created_at,
 				});
 			},
 		},
@@ -162,12 +185,10 @@ const server = Bun.serve({
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(sessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				const sessions = getUserSessionsForUser(user.id);
 				return Response.json({
 					sessions: sessions.map((s) => ({
@@ -176,7 +197,6 @@ const server = Bun.serve({
 						user_agent: s.user_agent,
 						created_at: s.created_at,
 						expires_at: s.expires_at,
-						is_current: s.id === sessionId,
 					})),
 				});
 			},
@@ -185,47 +205,38 @@ const server = Bun.serve({
 				if (!currentSessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(currentSessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				const body = await req.json();
 				const targetSessionId = body.sessionId;
-
 				if (!targetSessionId) {
 					return Response.json(
 						{ error: "Session ID required" },
 						{ status: 400 },
 					);
 				}
-
 				// Verify the session belongs to the user
 				const targetSession = getSession(targetSessionId);
 				if (!targetSession || targetSession.user_id !== user.id) {
 					return Response.json({ error: "Session not found" }, { status: 404 });
 				}
-
 				deleteSession(targetSessionId);
-
 				return Response.json({ success: true });
 			},
 		},
-		"/api/auth/delete-account": {
+		"/api/user": {
 			DELETE: (req) => {
 				const sessionId = getSessionFromRequest(req);
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(sessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				deleteUser(user.id);
-
 				return Response.json(
 					{ success: true },
 					{
@@ -243,19 +254,15 @@ const server = Bun.serve({
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(sessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				const body = await req.json();
 				const { email } = body;
-
 				if (!email) {
 					return Response.json({ error: "Email required" }, { status: 400 });
 				}
-
 				try {
 					updateUserEmail(user.id, email);
 					return Response.json({ success: true });
@@ -280,26 +287,21 @@ const server = Bun.serve({
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(sessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				const body = await req.json();
 				const { password } = body;
-
 				if (!password) {
 					return Response.json({ error: "Password required" }, { status: 400 });
 				}
-
 				if (password.length < 8) {
 					return Response.json(
 						{ error: "Password must be at least 8 characters" },
 						{ status: 400 },
 					);
 				}
-
 				try {
 					await updateUserPassword(user.id, password);
 					return Response.json({ success: true });
@@ -312,34 +314,30 @@ const server = Bun.serve({
 			},
 		},
 		"/api/user/name": {
-		PUT: async (req) => {
-		const sessionId = getSessionFromRequest(req);
-		if (!sessionId) {
-		return Response.json({ error: "Not authenticated" }, { status: 401 });
-		}
-
-		const user = getUserBySession(sessionId);
-		if (!user) {
-		return Response.json({ error: "Invalid session" }, { status: 401 });
-		}
-
-		const body = await req.json();
-		const { name } = body;
-
-		if (!name) {
-		return Response.json({ error: "Name required" }, { status: 400 });
-		}
-
-		try {
-		updateUserName(user.id, name);
-		return Response.json({ success: true });
-		} catch {
-		return Response.json(
-		{ error: "Failed to update name" },
-		{ status: 500 },
-		);
-		}
-		},
+			PUT: async (req) => {
+				const sessionId = getSessionFromRequest(req);
+				if (!sessionId) {
+					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				}
+				const user = getUserBySession(sessionId);
+				if (!user) {
+					return Response.json({ error: "Invalid session" }, { status: 401 });
+				}
+				const body = await req.json();
+				const { name } = body;
+				if (!name) {
+					return Response.json({ error: "Name required" }, { status: 400 });
+				}
+				try {
+					updateUserName(user.id, name);
+					return Response.json({ success: true });
+				} catch {
+					return Response.json(
+						{ error: "Failed to update name" },
+						{ status: 500 },
+					);
+				}
+			},
 		},
 		"/api/user/avatar": {
 			PUT: async (req) => {
@@ -347,19 +345,15 @@ const server = Bun.serve({
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
 				}
-
 				const user = getUserBySession(sessionId);
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
-
 				const body = await req.json();
 				const { avatar } = body;
-
 				if (!avatar) {
 					return Response.json({ error: "Avatar required" }, { status: 400 });
 				}
-
 				try {
 					updateUserAvatar(user.id, avatar);
 					return Response.json({ success: true });
@@ -371,11 +365,193 @@ const server = Bun.serve({
 				}
 			},
 		},
+		"/api/transcriptions/:id/stream": {
+			GET: (req) => {
+				const sessionId = getSessionFromRequest(req);
+				if (!sessionId) {
+					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				}
+				const user = getUserBySession(sessionId);
+				if (!user) {
+					return Response.json({ error: "Invalid session" }, { status: 401 });
+				}
+				const transcriptionId = req.params.id;
+				// Verify ownership
+				const transcription = db
+					.query<{ id: string; user_id: number; status: string }, [string]>(
+						"SELECT id, user_id, status FROM transcriptions WHERE id = ?",
+					)
+					.get(transcriptionId);
+				if (!transcription || transcription.user_id !== user.id) {
+					return Response.json(
+						{ error: "Transcription not found" },
+						{ status: 404 },
+					);
+				}
+				// Event-driven SSE stream (NO POLLING!)
+				const stream = new ReadableStream({
+					start(controller) {
+						const encoder = new TextEncoder();
+
+						const sendEvent = (data: Partial<TranscriptionUpdate>) => {
+							controller.enqueue(
+								encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+							);
+						};
+						// Send initial state from DB
+						const current = db
+							.query<
+								{
+									status: string;
+									progress: number;
+									transcript: string | null;
+								},
+								[string]
+							>(
+								"SELECT status, progress, transcript FROM transcriptions WHERE id = ?",
+							)
+							.get(transcriptionId);
+						if (current) {
+							sendEvent({
+								status: current.status as TranscriptionUpdate["status"],
+								progress: current.progress,
+								transcript: current.transcript || undefined,
+							});
+						}
+						// If already complete, close immediately
+						if (
+							current?.status === "completed" ||
+							current?.status === "failed"
+						) {
+							controller.close();
+							return;
+						}
+						// Subscribe to EventEmitter for live updates
+						const updateHandler = (data: TranscriptionUpdate) => {
+							console.log(`[SSE to client] Job ${transcriptionId}:`, data);
+							// Only send changed fields to save bandwidth
+							const payload: Partial<TranscriptionUpdate> = {
+								status: data.status,
+								progress: data.progress,
+							};
+
+							if (data.transcript !== undefined) {
+								payload.transcript = data.transcript;
+							}
+							if (data.error_message !== undefined) {
+								payload.error_message = data.error_message;
+							}
+
+							sendEvent(payload);
+
+							// Close stream when done
+							if (data.status === "completed" || data.status === "failed") {
+								transcriptionEvents.off(transcriptionId, updateHandler);
+								controller.close();
+							}
+						};
+						transcriptionEvents.on(transcriptionId, updateHandler);
+						// Cleanup on client disconnect
+						return () => {
+							transcriptionEvents.off(transcriptionId, updateHandler);
+						};
+					},
+				});
+				return new Response(stream, {
+					headers: {
+						"Content-Type": "text/event-stream",
+						"Cache-Control": "no-cache",
+						Connection: "keep-alive",
+					},
+				});
+			},
+		},
+		"/api/transcriptions": {
+			GET: (req) => {
+				try {
+					const user = requireAuth(req);
+
+					const transcriptions = db
+						.query<
+							{
+								id: string;
+								filename: string;
+								original_filename: string;
+								status: string;
+								progress: number;
+								transcript: string | null;
+								created_at: number;
+							},
+							[number]
+						>(
+							"SELECT id, filename, original_filename, status, progress, transcript, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
+						)
+						.all(user.id);
+
+					return Response.json({
+						jobs: transcriptions.map((t) => ({
+							id: t.id,
+							filename: t.original_filename,
+							status: t.status,
+							progress: t.progress,
+							transcript: t.transcript,
+							created_at: t.created_at,
+						})),
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+
+					const formData = await req.formData();
+					const file = formData.get("audio") as File;
+
+					if (!file) throw ValidationErrors.missingField("audio");
+
+					if (!file.type.startsWith("audio/")) {
+						throw ValidationErrors.unsupportedFileType(
+							"MP3, WAV, M4A, AAC, OGG, WebM, FLAC",
+						);
+					}
+
+					if (file.size > MAX_FILE_SIZE) {
+						throw ValidationErrors.fileTooLarge("25MB");
+					}
+
+					// Generate unique filename
+					const transcriptionId = crypto.randomUUID();
+					const fileExtension = file.name.split(".").pop();
+					const filename = `${transcriptionId}.${fileExtension}`;
+
+					// Save file to disk
+					const uploadDir = "./uploads";
+					await Bun.write(`${uploadDir}/${filename}`, file);
+
+					// Create database record
+					db.run(
+						"INSERT INTO transcriptions (id, user_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?)",
+						[transcriptionId, user.id, filename, file.name, "uploading"],
+					);
+
+					// Start transcription in background
+					whisperService.startTranscription(transcriptionId, filename);
+
+					return Response.json({
+						id: transcriptionId,
+						message: "Upload successful, transcription started",
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
 	},
 	development: {
 		hmr: true,
 		console: true,
 	},
 });
-
 console.log(`🪻 Thistle running at http://localhost:${server.port}`);

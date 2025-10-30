@@ -7,6 +7,7 @@
   --silver: #bfc0c0ff;
   --off-white: #fcf6f1;
   --coral: #ef8354ff;
+  --success-green: #16a34a;
 
   /* Semantic color assignments */
   --text: var(--gunmetal);
@@ -14,6 +15,7 @@
   --primary: var(--paynes-gray);
   --secondary: var(--silver);
   --accent: var(--coral);
+  --success: var(--success-green);
 }
 
 body {

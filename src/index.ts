@@ -429,7 +429,6 @@ const server = Bun.serve({
 						}
 						// Subscribe to EventEmitter for live updates
 						const updateHandler = (data: TranscriptionUpdate) => {
-							console.log(`[SSE to client] Job ${transcriptionId}:`, data);
 							// Only send changed fields to save bandwidth
 							const payload: Partial<TranscriptionUpdate> = {
 								status: data.status,

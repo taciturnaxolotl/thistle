@@ -141,9 +141,6 @@ export class WhisperServiceManager {
 			}
 
 			const { job_id } = await response.json();
-			console.log(
-				`[Transcription] Created Whisper job ${job_id} for ${transcriptionId}`,
-			);
 
 			// Connect to SSE stream from Whisper
 			this.streamWhisperJob(transcriptionId, job_id, filePath);
@@ -180,7 +177,6 @@ export class WhisperServiceManager {
 	) {
 		// Prevent duplicate streams using locks
 		if (this.streamLocks.has(transcriptionId)) {
-			console.log(`[Stream] Already streaming ${transcriptionId}, skipping`);
 			return;
 		}
 
@@ -499,10 +495,6 @@ export class WhisperServiceManager {
 				const filePath = `./uploads/${filename}`;
 				await Bun.write(filePath, "").catch(() => {});
 			}
-
-			console.log(
-				`[Cleanup] Removed ${staleTranscriptions.length} stale files`,
-			);
 		} catch (error) {
 			console.error("[Cleanup] Failed:", error);
 		}

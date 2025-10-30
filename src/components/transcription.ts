@@ -205,7 +205,6 @@ export class TranscriptionComponent extends LitElement {
 
 		eventSource.onmessage = (event) => {
 			const update = JSON.parse(event.data);
-			console.log(`[Client received] Job ${jobId}:`, update);
 
 			// Update the job in our list efficiently (mutate in place for Lit)
 			const job = this.jobs.find((j) => j.id === jobId);

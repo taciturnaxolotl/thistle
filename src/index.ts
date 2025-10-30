@@ -176,6 +176,7 @@ const server = Bun.serve({
 					email: user.email,
 					name: user.name,
 					avatar: user.avatar,
+					created_at: user.created_at,
 				});
 			},
 		},

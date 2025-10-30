@@ -9,10 +9,6 @@
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🪻</text></svg>">
   <link rel="stylesheet" href="../styles/main.css">
   <style>
-    main {
-      max-width: 48rem;
-    }
-
     .page-header {
       text-align: center;
       margin-bottom: 3rem;
@@ -30,33 +26,21 @@
       color: var(--text);
       opacity: 0.8;
     }
-
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      color: var(--text);
-      opacity: 0.7;
-      text-decoration: none;
-      font-size: 0.875rem;
-      margin-bottom: 2rem;
-      transition: opacity 0.2s;
-    }
-
-    .back-link:hover {
-      opacity: 1;
-    }
   </style>
 </head>
 
 <body>
-  <auth-component></auth-component>
+  <header>
+    <div class="header-content">
+      <a href="/" class="site-title">
+        <span>🪻</span>
+        <span>Thistle - Transcription</span>
+      </a>
+      <auth-component></auth-component>
+    </div>
+  </header>
 
   <main>
-    <a href="/" class="back-link">
-      ← Back to Home
-    </a>
-
     <div class="page-header">
       <h1 class="page-title">Audio Transcription</h1>
       <p class="page-subtitle">Upload your audio files and get accurate transcripts powered by AI</p>

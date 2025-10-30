@@ -9,12 +9,6 @@
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🪻</text></svg>">
   <link rel="stylesheet" href="../styles/main.css">
   <style>
-    main {
-      max-width: 48rem;
-      text-align: center;
-      padding: 4rem 2rem;
-    }
-
     .hero-title {
       font-size: 3rem;
       font-weight: 700;
@@ -27,6 +21,11 @@
       color: var(--text);
       opacity: 0.8;
       margin-bottom: 2rem;
+    }
+
+    main {
+      text-align: center;
+      padding: 4rem 2rem;
     }
 
     .cta-buttons {
@@ -85,7 +84,15 @@
 </head>
 
 <body>
-  <auth-component></auth-component>
+  <header>
+    <div class="header-content">
+      <a href="/" class="site-title">
+        <span>🪻</span>
+        <span>Thistle</span>
+      </a>
+      <auth-component></auth-component>
+    </div>
+  </header>
 
   <main>
     <h1 class="hero-title">Thistle</h1>

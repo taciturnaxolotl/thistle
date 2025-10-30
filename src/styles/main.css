@@ -1,4 +1,5 @@
 @import url('./buttons.css');
+@import url('./header.css');
 
 :root {
   /* Color palette */
@@ -78,4 +79,5 @@ small {
 
 main {
   margin: 0 auto;
+  max-width: 48rem;
 }

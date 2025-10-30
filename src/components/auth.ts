@@ -22,10 +22,10 @@ export class AuthComponent extends LitElement {
 	static override styles = css`
 		:host {
 			display: block;
-			position: fixed;
-			top: 2rem;
-			right: 2rem;
-			z-index: 1000;
+		}
+
+		.auth-container {
+			position: relative;
 		}
 
 		.auth-button {
@@ -98,30 +98,26 @@ export class AuthComponent extends LitElement {
 			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 		}
 
-		.modal h2 {
+		.modal-title {
 			margin-top: 0;
+			margin-bottom: 1rem;
 			color: var(--text);
-			font-size: 1.777rem;
 		}
 
-		.modal form {
-			display: flex;
-			flex-direction: column;
-			gap: 1rem;
+		.form-group {
+			margin-bottom: 1rem;
 		}
 
-		.field {
-			display: flex;
-			flex-direction: column;
-			gap: 0.5rem;
-		}
-
-		.field label {
+		label {
+			display: block;
+			margin-bottom: 0.25rem;
 			font-weight: 500;
 			color: var(--text);
+			font-size: 0.875rem;
 		}
 
-		.field input {
+		input {
+			width: 100%;
 			padding: 0.75rem;
 			border: 2px solid var(--secondary);
 			border-radius: 6px;
@@ -129,42 +125,44 @@ export class AuthComponent extends LitElement {
 			font-family: inherit;
 			background: var(--background);
 			color: var(--text);
+			transition: all 0.2s;
+			box-sizing: border-box;
 		}
 
-		.field input:focus {
+		input:focus {
 			outline: none;
 			border-color: var(--primary);
 		}
 
-		.error {
+		.error-message {
 			color: var(--accent);
 			font-size: 0.875rem;
-			margin: 0;
+			margin-top: 1rem;
 		}
 
-		.btn {
+		button {
 			padding: 0.75rem 1.5rem;
+			border: 2px solid var(--primary);
 			border-radius: 6px;
 			font-size: 1rem;
 			font-weight: 500;
 			cursor: pointer;
 			transition: all 0.2s;
 			font-family: inherit;
-			border: 2px solid;
 		}
 
-		.btn:disabled {
-			opacity: 0.5;
+		button:disabled {
+			opacity: 0.6;
 			cursor: not-allowed;
 		}
 
-		.btn-affirmative {
+		.btn-primary {
 			background: var(--primary);
 			color: white;
-			border-color: var(--primary);
+			flex: 1;
 		}
 
-		.btn-affirmative:hover:not(:disabled) {
+		.btn-primary:hover:not(:disabled) {
 			background: transparent;
 			color: var(--primary);
 		}
@@ -210,6 +208,7 @@ export class AuthComponent extends LitElement {
 			display: flex;
 			flex-direction: column;
 			gap: 0.5rem;
+			z-index: 100;
 		}
 
 		.user-menu a,
@@ -273,11 +272,11 @@ export class AuthComponent extends LitElement {
 
 	private closeModal() {
 		this.showModal = false;
+		this.needsRegistration = false;
 		this.email = "";
 		this.password = "";
 		this.name = "";
 		this.error = "";
-		this.needsRegistration = false;
 	}
 
 	private async handleSubmit(e: Event) {
@@ -289,11 +288,13 @@ export class AuthComponent extends LitElement {
 			if (this.needsRegistration) {
 				const response = await fetch("/api/auth/register", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+					},
 					body: JSON.stringify({
 						email: this.email,
 						password: this.password,
-						name: this.name,
+						name: this.name || null,
 					}),
 				});
 
@@ -310,7 +311,9 @@ export class AuthComponent extends LitElement {
 			} else {
 				const response = await fetch("/api/auth/login", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+					},
 					body: JSON.stringify({
 						email: this.email,
 						password: this.password,
@@ -343,7 +346,7 @@ export class AuthComponent extends LitElement {
 		}
 	}
 
-	async handleLogout() {
+	private async handleLogout() {
 		try {
 			await fetch("/api/auth/logout", { method: "POST" });
 			this.user = null;
@@ -353,8 +356,20 @@ export class AuthComponent extends LitElement {
 		}
 	}
 
-	private toggleUserMenu() {
+	private toggleMenu() {
 		this.showModal = !this.showModal;
+	}
+
+	private handleEmailInput(e: Event) {
+		this.email = (e.target as HTMLInputElement).value;
+	}
+
+	private handleNameInput(e: Event) {
+		this.name = (e.target as HTMLInputElement).value;
+	}
+
+	private handlePasswordInput(e: Event) {
+		this.password = (e.target as HTMLInputElement).value;
 	}
 
 	override render() {
@@ -362,134 +377,140 @@ export class AuthComponent extends LitElement {
 			return html`<div class="loading">Loading...</div>`;
 		}
 
-		if (this.user) {
-			return html`
-				<div>
-					<button class="auth-button" @click=${this.toggleUserMenu}>
-						<img
-							src="https://hostedboringavatars.vercel.app/api/marble?size=24&name=${this.user.avatar}&colors=2d3142ff,4f5d75ff,bfc0c0ff,ef8354ff"
-							alt="Avatar"
-							style="border-radius: 50%; width: 24px; height: 24px;"
-						/>
-						<span class="email">${this.user.name ?? this.user.email}</span>
-						<span>▼</span>
-					</button>
-					${
-						this.showModal
-							? html`
-							<div class="user-menu">
-							<a href="/transcribe" @click=${this.closeModal}>Transcribe</a>
-							<a href="/settings" @click=${this.closeModal}>Settings</a>
-							 <button @click=${this.handleLogout}>Logout</button>
-							</div>
-					  `
-							: ""
-					}
-				</div>
-			`;
-		}
-
 		return html`
-			<div>
-				<button class="auth-button" @click=${this.openModal}>Login</button>
+			<div class="auth-container">
 				${
-					this.showModal
+					this.user
 						? html`
-							<div class="modal-overlay" @click=${this.closeModal}>
-								<div class="modal" @click=${(e: Event) => e.stopPropagation()}>
-									<h2>${this.needsRegistration ? "Complete Registration" : "Login"}</h2>
+							<button class="auth-button" @click=${this.toggleMenu}>
+								<div class="user-info">
+									<img
+										src="https://hostedboringavatars.vercel.app/api/marble?size=32&name=${this.user.avatar}&colors=2d3142ff,4f5d75ff,bfc0c0ff,ef8354ff"
+										alt="Avatar"
+										width="32"
+										height="32"
+										style="border-radius: 50%"
+									/>
+									<span class="email">${this.user.name ?? this.user.email}</span>
+								</div>
+							</button>
+							${
+								this.showModal
+									? html`
+										<div class="user-menu">
+											<a href="/transcribe" @click=${this.closeModal}>Transcribe</a>
+											<a href="/settings" @click=${this.closeModal}>Settings</a>
+											<button @click=${this.handleLogout}>Logout</button>
+										</div>
+									`
+									: ""
+							}
+						`
+						: html`
+							<button class="auth-button" @click=${this.openModal}>
+								Sign In
+							</button>
+						`
+				}
+			</div>
+
+			${
+				this.showModal && !this.user
+					? html`
+						<div class="modal-overlay" @click=${this.closeModal}>
+							<div class="modal" @click=${(e: Event) => e.stopPropagation()}>
+								<h2 class="modal-title">
+									${this.needsRegistration ? "Create Account" : "Sign In"}
+								</h2>
+
+								${
+									this.needsRegistration
+										? html`
+											<p class="info-text">
+												That email isn't registered yet. Let's create an
+												account!
+											</p>
+										`
+										: ""
+								}
+
+								<form @submit=${this.handleSubmit}>
+									<div class="form-group">
+										<label for="email">Email</label>
+										<input
+											type="email"
+											id="email"
+											.value=${this.email}
+											@input=${this.handleEmailInput}
+											required
+											?disabled=${this.isSubmitting}
+										/>
+									</div>
+
 									${
 										this.needsRegistration
 											? html`
-												<p class="info-text">
-													Welcome! We'll create an account for <strong>${this.email}</strong>
-												</p>
-										  `
+												<div class="form-group">
+													<label for="name">Name (optional)</label>
+													<input
+														type="text"
+														id="name"
+														.value=${this.name}
+														@input=${this.handleNameInput}
+														?disabled=${this.isSubmitting}
+													/>
+												</div>
+											`
 											: ""
 									}
-									<form @submit=${this.handleSubmit}>
-										<div class="field">
-											<label for="email">Email</label>
-											<input
-												type="email"
-												id="email"
-												.value=${this.email}
-												@input=${(e: InputEvent) => {
-													this.email = (e.target as HTMLInputElement).value;
-												}}
-												required
-												?disabled=${this.needsRegistration}
-											/>
-										</div>
 
-										${
-											this.needsRegistration
-												? html`
-													<div class="field">
-														<label for="name">Name</label>
-														<input
-															type="text"
-															id="name"
-															.value=${this.name}
-															@input=${(e: InputEvent) => {
-																this.name = (
-																	e.target as HTMLInputElement
-																).value;
-															}}
-															required
-															placeholder="What should we call you?"
-														/>
-													</div>
-											  `
-												: ""
-										}
+									<div class="form-group">
+										<label for="password">Password</label>
+										<input
+											type="password"
+											id="password"
+											.value=${this.password}
+											@input=${this.handlePasswordInput}
+											required
+											?disabled=${this.isSubmitting}
+										/>
+									</div>
 
-										<div class="field">
-											<label for="password">${this.needsRegistration ? "Create Password" : "Password"}</label>
-											<input
-												type="password"
-												id="password"
-												.value=${this.password}
-												@input=${(e: InputEvent) => {
-													this.password = (e.target as HTMLInputElement).value;
-												}}
-												required
-												minlength="8"
-												placeholder=${this.needsRegistration ? "At least 8 characters plz" : ""}
-											/>
-										</div>
+									${
+										this.error
+											? html`<div class="error-message">${this.error}</div>`
+											: ""
+									}
 
-										${this.error ? html`<p class="error">${this.error}</p>` : ""}
-
-										<div class="modal-actions">
-											<button
-												type="submit"
-												class="btn btn-affirmative"
-												?disabled=${this.isSubmitting}
-											>
-												${
-													this.isSubmitting
-														? "Loading..."
-														: this.needsRegistration
-															? "Create Account"
-															: "Login"
-												}
-											</button>
-											<button
-												type="button"
-												class="btn btn-neutral"
-												@click=${this.closeModal}
-											>
-												Cancel
-											</button>
-										</div>
-									</form>
-								</div>
+									<div class="modal-actions">
+										<button
+											type="submit"
+											class="btn-primary"
+											?disabled=${this.isSubmitting}
+										>
+											${
+												this.isSubmitting
+													? "Loading..."
+													: this.needsRegistration
+														? "Create Account"
+														: "Sign In"
+											}
+										</button>
+										<button
+											type="button"
+											class="btn-neutral"
+											@click=${this.closeModal}
+											?disabled=${this.isSubmitting}
+										>
+											Cancel
+										</button>
+									</div>
+								</form>
 							</div>
-					  `
-						: ""
-				}
-			</div>
+						</div>
+					`
+					: ""
+			}
 		`;
 	}
 }

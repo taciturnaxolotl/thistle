@@ -3,7 +3,7 @@ import { createEventSource } from "eventsource-client";
 import { ErrorCode } from "./errors";
 
 // Constants
-export const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 export const MAX_TRANSCRIPT_LENGTH = 50000;
 export const MAX_ERROR_LENGTH = 255;
 
@@ -11,6 +11,7 @@ export const MAX_ERROR_LENGTH = 255;
 export type TranscriptionStatus =
 	| "uploading"
 	| "processing"
+	| "transcribing"
 	| "completed"
 	| "failed";
 
@@ -107,6 +108,17 @@ export class WhisperServiceManager {
 		private events: TranscriptionEventEmitter,
 	) {}
 
+	async checkHealth(): Promise<boolean> {
+		try {
+			const response = await fetch(`${this.serviceUrl}/jobs`, {
+				method: "GET",
+			});
+			return response.ok;
+		} catch {
+			return false;
+		}
+	}
+
 	async startTranscription(
 		transcriptionId: string,
 		filename: string,
@@ -122,12 +134,12 @@ export class WhisperServiceManager {
 			const filePath = `./uploads/${filename}`;
 			const fileBuffer = await Bun.file(filePath).arrayBuffer();
 
-			// Create form data for the faster-whisper server
+			// Create form data for the Murmur server
 			const formData = new FormData();
 			const file = new File([fileBuffer], filename, { type: "audio/mpeg" });
 			formData.append("file", file);
 
-			// Call the faster-whisper server to start transcription
+			// Call the Murmur server to start transcription
 			const response = await fetch(`${this.serviceUrl}/transcribe`, {
 				method: "POST",
 				body: formData,
@@ -142,7 +154,13 @@ export class WhisperServiceManager {
 
 			const { job_id } = await response.json();
 
-			// Connect to SSE stream from Whisper
+			// Store Murmur's job_id in our database for tracking
+			this.db.run("UPDATE transcriptions SET whisper_job_id = ? WHERE id = ?", [
+				job_id,
+				transcriptionId,
+			]);
+
+			// Connect to SSE stream from Murmur (use the job_id returned by Murmur)
 			this.streamWhisperJob(transcriptionId, job_id, filePath);
 		} catch (error) {
 			console.error(
@@ -184,10 +202,35 @@ export class WhisperServiceManager {
 
 		const es = createEventSource({
 			url: `${this.serviceUrl}/transcribe/${jobId}/stream`,
-			onMessage: ({ data }) => {
+			onMessage: ({ event, data }) => {
 				try {
+					// Handle "error" events from SSE (e.g., "Job not found")
+					if (event === "error") {
+						const errorData = JSON.parse(data) as { error: string };
+						console.error(
+							`[Stream] Whisper service error for ${transcriptionId}:`,
+							errorData.error,
+						);
+
+						// Mark the job as failed in our database
+						this.updateTranscription(transcriptionId, {
+							status: "failed",
+							error_message: errorData.error,
+						});
+
+						this.events.emit(transcriptionId, {
+							status: "failed",
+							progress: 0,
+							error_message: errorData.error,
+							error_code: ErrorCode.TRANSCRIPTION_FAILED,
+						});
+
+						this.closeStream(transcriptionId);
+						return;
+					}
+
 					const update = JSON.parse(data) as WhisperJob;
-					this.handleWhisperUpdate(transcriptionId, jobId, filePath, update);
+					this.handleWhisperUpdate(transcriptionId, filePath, update);
 				} catch (err) {
 					console.error(
 						`[Stream] Error processing update for ${transcriptionId}:`,
@@ -202,19 +245,51 @@ export class WhisperServiceManager {
 
 	private handleWhisperUpdate(
 		transcriptionId: string,
-		jobId: string,
 		filePath: string,
 		update: WhisperJob,
 	) {
+		if (update.status === "pending") {
+			// Initial status, no action needed
+			return;
+		}
+
 		if (update.status === "processing") {
-			const progress = Math.max(10, Math.min(95, update.progress ?? 0));
-			this.updateTranscription(transcriptionId, { progress });
+			// Murmur is initializing (file I/O, WhisperKit setup) - no transcript yet
+			const progress = Math.min(100, update.progress ?? 0);
+
+			this.updateTranscription(transcriptionId, {
+				status: "processing",
+				progress,
+			});
 
 			this.events.emit(transcriptionId, {
 				status: "processing",
 				progress,
 			});
+		} else if (update.status === "transcribing") {
+			// Active transcription with progress callbacks
+			const progress = Math.min(100, update.progress ?? 0);
+
+			// If progress is still 0, keep status as "processing" until real progress starts
+			const status = progress === 0 ? "processing" : "transcribing";
+
+			// Strip WhisperKit special tokens from intermediate transcript
+			let transcript = update.transcript ?? "";
+			transcript = transcript.replace(/<\|[^|]+\|>/g, "").trim();
+
+			this.updateTranscription(transcriptionId, {
+				status,
+				progress,
+				transcript,
+			});
+
+			this.events.emit(transcriptionId, {
+				status,
+				progress,
+				transcript: transcript || undefined,
+			});
 		} else if (update.status === "completed") {
+			// Final transcript should already have tokens stripped by Murmur
 			const transcript = (update.transcript ?? "").substring(
 				0,
 				MAX_TRANSCRIPT_LENGTH,
@@ -232,8 +307,9 @@ export class WhisperServiceManager {
 				transcript,
 			});
 
-			// Clean up
-			this.cleanupJob(transcriptionId, jobId, filePath);
+			// Only close stream and delete local file - keep Whisper job for potential replay/debugging
+			this.closeStream(transcriptionId);
+			this.deleteLocalFile(filePath);
 		} else if (update.status === "failed") {
 			const errorMessage = (
 				update.error_message ?? "Transcription failed"
@@ -251,20 +327,9 @@ export class WhisperServiceManager {
 				error_code: ErrorCode.TRANSCRIPTION_FAILED,
 			});
 
+			// Only close stream - keep failed jobs in Whisper for debugging
 			this.closeStream(transcriptionId);
-			this.deleteWhisperJob(jobId);
 		}
-	}
-
-	private cleanupJob(transcriptionId: string, jobId: string, filePath: string) {
-		// Delete uploaded file
-		Bun.file(filePath)
-			.text()
-			.then(() => Bun.write(filePath, ""))
-			.catch(() => {});
-
-		this.closeStream(transcriptionId);
-		this.deleteWhisperJob(jobId);
 	}
 
 	private closeStream(transcriptionId: string) {
@@ -276,14 +341,12 @@ export class WhisperServiceManager {
 		this.streamLocks.delete(transcriptionId);
 	}
 
-	private async deleteWhisperJob(jobId: string) {
-		try {
-			await fetch(`${this.serviceUrl}/transcribe/${jobId}`, {
-				method: "DELETE",
-			});
-		} catch {
-			// Silent fail - job may already be deleted
-		}
+	private deleteLocalFile(filePath: string) {
+		// Delete uploaded file from disk
+		Bun.file(filePath)
+			.text()
+			.then(() => Bun.write(filePath, ""))
+			.catch(() => {});
 	}
 
 	private updateTranscription(
@@ -327,21 +390,16 @@ export class WhisperServiceManager {
 	}
 
 	async syncWithWhisper(): Promise<void> {
-		try {
-			const whisperJobs = await this.fetchWhisperJobs();
-			if (!whisperJobs) return;
-
-			const activeDbJobs = this.getActiveDbJobs();
-			const activeJobsMap = new Map(activeDbJobs.map((j) => [j.id, j]));
-
-			await this.syncWhisperJobsToDb(whisperJobs, activeJobsMap);
-			await this.syncDbJobsToWhisper(activeDbJobs, whisperJobs);
-		} catch (error) {
-			console.warn(
-				"[Sync] Failed:",
-				error instanceof Error ? error.message : "Unknown error",
-			);
+		const whisperJobs = await this.fetchWhisperJobs();
+		if (!whisperJobs) {
+			throw new Error("Murmur service unavailable");
 		}
+
+		const activeDbJobs = this.getActiveDbJobs();
+		const activeJobsMap = new Map(activeDbJobs.map((j) => [j.id, j]));
+
+		await this.syncWhisperJobsToDb(whisperJobs, activeJobsMap);
+		await this.syncDbJobsToWhisper(activeDbJobs, whisperJobs);
 	}
 
 	private async fetchWhisperJobs(): Promise<WhisperJob[] | null> {
@@ -360,12 +418,21 @@ export class WhisperServiceManager {
 
 	private getActiveDbJobs(): Array<{
 		id: string;
+		whisper_job_id: string | null;
 		filename: string;
 		status: string;
 	}> {
 		return this.db
-			.query<{ id: string; filename: string; status: string }, []>(
-				"SELECT id, filename, status FROM transcriptions WHERE status IN ('uploading', 'processing')",
+			.query<
+				{
+					id: string;
+					whisper_job_id: string | null;
+					filename: string;
+					status: string;
+				},
+				[]
+			>(
+				"SELECT id, whisper_job_id, filename, status FROM transcriptions WHERE status IN ('uploading', 'processing', 'transcribing')",
 			)
 			.all();
 	}
@@ -374,37 +441,73 @@ export class WhisperServiceManager {
 		whisperJobs: WhisperJob[],
 		activeJobsMap: Map<
 			string,
-			{ id: string; filename: string; status: string }
+			{
+				id: string;
+				whisper_job_id: string | null;
+				filename: string;
+				status: string;
+			}
 		>,
 	) {
 		for (const whisperJob of whisperJobs) {
-			const localJob = activeJobsMap.get(whisperJob.id);
+			// Try to find by whisper_job_id first, then fall back to id
+			let localJob = Array.from(activeJobsMap.values()).find(
+				(j) => j.whisper_job_id === whisperJob.id,
+			);
+
+			if (!localJob) {
+				// Legacy: try matching by our transcriptionId === whisperJob.id
+				localJob = activeJobsMap.get(whisperJob.id);
+			}
 
 			if (!localJob) {
 				await this.handleOrphanedWhisperJob(whisperJob.id);
 				continue;
 			}
 
-			if (whisperJob.status === "completed" || whisperJob.status === "failed") {
-				await this.syncCompletedJob(whisperJob);
+			// Reconnect to active jobs on startup
+			if (
+				whisperJob.status === "processing" ||
+				whisperJob.status === "transcribing"
+			) {
+				// Check if we're already streaming this job
+				if (!this.activeStreams.has(localJob.id)) {
+					console.log(
+						`[Sync] Reconnecting to active job ${localJob.id} (Murmur job ${whisperJob.id})`,
+					);
+					const filePath = `./uploads/${localJob.filename}`;
+					this.streamWhisperJob(localJob.id, whisperJob.id, filePath);
+				}
+			} else if (
+				whisperJob.status === "completed" ||
+				whisperJob.status === "failed"
+			) {
+				// Use our transcription ID, not Murmur's job ID
+				await this.syncCompletedJob(whisperJob, localJob.id);
 			}
 		}
 	}
 
 	private async handleOrphanedWhisperJob(jobId: string) {
+		// Check if this Murmur job_id exists in our DB (either as id or whisper_job_id)
 		const jobExists = this.db
-			.query<{ id: string }, [string]>(
-				"SELECT id FROM transcriptions WHERE id = ?",
+			.query<{ id: string }, [string, string]>(
+				"SELECT id FROM transcriptions WHERE id = ? OR whisper_job_id = ?",
 			)
-			.get(jobId);
+			.get(jobId, jobId);
 
 		if (!jobExists) {
-			// Not our job, delete it from Whisper
-			await this.deleteWhisperJob(jobId);
+			// Not our job - Murmur will keep it until explicitly deleted
+			console.warn(
+				`[Sync] Found orphaned job ${jobId} in Murmur (not in our DB)`,
+			);
 		}
 	}
 
-	private async syncCompletedJob(whisperJob: WhisperJob) {
+	private async syncCompletedJob(
+		whisperJob: WhisperJob,
+		transcriptionId: string,
+	) {
 		try {
 			const details = await this.fetchJobDetails(whisperJob.id);
 			if (!details) return;
@@ -413,13 +516,13 @@ export class WhisperServiceManager {
 				const transcript =
 					details.transcript?.substring(0, MAX_TRANSCRIPT_LENGTH) ?? "";
 
-				this.updateTranscription(whisperJob.id, {
+				this.updateTranscription(transcriptionId, {
 					status: "completed",
 					progress: 100,
 					transcript,
 				});
 
-				this.events.emit(whisperJob.id, {
+				this.events.emit(transcriptionId, {
 					status: "completed",
 					progress: 100,
 					transcript,
@@ -429,19 +532,19 @@ export class WhisperServiceManager {
 					details.error_message ?? "Transcription failed"
 				).substring(0, MAX_ERROR_LENGTH);
 
-				this.updateTranscription(whisperJob.id, {
+				this.updateTranscription(transcriptionId, {
 					status: "failed",
 					error_message: errorMessage,
 				});
 
-				this.events.emit(whisperJob.id, {
+				this.events.emit(transcriptionId, {
 					status: "failed",
 					progress: 0,
 					error_message: errorMessage,
 				});
 			}
 
-			await this.deleteWhisperJob(whisperJob.id);
+			// Job persists in Murmur until explicitly deleted - we just sync state
 		} catch {
 			console.warn(
 				`[Sync] Failed to retrieve details for job ${whisperJob.id}`,
@@ -456,14 +559,22 @@ export class WhisperServiceManager {
 	}
 
 	private async syncDbJobsToWhisper(
-		activeDbJobs: Array<{ id: string; filename: string; status: string }>,
+		activeDbJobs: Array<{
+			id: string;
+			whisper_job_id: string | null;
+			filename: string;
+			status: string;
+		}>,
 		whisperJobs: WhisperJob[],
 	) {
 		for (const localJob of activeDbJobs) {
-			const whisperHasJob = whisperJobs.some((wj) => wj.id === localJob.id);
+			// Check if Murmur has this job (by whisper_job_id or legacy id match)
+			const whisperHasJob = whisperJobs.some(
+				(wj) => wj.id === localJob.whisper_job_id || wj.id === localJob.id,
+			);
 
-			if (!whisperHasJob) {
-				// Job was lost, mark as failed
+			if (!whisperHasJob && localJob.whisper_job_id) {
+				// Job was lost from Murmur, mark as failed
 				const errorMessage = "Job lost - whisper service may have restarted";
 
 				this.updateTranscription(localJob.id, {

@@ -60,6 +60,14 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_transcriptions_status ON transcriptions(status);
     `,
 	},
+	{
+		version: 3,
+		name: "Add whisper_job_id to transcriptions",
+		sql: `
+      ALTER TABLE transcriptions ADD COLUMN whisper_job_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_whisper_job_id ON transcriptions(whisper_job_id);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

@@ -35,6 +35,9 @@ const WHISPER_SERVICE_URL =
 await Bun.write("./uploads/.gitkeep", "");
 
 // Initialize transcription system
+console.log(
+	`[Transcription] Connecting to Murmur at ${WHISPER_SERVICE_URL}...`,
+);
 const transcriptionEvents = new TranscriptionEventEmitter();
 const whisperService = new WhisperServiceManager(
 	WHISPER_SERVICE_URL,
@@ -46,7 +49,15 @@ const whisperService = new WhisperServiceManager(
 setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
 
 // Sync with Whisper DB on startup
-await whisperService.syncWithWhisper();
+try {
+	await whisperService.syncWithWhisper();
+	console.log("[Transcription] Successfully connected to Murmur");
+} catch (error) {
+	console.warn(
+		"[Transcription] Murmur unavailable at startup:",
+		error instanceof Error ? error.message : "Unknown error",
+	);
+}
 
 // Periodic sync every 5 minutes as backup (SSE handles real-time updates)
 setInterval(() => whisperService.syncWithWhisper(), 5 * 60 * 1000);
@@ -389,15 +400,36 @@ const server = Bun.serve({
 						{ status: 404 },
 					);
 				}
-				// Event-driven SSE stream (NO POLLING!)
+				// Event-driven SSE stream with reconnection support
 				const stream = new ReadableStream({
 					start(controller) {
 						const encoder = new TextEncoder();
+						let isClosed = false;
+						let lastEventId = Math.floor(Date.now() / 1000);
 
 						const sendEvent = (data: Partial<TranscriptionUpdate>) => {
-							controller.enqueue(
-								encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
-							);
+							if (isClosed) return;
+							try {
+								// Send event ID for reconnection support
+								lastEventId = Math.floor(Date.now() / 1000);
+								controller.enqueue(
+									encoder.encode(
+										`id: ${lastEventId}\nevent: update\ndata: ${JSON.stringify(data)}\n\n`,
+									),
+								);
+							} catch {
+								// Controller already closed (client disconnected)
+								isClosed = true;
+							}
+						};
+
+						const sendHeartbeat = () => {
+							if (isClosed) return;
+							try {
+								controller.enqueue(encoder.encode(": heartbeat\n\n"));
+							} catch {
+								isClosed = true;
+							}
 						};
 						// Send initial state from DB
 						const current = db
@@ -424,11 +456,17 @@ const server = Bun.serve({
 							current?.status === "completed" ||
 							current?.status === "failed"
 						) {
+							isClosed = true;
 							controller.close();
 							return;
 						}
+						// Send heartbeats every 2.5 seconds to keep connection alive
+						const heartbeatInterval = setInterval(sendHeartbeat, 2500);
+
 						// Subscribe to EventEmitter for live updates
 						const updateHandler = (data: TranscriptionUpdate) => {
+							if (isClosed) return;
+
 							// Only send changed fields to save bandwidth
 							const payload: Partial<TranscriptionUpdate> = {
 								status: data.status,
@@ -446,6 +484,8 @@ const server = Bun.serve({
 
 							// Close stream when done
 							if (data.status === "completed" || data.status === "failed") {
+								isClosed = true;
+								clearInterval(heartbeatInterval);
 								transcriptionEvents.off(transcriptionId, updateHandler);
 								controller.close();
 							}
@@ -453,6 +493,8 @@ const server = Bun.serve({
 						transcriptionEvents.on(transcriptionId, updateHandler);
 						// Cleanup on client disconnect
 						return () => {
+							isClosed = true;
+							clearInterval(heartbeatInterval);
 							transcriptionEvents.off(transcriptionId, updateHandler);
 						};
 					},
@@ -464,6 +506,12 @@ const server = Bun.serve({
 						Connection: "keep-alive",
 					},
 				});
+			},
+		},
+		"/api/transcriptions/health": {
+			GET: async () => {
+				const isHealthy = await whisperService.checkHealth();
+				return Response.json({ available: isHealthy });
 			},
 		},
 		"/api/transcriptions": {
@@ -511,7 +559,24 @@ const server = Bun.serve({
 
 					if (!file) throw ValidationErrors.missingField("audio");
 
-					if (!file.type.startsWith("audio/")) {
+					// Validate file type
+					const fileExtension = file.name.split(".").pop()?.toLowerCase();
+					const allowedExtensions = [
+						"mp3",
+						"wav",
+						"m4a",
+						"aac",
+						"ogg",
+						"webm",
+						"flac",
+						"mp4",
+					];
+					const isAudioType =
+						file.type.startsWith("audio/") || file.type === "video/mp4";
+					const isAudioExtension =
+						fileExtension && allowedExtensions.includes(fileExtension);
+
+					if (!isAudioType && !isAudioExtension) {
 						throw ValidationErrors.unsupportedFileType(
 							"MP3, WAV, M4A, AAC, OGG, WebM, FLAC",
 						);
@@ -523,7 +588,6 @@ const server = Bun.serve({
 
 					// Generate unique filename
 					const transcriptionId = crypto.randomUUID();
-					const fileExtension = file.name.split(".").pop();
 					const filename = `${transcriptionId}.${fileExtension}`;
 
 					// Save file to disk

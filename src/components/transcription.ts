@@ -4,7 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 interface TranscriptionJob {
 	id: string;
 	filename: string;
-	status: "uploading" | "processing" | "completed" | "failed";
+	status: "uploading" | "processing" | "transcribing" | "completed" | "failed";
 	progress: number;
 	transcript?: string;
 	created_at: number;
@@ -113,6 +113,11 @@ export class TranscriptionComponent extends LitElement {
     }
 
     .status-processing {
+      background: color-mix(in srgb, var(--primary) 10%, transparent);
+      color: var(--primary);
+    }
+
+    .status-transcribing {
       background: color-mix(in srgb, var(--accent) 10%, transparent);
       color: var(--accent);
     }
@@ -133,6 +138,8 @@ export class TranscriptionComponent extends LitElement {
       background: var(--secondary);
       border-radius: 2px;
       margin-bottom: 1rem;
+      overflow: hidden;
+      position: relative;
     }
 
     .progress-fill {
@@ -140,6 +147,21 @@ export class TranscriptionComponent extends LitElement {
       background: var(--primary);
       border-radius: 2px;
       transition: width 0.3s;
+    }
+
+    .progress-fill.indeterminate {
+      width: 30%;
+      background: var(--primary);
+      animation: progress-slide 1.5s ease-in-out infinite;
+    }
+
+    @keyframes progress-slide {
+      0% {
+        transform: translateX(-100%);
+      }
+      100% {
+        transform: translateX(333%);
+      }
     }
 
     .job-transcript {
@@ -164,12 +186,14 @@ export class TranscriptionComponent extends LitElement {
 
 	private eventSources: Map<string, EventSource> = new Map();
 	private handleAuthChange = async () => {
+		await this.checkHealth();
 		await this.loadJobs();
 		this.connectToJobStreams();
 	};
 
 	override async connectedCallback() {
 		super.connectedCallback();
+		await this.checkHealth();
 		await this.loadJobs();
 		this.connectToJobStreams();
 
@@ -190,7 +214,11 @@ export class TranscriptionComponent extends LitElement {
 	private connectToJobStreams() {
 		// Connect to SSE streams for active jobs
 		for (const job of this.jobs) {
-			if (job.status === "processing" || job.status === "uploading") {
+			if (
+				job.status === "processing" ||
+				job.status === "transcribing" ||
+				job.status === "uploading"
+			) {
 				this.connectToJobStream(job.id);
 			}
 		}
@@ -203,7 +231,8 @@ export class TranscriptionComponent extends LitElement {
 
 		const eventSource = new EventSource(`/api/transcriptions/${jobId}/stream`);
 
-		eventSource.onmessage = (event) => {
+		// Handle named "update" events from SSE stream
+		eventSource.addEventListener("update", (event) => {
 			const update = JSON.parse(event.data);
 
 			// Update the job in our list efficiently (mutate in place for Lit)
@@ -223,12 +252,25 @@ export class TranscriptionComponent extends LitElement {
 					this.eventSources.delete(jobId);
 				}
 			}
-		};
+		});
 
 		eventSource.onerror = (error) => {
 			console.warn(`SSE connection error for job ${jobId}:`, error);
 			eventSource.close();
 			this.eventSources.delete(jobId);
+
+			// Check if the job still exists before retrying
+			const job = this.jobs.find((j) => j.id === jobId);
+			if (!job) {
+				console.log(`Job ${jobId} no longer exists, skipping retry`);
+				return;
+			}
+
+			// Don't retry if job is already in a terminal state
+			if (job.status === "completed" || job.status === "failed") {
+				console.log(`Job ${jobId} is ${job.status}, skipping retry`);
+				return;
+			}
 
 			// Retry connection up to 3 times with exponential backoff
 			if (retryCount < 3) {
@@ -247,26 +289,37 @@ export class TranscriptionComponent extends LitElement {
 		this.eventSources.set(jobId, eventSource);
 	}
 
+	async checkHealth() {
+		try {
+			const response = await fetch("/api/transcriptions/health");
+			if (response.ok) {
+				const data = await response.json();
+				this.serviceAvailable = data.available;
+			} else {
+				this.serviceAvailable = false;
+			}
+		} catch {
+			this.serviceAvailable = false;
+		}
+	}
+
 	async loadJobs() {
 		try {
 			const response = await fetch("/api/transcriptions");
 			if (response.ok) {
 				const data = await response.json();
 				this.jobs = data.jobs;
-				this.serviceAvailable = true;
+				// Don't override serviceAvailable - it's set by checkHealth()
 			} else if (response.status === 404) {
 				// Transcription service not available - show empty state
 				this.jobs = [];
-				this.serviceAvailable = false;
 			} else {
 				console.error("Failed to load jobs:", response.status);
-				this.serviceAvailable = false;
 			}
 		} catch (error) {
 			// Network error or service unavailable - don't break the page
 			console.warn("Transcription service unavailable:", error);
 			this.jobs = [];
-			this.serviceAvailable = false;
 		}
 	}
 
@@ -324,9 +377,9 @@ export class TranscriptionComponent extends LitElement {
 			return;
 		}
 
-		if (file.size > 25 * 1024 * 1024) {
-			// 25MB limit
-			alert("File size must be less than 25MB");
+		if (file.size > 100 * 1024 * 1024) {
+			// 100MB limit
+			alert("File size must be less than 100MB");
 			return;
 		}
 
@@ -382,7 +435,7 @@ export class TranscriptionComponent extends LitElement {
 					}
         </div>
         <div class="upload-hint">
-          ${this.serviceAvailable ? "Supports MP3, WAV, M4A, AAC, OGG, WebM, FLAC up to 25MB - Requires faster-whisper server" : "Transcription service unavailable"}
+          ${this.serviceAvailable ? "Supports MP3, WAV, M4A, AAC, OGG, WebM, FLAC up to 100MB" : "Transcription is currently unavailable"}
         </div>
         <input type="file" class="file-input" accept="audio/mpeg,audio/wav,audio/m4a,audio/mp4,audio/aac,audio/ogg,audio/webm,audio/flac,.m4a" @change=${this.handleFileSelect} ${!this.serviceAvailable ? "disabled" : ""} />
       </div>
@@ -398,10 +451,12 @@ export class TranscriptionComponent extends LitElement {
             </div>
 
             ${
-							job.status === "uploading" || job.status === "processing"
+							job.status === "uploading" ||
+							job.status === "processing" ||
+							job.status === "transcribing"
 								? html`
               <div class="progress-bar">
-                <div class="progress-fill" style="width: ${job.progress}%"></div>
+                <div class="progress-fill ${job.status === "processing" ? "indeterminate" : ""}" style="${job.status === "processing" ? "" : `width: ${job.progress}%`}"></div>
               </div>
             `
 								: ""

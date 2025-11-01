@@ -13,7 +13,7 @@ from sse_starlette.sse import EventSourceResponse
 # --- 1. Load Model on Startup ---
 # This loads the model only once, not on every request
 print("--- Loading faster-whisper model... ---")
-model_size = "small"
+model_size = "medium.en"
 # You can change this to "cuda" and "float16" if you have a GPU
 model = WhisperModel(model_size, device="cpu", compute_type="int8")
 print(f"--- Model '{model_size}' loaded. Server is ready. ---")

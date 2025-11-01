@@ -422,6 +422,13 @@ export class TranscriptionComponent extends LitElement {
 			if (response.ok) {
 				const data = await response.json();
 				this.jobs = data.jobs;
+				
+				// Initialize displayedTranscripts for completed/failed jobs
+				for (const job of this.jobs) {
+					if ((job.status === "completed" || job.status === "failed") && job.transcript) {
+						this.displayedTranscripts.set(job.id, job.transcript);
+					}
+				}
 				// Don't override serviceAvailable - it's set by checkHealth()
 			} else if (response.status === 404) {
 				// Transcription service not available - show empty state

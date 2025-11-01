@@ -10,12 +10,67 @@ interface TranscriptionJob {
 	created_at: number;
 }
 
+class WordStreamer {
+	private queue: string[] = [];
+	private isProcessing = false;
+	private wordDelay: number;
+	private onWord: (word: string) => void;
+
+	constructor(wordDelay: number = 50, onWord: (word: string) => void) {
+		this.wordDelay = wordDelay;
+		this.onWord = onWord;
+	}
+
+	addChunk(text: string) {
+		// Split on whitespace and filter out empty strings
+		const words = text.split(/(\s+)/).filter((w) => w.length > 0);
+		this.queue.push(...words);
+
+		// Start processing if not already running
+		if (!this.isProcessing) {
+			this.processQueue();
+		}
+	}
+
+	private async processQueue() {
+		this.isProcessing = true;
+
+		while (this.queue.length > 0) {
+			const word = this.queue.shift()!;
+			this.onWord(word);
+			await new Promise((resolve) => setTimeout(resolve, this.wordDelay));
+		}
+
+		this.isProcessing = false;
+	}
+
+	showAll() {
+		// Drain entire queue immediately
+		while (this.queue.length > 0) {
+			const word = this.queue.shift()!;
+			this.onWord(word);
+		}
+		this.isProcessing = false;
+	}
+
+	clear() {
+		this.queue = [];
+		this.isProcessing = false;
+	}
+}
+
 @customElement("transcription-component")
 export class TranscriptionComponent extends LitElement {
 	@state() jobs: TranscriptionJob[] = [];
 	@state() isUploading = false;
 	@state() dragOver = false;
 	@state() serviceAvailable = true;
+	// Word streamers for each job
+	private wordStreamers = new Map<string, WordStreamer>();
+	// Displayed transcripts
+	private displayedTranscripts = new Map<string, string>();
+	// Track last full transcript to compare
+	private lastTranscripts = new Map<string, string>();
 
 	static override styles = css`
     :host {
@@ -169,10 +224,11 @@ export class TranscriptionComponent extends LitElement {
       border-radius: 6px;
       padding: 1rem;
       margin-top: 1rem;
-      white-space: pre-wrap;
       font-family: monospace;
       font-size: 0.875rem;
       color: var(--text);
+      line-height: 1.6;
+      word-wrap: break-word;
     }
 
     .hidden {
@@ -203,11 +259,19 @@ export class TranscriptionComponent extends LitElement {
 
 	override disconnectedCallback() {
 		super.disconnectedCallback();
-		// Clean up all event sources
+		// Clean up all event sources and word streamers
 		for (const es of this.eventSources.values()) {
 			es.close();
 		}
 		this.eventSources.clear();
+		
+		for (const streamer of this.wordStreamers.values()) {
+			streamer.clear();
+		}
+		this.wordStreamers.clear();
+		this.displayedTranscripts.clear();
+		this.lastTranscripts.clear();
+		
 		window.removeEventListener("auth-changed", this.handleAuthChange);
 	}
 
@@ -241,7 +305,48 @@ export class TranscriptionComponent extends LitElement {
 				// Update properties directly
 				if (update.status !== undefined) job.status = update.status;
 				if (update.progress !== undefined) job.progress = update.progress;
-				if (update.transcript !== undefined) job.transcript = update.transcript;
+				if (update.transcript !== undefined) {
+					job.transcript = update.transcript;
+					
+					// Get or create word streamer for this job
+					if (!this.wordStreamers.has(jobId)) {
+						const streamer = new WordStreamer(50, (word) => {
+							const current = this.displayedTranscripts.get(jobId) || "";
+							this.displayedTranscripts.set(jobId, current + word);
+							this.requestUpdate();
+						});
+						this.wordStreamers.set(jobId, streamer);
+					}
+					
+					const streamer = this.wordStreamers.get(jobId)!;
+					const lastTranscript = this.lastTranscripts.get(jobId) || "";
+					const newTranscript = update.transcript;
+					
+					// Check if this is new content we haven't seen
+					if (newTranscript !== lastTranscript) {
+						// If new transcript starts with last transcript, it's cumulative - add diff
+						if (newTranscript.startsWith(lastTranscript)) {
+							const newPortion = newTranscript.slice(lastTranscript.length);
+							if (newPortion.trim()) {
+								streamer.addChunk(newPortion);
+							}
+						} else {
+							// Completely different segment, add space separator then new content
+							if (lastTranscript) {
+								streamer.addChunk(" ");
+							}
+							streamer.addChunk(newTranscript);
+						}
+						this.lastTranscripts.set(jobId, newTranscript);
+					}
+					
+					// On completion, show everything immediately
+					if (update.status === "completed") {
+						streamer.showAll();
+						this.wordStreamers.delete(jobId);
+						this.lastTranscripts.delete(jobId);
+					}
+				}
 
 				// Trigger Lit re-render by creating new array reference
 				this.jobs = [...this.jobs];
@@ -250,6 +355,14 @@ export class TranscriptionComponent extends LitElement {
 				if (update.status === "completed" || update.status === "failed") {
 					eventSource.close();
 					this.eventSources.delete(jobId);
+					
+					// Clean up streamer
+					const streamer = this.wordStreamers.get(jobId);
+					if (streamer) {
+						streamer.clear();
+						this.wordStreamers.delete(jobId);
+					}
+					this.lastTranscripts.delete(jobId);
 				}
 			}
 		});
@@ -417,6 +530,11 @@ export class TranscriptionComponent extends LitElement {
 		return `status-${status}`;
 	}
 
+	private renderTranscript(job: TranscriptionJob) {
+		const displayed = this.displayedTranscripts.get(job.id) || "";
+		return displayed;
+	}
+
 	override render() {
 		return html`
       <div class="upload-area ${this.dragOver ? "drag-over" : ""} ${!this.serviceAvailable ? "disabled" : ""}"
@@ -463,9 +581,9 @@ export class TranscriptionComponent extends LitElement {
 						}
 
             ${
-							job.transcript
+							this.displayedTranscripts.has(job.id) && this.displayedTranscripts.get(job.id)
 								? html`
-              <div class="job-transcript">${job.transcript}</div>
+              <div class="job-transcript">${this.renderTranscript(job)}</div>
             `
 								: ""
 						}

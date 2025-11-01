@@ -255,6 +255,8 @@ export class AuthComponent extends LitElement {
 
 			if (response.ok) {
 				this.user = await response.json();
+			} else if (window.location.pathname !== "/") {
+				window.location.href = "/";
 			}
 		} finally {
 			this.loading = false;
@@ -351,6 +353,7 @@ export class AuthComponent extends LitElement {
 			await fetch("/api/auth/logout", { method: "POST" });
 			this.user = null;
 			window.dispatchEvent(new CustomEvent("auth-changed"));
+			window.location.href = "/";
 		} catch {
 			// Silent fail
 		}

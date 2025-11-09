@@ -161,7 +161,7 @@ export class WhisperServiceManager {
 			]);
 
 			// Connect to SSE stream from Murmur (use the job_id returned by Murmur)
-			this.streamWhisperJob(transcriptionId, job_id, filePath);
+			this.streamWhisperJob(transcriptionId, job_id);
 		} catch (error) {
 			console.error(
 				`[Transcription] Failed to start ${transcriptionId}:`,
@@ -191,7 +191,6 @@ export class WhisperServiceManager {
 	private streamWhisperJob(
 		transcriptionId: string,
 		jobId: string,
-		filePath: string,
 	) {
 		// Prevent duplicate streams using locks
 		if (this.streamLocks.has(transcriptionId)) {
@@ -230,7 +229,7 @@ export class WhisperServiceManager {
 					}
 
 					const update = JSON.parse(data) as WhisperJob;
-					await this.handleWhisperUpdate(transcriptionId, filePath, update);
+					await this.handleWhisperUpdate(transcriptionId, update);
 				} catch (err) {
 					console.error(
 						`[Stream] Error processing update for ${transcriptionId}:`,
@@ -245,7 +244,6 @@ export class WhisperServiceManager {
 
 	private async handleWhisperUpdate(
 		transcriptionId: string,
-		filePath: string,
 		update: WhisperJob,
 	) {
 		if (update.status === "pending") {
@@ -336,9 +334,8 @@ export class WhisperServiceManager {
 				transcript,
 			});
 
-			// Only close stream and delete local file - keep Whisper job for potential replay/debugging
+			// Close stream - keep audio file for playback
 			this.closeStream(transcriptionId);
-			this.deleteLocalFile(filePath);
 		} else if (update.status === "failed") {
 			const errorMessage = (
 				update.error_message ?? "Transcription failed"
@@ -368,14 +365,6 @@ export class WhisperServiceManager {
 			this.activeStreams.delete(transcriptionId);
 		}
 		this.streamLocks.delete(transcriptionId);
-	}
-
-	private deleteLocalFile(filePath: string) {
-		// Delete uploaded file from disk
-		Bun.file(filePath)
-			.text()
-			.then(() => Bun.write(filePath, ""))
-			.catch(() => {});
 	}
 
 	private updateTranscription(
@@ -499,8 +488,7 @@ export class WhisperServiceManager {
 					console.log(
 						`[Sync] Reconnecting to active job ${localJob.id} (Murmur job ${whisperJob.id})`,
 					);
-					const filePath = `./uploads/${localJob.filename}`;
-					this.streamWhisperJob(localJob.id, whisperJob.id, filePath);
+					this.streamWhisperJob(localJob.id, whisperJob.id);
 				}
 			} else if (
 				whisperJob.status === "completed" ||

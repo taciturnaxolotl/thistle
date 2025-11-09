@@ -597,6 +597,83 @@ const server = Bun.serve({
 				}
 			},
 		},
+		"/api/transcriptions/:id/audio": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const transcriptionId = req.params.id;
+
+					// Verify ownership and get filename
+					const transcription = db
+						.query<
+							{
+								id: string;
+								user_id: number;
+								filename: string;
+								status: string;
+							},
+							[string]
+						>("SELECT id, user_id, filename, status FROM transcriptions WHERE id = ?")
+						.get(transcriptionId);
+
+					if (!transcription || transcription.user_id !== user.id) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					if (transcription.status !== "completed") {
+						return Response.json(
+							{ error: "Transcription not completed yet" },
+							{ status: 400 },
+						);
+					}
+
+					// Serve the audio file with range request support
+					const filePath = `./uploads/${transcription.filename}`;
+					const file = Bun.file(filePath);
+
+					if (!(await file.exists())) {
+						return Response.json({ error: "Audio file not found" }, { status: 404 });
+					}
+
+					const fileSize = file.size;
+					const range = req.headers.get("range");
+
+					// Handle range requests for seeking
+					if (range) {
+						const parts = range.replace(/bytes=/, "").split("-");
+						const start = Number.parseInt(parts[0] || "0", 10);
+						const end = parts[1] ? Number.parseInt(parts[1], 10) : fileSize - 1;
+						const chunkSize = end - start + 1;
+
+						const fileSlice = file.slice(start, end + 1);
+
+						return new Response(fileSlice, {
+							status: 206,
+							headers: {
+								"Content-Range": `bytes ${start}-${end}/${fileSize}`,
+								"Accept-Ranges": "bytes",
+								"Content-Length": chunkSize.toString(),
+								"Content-Type": file.type || "audio/mpeg",
+							},
+						});
+					}
+
+					// No range request, send entire file
+					return new Response(file, {
+						headers: {
+							"Content-Type": file.type || "audio/mpeg",
+							"Accept-Ranges": "bytes",
+							"Content-Length": fileSize.toString(),
+						},
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
 		"/api/transcriptions": {
 			GET: async (req) => {
 				try {

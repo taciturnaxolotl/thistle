@@ -8,6 +8,64 @@ interface TranscriptionJob {
 	progress: number;
 	transcript?: string;
 	created_at: number;
+	audioUrl?: string;
+	vttSegments?: VTTSegment[];
+}
+
+interface VTTSegment {
+	start: number;
+	end: number;
+	text: string;
+}
+
+
+
+function parseVTT(vttContent: string): VTTSegment[] {
+	const segments: VTTSegment[] = [];
+	const lines = vttContent.split("\n");
+
+	let i = 0;
+	// Skip WEBVTT header
+	while (i < lines.length && !lines[i]?.includes("-->")) {
+		i++;
+	}
+
+	while (i < lines.length) {
+		const line = lines[i];
+		if (line?.includes("-->")) {
+			const [startStr, endStr] = line.split("-->").map((s) => s.trim());
+			const start = parseVTTTimestamp(startStr || "");
+			const end = parseVTTTimestamp(endStr || "");
+
+			// Collect text lines until empty line
+			const textLines: string[] = [];
+			i++;
+			while (i < lines.length && lines[i]?.trim()) {
+				textLines.push(lines[i] || "");
+				i++;
+			}
+
+			segments.push({
+				start,
+				end,
+				text: textLines.join(" ").trim(),
+			});
+		}
+		i++;
+	}
+
+	return segments;
+}
+
+function parseVTTTimestamp(timestamp: string): number {
+	const parts = timestamp.split(":");
+	if (parts.length === 3) {
+		const hours = Number.parseFloat(parts[0] || "0");
+		const minutes = Number.parseFloat(parts[1] || "0");
+		const seconds = Number.parseFloat(parts[2] || "0");
+		return hours * 3600 + minutes * 60 + seconds;
+	}
+	return 0;
 }
 
 class WordStreamer {
@@ -231,6 +289,32 @@ export class TranscriptionComponent extends LitElement {
       word-wrap: break-word;
     }
 
+    .segment {
+      cursor: pointer;
+      transition: background 0.1s;
+      display: inline;
+    }
+
+    .segment:hover {
+      background: color-mix(in srgb, var(--primary) 15%, transparent);
+      border-radius: 2px;
+    }
+
+    .current-segment {
+      background: color-mix(in srgb, var(--accent) 30%, transparent);
+      border-radius: 2px;
+    }
+
+    .audio-player {
+      margin-top: 1rem;
+      width: 100%;
+    }
+
+    .audio-player audio {
+      width: 100%;
+      height: 2.5rem;
+    }
+
     .hidden {
       display: none;
     }
@@ -296,7 +380,7 @@ export class TranscriptionComponent extends LitElement {
 		const eventSource = new EventSource(`/api/transcriptions/${jobId}/stream`);
 
 		// Handle named "update" events from SSE stream
-		eventSource.addEventListener("update", (event) => {
+		eventSource.addEventListener("update", async (event) => {
 			const update = JSON.parse(event.data);
 
 			// Update the job in our list efficiently (mutate in place for Lit)
@@ -363,6 +447,12 @@ export class TranscriptionComponent extends LitElement {
 						this.wordStreamers.delete(jobId);
 					}
 					this.lastTranscripts.delete(jobId);
+					
+					// Load VTT for completed jobs
+					if (update.status === "completed") {
+						await this.loadVTTForJob(jobId);
+						this.setupWordHighlighting(jobId);
+					}
 				}
 			}
 		});
@@ -428,6 +518,13 @@ export class TranscriptionComponent extends LitElement {
 					if ((job.status === "completed" || job.status === "failed") && job.transcript) {
 						this.displayedTranscripts.set(job.id, job.transcript);
 					}
+					
+					// Fetch VTT for completed jobs
+					if (job.status === "completed") {
+						await this.loadVTTForJob(job.id);
+						await this.updateComplete;
+						this.setupWordHighlighting(job.id);
+					}
 				}
 				// Don't override serviceAvailable - it's set by checkHealth()
 			} else if (response.status === 404) {
@@ -441,6 +538,87 @@ export class TranscriptionComponent extends LitElement {
 			console.warn("Transcription service unavailable:", error);
 			this.jobs = [];
 		}
+	}
+
+	private async loadVTTForJob(jobId: string) {
+		try {
+			const response = await fetch(`/api/transcriptions/${jobId}?format=vtt`);
+			if (response.ok) {
+				const vttContent = await response.text();
+				const segments = parseVTT(vttContent);
+				
+				// Update job with VTT segments
+				const job = this.jobs.find((j) => j.id === jobId);
+				if (job) {
+					job.vttSegments = segments;
+					job.audioUrl = `/api/transcriptions/${jobId}/audio`;
+					this.jobs = [...this.jobs];
+				}
+			}
+		} catch (error) {
+			console.warn(`Failed to load VTT for job ${jobId}:`, error);
+		}
+	}
+
+	private setupWordHighlighting(jobId: string) {
+		const job = this.jobs.find((j) => j.id === jobId);
+		if (!job?.audioUrl || !job.vttSegments) return;
+
+		// Wait for next frame to ensure DOM is updated
+		requestAnimationFrame(() => {
+			const audioElement = this.shadowRoot?.querySelector(
+				`#audio-${jobId}`,
+			) as HTMLAudioElement;
+			const transcriptDiv = this.shadowRoot?.querySelector(
+				`#transcript-${jobId}`,
+			) as HTMLDivElement;
+
+			if (!audioElement || !transcriptDiv) {
+				console.warn("Could not find audio or transcript elements");
+				return;
+			}
+
+			// Track current segment
+			let currentSegmentElement: HTMLElement | null = null;
+
+			// Update highlighting on timeupdate
+			audioElement.addEventListener("timeupdate", () => {
+				const currentTime = audioElement.currentTime;
+				const segmentElements = transcriptDiv.querySelectorAll("[data-start]");
+
+				for (const el of segmentElements) {
+					const start = Number.parseFloat(
+						(el as HTMLElement).dataset.start || "0",
+					);
+					const end = Number.parseFloat((el as HTMLElement).dataset.end || "0");
+
+					if (currentTime >= start && currentTime <= end) {
+						if (currentSegmentElement !== el) {
+							currentSegmentElement?.classList.remove("current-segment");
+							(el as HTMLElement).classList.add("current-segment");
+							currentSegmentElement = el as HTMLElement;
+
+							// Auto-scroll to current segment
+							el.scrollIntoView({
+								behavior: "smooth",
+								block: "center",
+							});
+						}
+						break;
+					}
+				}
+			});
+
+			// Handle segment clicks
+			transcriptDiv.addEventListener("click", (e) => {
+				const target = e.target as HTMLElement;
+				if (target.dataset.start) {
+					const start = Number.parseFloat(target.dataset.start);
+					audioElement.currentTime = start;
+					audioElement.play();
+				}
+			});
+		});
 	}
 
 	private handleDragOver(e: DragEvent) {
@@ -538,9 +716,23 @@ export class TranscriptionComponent extends LitElement {
 	}
 
 	private renderTranscript(job: TranscriptionJob) {
-		const displayed = this.displayedTranscripts.get(job.id) || "";
-		return displayed;
+		if (!job.vttSegments) {
+			const displayed = this.displayedTranscripts.get(job.id) || "";
+			return displayed;
+		}
+
+		const segments = job.vttSegments;
+		// Render segments as clickable spans
+		return html`${segments.map(
+			(segment, idx) => html`<span
+          class="segment"
+          data-start="${segment.start}"
+          data-end="${segment.end}"
+        >${segment.text}</span>${idx < segments.length - 1 ? " " : ""}`,
+		)}`;
 	}
+
+
 
 	override render() {
 		return html`
@@ -588,11 +780,20 @@ export class TranscriptionComponent extends LitElement {
 						}
 
             ${
-							this.displayedTranscripts.has(job.id) && this.displayedTranscripts.get(job.id)
+							job.status === "completed" && job.audioUrl && job.vttSegments
 								? html`
+              <div class="audio-player">
+                <audio id="audio-${job.id}" preload="metadata" controls src="${job.audioUrl}"></audio>
+              </div>
+              <div class="job-transcript" id="transcript-${job.id}">
+                ${this.renderTranscript(job)}
+              </div>
+            `
+								: this.displayedTranscripts.has(job.id) && this.displayedTranscripts.get(job.id)
+									? html`
               <div class="job-transcript">${this.renderTranscript(job)}</div>
             `
-								: ""
+									: ""
 						}
           </div>
         `,

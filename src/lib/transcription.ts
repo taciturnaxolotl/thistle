@@ -1,7 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { createEventSource } from "eventsource-client";
 import { ErrorCode } from "./errors";
-import { saveTranscript, saveTranscriptVTT } from "./transcript-storage";
+import { saveTranscriptVTT } from "./transcript-storage";
+import { cleanVTT } from "./vtt-cleaner";
 
 // Constants
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -275,11 +276,6 @@ export class WhisperServiceManager {
 			let transcript = update.transcript ?? "";
 			transcript = transcript.replace(/<\|[^|]+\|>/g, "").trim();
 
-			// Save transcript to file (overwrites on each update)
-			if (transcript) {
-				await saveTranscript(transcriptionId, transcript);
-			}
-
 			this.updateTranscription(transcriptionId, {
 				status,
 				progress,
@@ -291,14 +287,6 @@ export class WhisperServiceManager {
 				transcript: transcript || undefined,
 			});
 		} else if (update.status === "completed") {
-			// Final transcript should already have tokens stripped by Murmur
-			const transcript = update.transcript ?? "";
-
-			// Save final transcript to file
-			if (transcript) {
-				await saveTranscript(transcriptionId, transcript);
-			}
-
 			// Fetch and save VTT file from Murmur
 			const whisperJobId = this.db
 				.query<{ whisper_job_id: string }, [string]>(
@@ -313,7 +301,8 @@ export class WhisperServiceManager {
 					);
 					if (vttResponse.ok) {
 						const vttContent = await vttResponse.text();
-						await saveTranscriptVTT(transcriptionId, vttContent);
+						const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
+						await saveTranscriptVTT(transcriptionId, cleanedVTT);
 					}
 				} catch (error) {
 					console.warn(
@@ -331,7 +320,6 @@ export class WhisperServiceManager {
 			this.events.emit(transcriptionId, {
 				status: "completed",
 				progress: 100,
-				transcript,
 			});
 
 			// Close stream - keep audio file for playback
@@ -525,13 +513,6 @@ export class WhisperServiceManager {
 			if (!details) return;
 
 			if (details.status === "completed") {
-				const transcript = details.transcript ?? "";
-
-				// Save transcript to file
-				if (transcript) {
-					await saveTranscript(transcriptionId, transcript);
-				}
-
 				// Fetch and save VTT file
 				try {
 					const vttResponse = await fetch(
@@ -539,7 +520,8 @@ export class WhisperServiceManager {
 					);
 					if (vttResponse.ok) {
 						const vttContent = await vttResponse.text();
-						await saveTranscriptVTT(transcriptionId, vttContent);
+						const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
+						await saveTranscriptVTT(transcriptionId, cleanedVTT);
 					}
 				} catch (error) {
 					console.warn(
@@ -556,7 +538,6 @@ export class WhisperServiceManager {
 				this.events.emit(transcriptionId, {
 					status: "completed",
 					progress: 100,
-					transcript,
 				});
 			} else if (details.status === "failed") {
 				const errorMessage = (

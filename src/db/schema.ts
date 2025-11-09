@@ -68,6 +68,14 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_transcriptions_whisper_job_id ON transcriptions(whisper_job_id);
     `,
 	},
+	{
+		version: 4,
+		name: "Remove transcript column from transcriptions",
+		sql: `
+      -- SQLite 3.35.0+ supports DROP COLUMN
+      ALTER TABLE transcriptions DROP COLUMN transcript;
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

@@ -247,6 +247,8 @@ Lit provides:
 
 Use `bun test` to run tests.
 
+### Basic Test Structure
+
 ```ts
 import { test, expect } from "bun:test";
 
@@ -254,6 +256,96 @@ test("hello world", () => {
   expect(1).toBe(1);
 });
 ```
+
+### Test File Naming
+
+- Place tests next to the code they test: `foo.ts` → `foo.test.ts`
+- This keeps tests close to implementation for easy maintenance
+- Bun automatically discovers `*.test.ts` files
+
+### Writing Good Tests
+
+**Test security-critical code:**
+- File path operations (directory traversal, injection)
+- User input validation
+- Authentication/authorization
+- API endpoint security
+
+**Test edge cases:**
+- Empty strings, null, undefined
+- Very large inputs (size limits)
+- Invalid formats
+- Boundary conditions
+
+**Test async operations:**
+```ts
+test("async function", async () => {
+  const result = await someAsyncFunction();
+  expect(result).toBe("expected value");
+});
+```
+
+**Test error conditions:**
+```ts
+test("rejects invalid input", async () => {
+  await expect(dangerousFunction("../../../etc/passwd")).rejects.toThrow();
+  await expect(dangerousFunction("invalid")).rejects.toThrow("Invalid format");
+});
+```
+
+**Example: Security-focused tests**
+```ts
+test("prevents directory traversal", async () => {
+  const maliciousIds = [
+    "../../../etc/passwd",
+    "../../secret.txt",
+    "test/../../../config",
+  ];
+
+  for (const id of maliciousIds) {
+    await expect(loadFile(id)).rejects.toThrow();
+  }
+});
+
+test("validates input format", async () => {
+  const invalidInputs = [
+    "test; rm -rf /",
+    "test`whoami`",
+    "test\x00null",
+  ];
+
+  for (const input of invalidInputs) {
+    await expect(processInput(input)).rejects.toThrow("Invalid format");
+  }
+});
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+bun test
+
+# Run specific test file
+bun test src/lib/auth.test.ts
+
+# Watch mode (re-run on changes)
+bun test --watch
+```
+
+### What to Test
+
+**Always test:**
+- Security-critical functions (file I/O, user input)
+- Complex business logic
+- Edge cases and error handling
+- Public API functions
+
+**Don't need to test:**
+- Simple getters/setters
+- Framework/library code
+- UI components (unless complex logic)
+- One-line utility functions
 
 ## TypeScript Configuration
 

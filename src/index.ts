@@ -23,6 +23,7 @@ import {
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
+import { getTranscript } from "./lib/transcript-storage";
 import indexHTML from "./pages/index.html";
 import settingsHTML from "./pages/settings.html";
 import transcribeHTML from "./pages/transcribe.html";
@@ -31,8 +32,9 @@ import transcribeHTML from "./pages/transcribe.html";
 const WHISPER_SERVICE_URL =
 	process.env.WHISPER_SERVICE_URL || "http://localhost:8000";
 
-// Create uploads directory if it doesn't exist
+// Create uploads and transcripts directories if they don't exist
 await Bun.write("./uploads/.gitkeep", "");
+await Bun.write("./transcripts/.gitkeep", "");
 
 // Initialize transcription system
 console.log(
@@ -378,7 +380,7 @@ const server = Bun.serve({
 			},
 		},
 		"/api/transcriptions/:id/stream": {
-			GET: (req) => {
+			GET: async (req) => {
 				const sessionId = getSessionFromRequest(req);
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
@@ -402,7 +404,7 @@ const server = Bun.serve({
 				}
 				// Event-driven SSE stream with reconnection support
 				const stream = new ReadableStream({
-					start(controller) {
+					async start(controller) {
 						const encoder = new TextEncoder();
 						let isClosed = false;
 						let lastEventId = Math.floor(Date.now() / 1000);
@@ -431,24 +433,28 @@ const server = Bun.serve({
 								isClosed = true;
 							}
 						};
-						// Send initial state from DB
+						// Send initial state from DB and file
 						const current = db
 							.query<
 								{
 									status: string;
 									progress: number;
-									transcript: string | null;
 								},
 								[string]
 							>(
-								"SELECT status, progress, transcript FROM transcriptions WHERE id = ?",
+								"SELECT status, progress FROM transcriptions WHERE id = ?",
 							)
 							.get(transcriptionId);
 						if (current) {
+							// Load transcript from file if completed
+							let transcript: string | undefined;
+							if (current.status === "completed") {
+								transcript = (await getTranscript(transcriptionId)) || undefined;
+							}
 							sendEvent({
 								status: current.status as TranscriptionUpdate["status"],
 								progress: current.progress,
-								transcript: current.transcript || undefined,
+								transcript,
 							});
 						}
 						// If already complete, close immediately
@@ -515,7 +521,7 @@ const server = Bun.serve({
 			},
 		},
 		"/api/transcriptions": {
-			GET: (req) => {
+			GET: async (req) => {
 				try {
 					const user = requireAuth(req);
 
@@ -527,25 +533,33 @@ const server = Bun.serve({
 								original_filename: string;
 								status: string;
 								progress: number;
-								transcript: string | null;
 								created_at: number;
 							},
 							[number]
 						>(
-							"SELECT id, filename, original_filename, status, progress, transcript, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
+							"SELECT id, filename, original_filename, status, progress, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
 						)
 						.all(user.id);
 
-					return Response.json({
-						jobs: transcriptions.map((t) => ({
-							id: t.id,
-							filename: t.original_filename,
-							status: t.status,
-							progress: t.progress,
-							transcript: t.transcript,
-							created_at: t.created_at,
-						})),
-					});
+					// Load transcripts from files for completed jobs
+					const jobs = await Promise.all(
+						transcriptions.map(async (t) => {
+							let transcript: string | null = null;
+							if (t.status === "completed") {
+								transcript = await getTranscript(t.id);
+							}
+							return {
+								id: t.id,
+								filename: t.original_filename,
+								status: t.status,
+								progress: t.progress,
+								transcript,
+								created_at: t.created_at,
+							};
+						}),
+					);
+
+					return Response.json({ jobs });
 				} catch (error) {
 					return handleError(error);
 				}

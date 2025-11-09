@@ -112,7 +112,7 @@ export async function authenticateUser(
 	password: string,
 ): Promise<User | null> {
 	const result = db
-		.query<{ id: number; email: string; name: string | null; password_hash: string; created_at: number }, [string]>(
+		.query<{ id: number; email: string; name: string | null; avatar: string; password_hash: string; created_at: number }, [string]>(
 			"SELECT id, email, name, avatar, password_hash, created_at FROM users WHERE email = ?",
 		)
 		.get(email);

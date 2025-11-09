@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
 import { createEventSource } from "eventsource-client";
 import { ErrorCode } from "./errors";
+import { saveTranscript } from "./transcript-storage";
 
 // Constants
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-export const MAX_TRANSCRIPT_LENGTH = 50000;
 export const MAX_ERROR_LENGTH = 255;
 
 // Types
@@ -243,7 +243,7 @@ export class WhisperServiceManager {
 		this.activeStreams.set(transcriptionId, es);
 	}
 
-	private handleWhisperUpdate(
+	private async handleWhisperUpdate(
 		transcriptionId: string,
 		filePath: string,
 		update: WhisperJob,
@@ -277,10 +277,14 @@ export class WhisperServiceManager {
 			let transcript = update.transcript ?? "";
 			transcript = transcript.replace(/<\|[^|]+\|>/g, "").trim();
 
+			// Save transcript to file (overwrites on each update)
+			if (transcript) {
+				await saveTranscript(transcriptionId, transcript);
+			}
+
 			this.updateTranscription(transcriptionId, {
 				status,
 				progress,
-				transcript,
 			});
 
 			this.events.emit(transcriptionId, {
@@ -290,15 +294,16 @@ export class WhisperServiceManager {
 			});
 		} else if (update.status === "completed") {
 			// Final transcript should already have tokens stripped by Murmur
-			const transcript = (update.transcript ?? "").substring(
-				0,
-				MAX_TRANSCRIPT_LENGTH,
-			);
+			const transcript = update.transcript ?? "";
+
+			// Save final transcript to file
+			if (transcript) {
+				await saveTranscript(transcriptionId, transcript);
+			}
 
 			this.updateTranscription(transcriptionId, {
 				status: "completed",
 				progress: 100,
-				transcript,
 			});
 
 			this.events.emit(transcriptionId, {
@@ -354,7 +359,6 @@ export class WhisperServiceManager {
 		data: {
 			status?: TranscriptionStatus;
 			progress?: number;
-			transcript?: string;
 			error_message?: string;
 		},
 	) {
@@ -368,10 +372,6 @@ export class WhisperServiceManager {
 		if (data.progress !== undefined) {
 			updates.push("progress = ?");
 			values.push(data.progress);
-		}
-		if (data.transcript !== undefined) {
-			updates.push("transcript = ?");
-			values.push(data.transcript);
 		}
 		if (data.error_message !== undefined) {
 			updates.push("error_message = ?");
@@ -513,13 +513,16 @@ export class WhisperServiceManager {
 			if (!details) return;
 
 			if (details.status === "completed") {
-				const transcript =
-					details.transcript?.substring(0, MAX_TRANSCRIPT_LENGTH) ?? "";
+				const transcript = details.transcript ?? "";
+
+				// Save transcript to file
+				if (transcript) {
+					await saveTranscript(transcriptionId, transcript);
+				}
 
 				this.updateTranscription(transcriptionId, {
 					status: "completed",
 					progress: 100,
-					transcript,
 				});
 
 				this.events.emit(transcriptionId, {

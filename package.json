@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run src/index.ts --hot"
+    "dev": "bun run src/index.ts --hot",
+    "clean": "rm -rf transcripts uploads thistle.db"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.2",

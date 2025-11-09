@@ -2,8 +2,10 @@ import { expect, test } from "bun:test";
 import {
 	deleteTranscript,
 	getTranscript,
+	getTranscriptVTT,
 	hasTranscript,
 	saveTranscript,
+	saveTranscriptVTT,
 } from "./transcript-storage";
 
 test("transcript storage", async () => {
@@ -89,5 +91,20 @@ test("transcript storage accepts valid UUIDs", async () => {
 		expect(await getTranscript(id)).toBe("test");
 		await deleteTranscript(id);
 	}
+});
+
+test("VTT transcript storage", async () => {
+	const testId = "test-vtt-123";
+	const vttContent = "WEBVTT\n\n00:00:00.000 --> 00:00:02.500\nHello world\n\n";
+
+	// Save VTT
+	await saveTranscriptVTT(testId, vttContent);
+
+	// Read VTT
+	const retrieved = await getTranscriptVTT(testId);
+	expect(retrieved).toBe(vttContent);
+
+	// Clean up
+	await deleteTranscript(testId);
 });
 

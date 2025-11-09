@@ -73,3 +73,30 @@ export async function hasTranscript(transcriptionId: string): Promise<boolean> {
 	const filePath = `${TRANSCRIPTS_DIR}/${safeId}.txt`;
 	return await Bun.file(filePath).exists();
 }
+
+/**
+ * Write WebVTT transcript to file system
+ */
+export async function saveTranscriptVTT(
+	transcriptionId: string,
+	vttContent: string,
+): Promise<void> {
+	const safeId = validateTranscriptionId(transcriptionId);
+	const filePath = `${TRANSCRIPTS_DIR}/${safeId}.vtt`;
+	await Bun.write(filePath, vttContent);
+}
+
+/**
+ * Read WebVTT transcript from file system
+ */
+export async function getTranscriptVTT(
+	transcriptionId: string,
+): Promise<string | null> {
+	const safeId = validateTranscriptionId(transcriptionId);
+	const filePath = `${TRANSCRIPTS_DIR}/${safeId}.vtt`;
+	try {
+		return await Bun.file(filePath).text();
+	} catch {
+		return null;
+	}
+}

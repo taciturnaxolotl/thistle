@@ -23,7 +23,7 @@ import {
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
-import { getTranscript } from "./lib/transcript-storage";
+import { getTranscript, getTranscriptVTT } from "./lib/transcript-storage";
 import indexHTML from "./pages/index.html";
 import settingsHTML from "./pages/settings.html";
 import transcribeHTML from "./pages/transcribe.html";
@@ -518,6 +518,83 @@ const server = Bun.serve({
 			GET: async () => {
 				const isHealthy = await whisperService.checkHealth();
 				return Response.json({ available: isHealthy });
+			},
+		},
+		"/api/transcriptions/:id": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const transcriptionId = req.params.id;
+
+					// Verify ownership
+					const transcription = db
+						.query<
+							{
+								id: string;
+								user_id: number;
+								status: string;
+								original_filename: string;
+							},
+							[string]
+						>(
+							"SELECT id, user_id, status, original_filename FROM transcriptions WHERE id = ?",
+						)
+						.get(transcriptionId);
+
+					if (!transcription || transcription.user_id !== user.id) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					if (transcription.status !== "completed") {
+						return Response.json(
+							{ error: "Transcription not completed yet" },
+							{ status: 400 },
+						);
+					}
+
+					// Get format from query parameter
+					const url = new URL(req.url);
+					const format = url.searchParams.get("format");
+
+					// Return WebVTT format if requested
+					if (format === "vtt") {
+						const vttContent = await getTranscriptVTT(transcriptionId);
+
+						if (!vttContent) {
+							return Response.json(
+								{ error: "VTT transcript not available" },
+								{ status: 404 },
+							);
+						}
+
+						return new Response(vttContent, {
+							headers: {
+								"Content-Type": "text/vtt",
+								"Content-Disposition": `attachment; filename="${transcription.original_filename}.vtt"`,
+							},
+						});
+					}
+
+					// Default: return plain text transcript from file
+					const transcript = await getTranscript(transcriptionId);
+					if (!transcript) {
+						return Response.json(
+							{ error: "Transcript not available" },
+							{ status: 404 },
+						);
+					}
+
+					return new Response(transcript, {
+						headers: {
+							"Content-Type": "text/plain",
+						},
+					});
+				} catch (error) {
+					return handleError(error);
+				}
 			},
 		},
 		"/api/transcriptions": {

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { createEventSource } from "eventsource-client";
 import { ErrorCode } from "./errors";
-import { saveTranscript } from "./transcript-storage";
+import { saveTranscript, saveTranscriptVTT } from "./transcript-storage";
 
 // Constants
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -301,6 +301,30 @@ export class WhisperServiceManager {
 				await saveTranscript(transcriptionId, transcript);
 			}
 
+			// Fetch and save VTT file from Murmur
+			const whisperJobId = this.db
+				.query<{ whisper_job_id: string }, [string]>(
+					"SELECT whisper_job_id FROM transcriptions WHERE id = ?",
+				)
+				.get(transcriptionId)?.whisper_job_id;
+
+			if (whisperJobId) {
+				try {
+					const vttResponse = await fetch(
+						`${this.serviceUrl}/transcribe/${whisperJobId}?format=vtt`,
+					);
+					if (vttResponse.ok) {
+						const vttContent = await vttResponse.text();
+						await saveTranscriptVTT(transcriptionId, vttContent);
+					}
+				} catch (error) {
+					console.warn(
+						`[Transcription] Failed to fetch VTT for ${transcriptionId}:`,
+						error,
+					);
+				}
+			}
+
 			this.updateTranscription(transcriptionId, {
 				status: "completed",
 				progress: 100,
@@ -518,6 +542,22 @@ export class WhisperServiceManager {
 				// Save transcript to file
 				if (transcript) {
 					await saveTranscript(transcriptionId, transcript);
+				}
+
+				// Fetch and save VTT file
+				try {
+					const vttResponse = await fetch(
+						`${this.serviceUrl}/transcribe/${whisperJob.id}?format=vtt`,
+					);
+					if (vttResponse.ok) {
+						const vttContent = await vttResponse.text();
+						await saveTranscriptVTT(transcriptionId, vttContent);
+					}
+				} catch (error) {
+					console.warn(
+						`[Sync] Failed to fetch VTT for ${transcriptionId}:`,
+						error,
+					);
 				}
 
 				this.updateTranscription(transcriptionId, {

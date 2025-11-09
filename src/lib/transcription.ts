@@ -202,7 +202,7 @@ export class WhisperServiceManager {
 
 		const es = createEventSource({
 			url: `${this.serviceUrl}/transcribe/${jobId}/stream`,
-			onMessage: ({ event, data }) => {
+			onMessage: async ({ event, data }) => {
 				try {
 					// Handle "error" events from SSE (e.g., "Job not found")
 					if (event === "error") {
@@ -230,7 +230,7 @@ export class WhisperServiceManager {
 					}
 
 					const update = JSON.parse(data) as WhisperJob;
-					this.handleWhisperUpdate(transcriptionId, filePath, update);
+					await this.handleWhisperUpdate(transcriptionId, filePath, update);
 				} catch (err) {
 					console.error(
 						`[Stream] Error processing update for ${transcriptionId}:`,

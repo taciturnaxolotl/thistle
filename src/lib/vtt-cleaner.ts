@@ -1,9 +1,7 @@
-// Parse and clean VTT files
-
-import type { ParagraphBoundary } from "./transcript-cleaner";
+// Parse and clean VTT files using AI
 
 interface VTTSegment {
-	index?: number;
+	index?: number | string;
 	timestamp: string;
 	text: string;
 	start?: number;
@@ -105,9 +103,9 @@ export function parseVTT(vttContent: string): VTTSegment[] {
 }
 
 /**
- * Clean VTT text segments by removing tags and fixing grammar.
- * Additionally, merge cleaned segments into paragraph cues while preserving
- * stable paragraph IDs (derived from first segment start time).
+ * Clean VTT text using AI to create paragraph-separated VTT file.
+ * Uses OpenRouter API to intelligently group segments into paragraphs
+ * while preserving timing information.
  */
 export async function cleanVTT(
 	transcriptionId: string,
@@ -123,121 +121,115 @@ export async function cleanVTT(
 		`[VTTCleaner] Processing ${segments.length} segments for ${transcriptionId}`,
 	);
 
-	// Combine all text for cleaning and paragraphing
-	const allText = segments.map((s) => s.text).join(" ");
-
-	// Attempt LLM-driven cleaning and paragraphing in one request, fallback to deterministic rules
-	let paragraphBoundaries: ParagraphBoundary[] = [];
+	const apiKey = process.env.LLM_API_KEY;
+	const apiBaseUrl = process.env.LLM_API_BASE_URL;
+	const model = process.env.LLM_MODEL;
+	
+	if (!apiKey || !apiBaseUrl || !model) {
+		console.warn("[VTTCleaner] LLM configuration incomplete (need LLM_API_KEY, LLM_API_BASE_URL, LLM_MODEL), returning uncleaned VTT");
+		return vttContent;
+	}
 
 	try {
-		const { cleanAndGetParagraphBoundaries } = await import(
-			"./transcript-cleaner"
-		);
-		const result = await cleanAndGetParagraphBoundaries({
-			transcriptId: transcriptionId,
-			rawTranscript: allText,
-			segments: segments.map((s) => ({
-				index: s.index,
-				start: s.start,
-				end: s.end,
-				text: s.text,
-			})),
-			maxWordsMove: 0,
-		});
+		// Build the input for the AI
+		const inputSegments = segments.map((seg, idx) => ({
+			index: idx,
+			timestamp: seg.timestamp,
+			text: seg.text,
+		}));
 
-		if (result?.paragraphs) {
-			paragraphBoundaries = result.paragraphs;
-		}
-	} catch (e) {
-		console.warn(
-			"[VTTCleaner] Consolidated LLM failed, no paragraph detection:",
-			e,
-		);
-	}
+		const prompt = `Can you turn this into a paragraph separated vtt file?
 
-	if (paragraphBoundaries.length === 0) {
-		// No paragraphs detected, treat as one big paragraph
-		paragraphBoundaries = [
+Use the format "Paragraph X-Y" where X is the paragraph number and Y is the segment number within that paragraph:
+
+Paragraph 1-1
+00:00:00.000 --> 00:00:05.559
+Today in chapel we are talking about the fact that we believe in having gospel
+
+Paragraph 1-2
+00:00:05.559 --> 00:00:08.639
+conversations. I'm gonna run my own PowerPoint. I'm gonna jump around. It's
+
+Paragraph 1-3
+00:00:08.639 --> 00:00:11.960
+gonna be a little more conversational than normal.
+
+Paragraph 2-1
+00:00:11.960 --> 00:00:15.000
+Now let's talk about something different.
+
+I want you to preserve sentences across paragraph breaks moving whatever is the smallest amount out to its own segment block.
+
+Also go through and rewrite the words to extract the meaning and not necessarily the exact phrasing if it sounds unnatural when written. I want the text to remain lined up with the original though so don't rewrite entire paragraphs but you can remove ums, alrights, and similar. Also remove all contextual tags like [background noise]. Add punctuation if it's missing to make the text readable. If there is no more context to fit a segment then just skip it and move to the next one.
+
+Input segments:
+${JSON.stringify(inputSegments, null, 2)}
+
+Return ONLY the VTT content starting with "WEBVTT" and nothing else. No explanations or additional text.`;
+
+		const response = await fetch(
+			`${apiBaseUrl}/chat/completions`,
 			{
-				startSegmentIndex: 0,
-				endSegmentIndex: segments.length - 1,
-				text: allText,
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Authorization": `Bearer ${apiKey}`,
+					"HTTP-Referer": "https://thistle.app",
+					"X-Title": "Thistle Transcription",
+				},
+				body: JSON.stringify({
+					model,
+					messages: [
+						{ role: "user", content: prompt },
+					],
+					temperature: 0.3,
+					max_tokens: 16384,
+				}),
 			},
-		];
-	}
-
-	// Get the full cleaned transcript from paragraphs
-	const cleanedTranscript = paragraphBoundaries.map((p) => p.text).join(" ");
-
-	// Split cleaned text back into segments proportionally (word-based)
-	const words = cleanedTranscript.split(/\s+/).filter(Boolean);
-	const originalWords = allText.split(/\s+/).filter(Boolean);
-	const ratio = words.length / Math.max(1, originalWords.length);
-
-	let wordIndex = 0;
-	const cleanedSegments: VTTSegment[] = [];
-
-	for (const segment of segments) {
-		const originalWordCount = Math.max(
-			1,
-			segment.text.split(/\s+/).filter(Boolean).length,
 		);
-		const newWordCount = Math.max(1, Math.round(originalWordCount * ratio));
-		const segmentWords = words.slice(wordIndex, wordIndex + newWordCount);
-		wordIndex += newWordCount;
 
-		cleanedSegments.push({
-			index: segment.index,
-			timestamp: segment.timestamp,
-			text: segmentWords.join(" "),
-			start: segment.start,
-			end: segment.end,
-		});
-	}
-
-	// If any remaining words, append to last segment
-	if (wordIndex < words.length && cleanedSegments.length > 0) {
-		const rest = words.slice(wordIndex).join(" ");
-		const lastIdx = cleanedSegments.length - 1;
-		const lastSeg = cleanedSegments[lastIdx];
-		if (lastSeg) {
-			lastSeg.text += (lastSeg.text ? " " : "") + rest;
+		if (!response.ok) {
+			const errorText = await response.text();
+			console.error(`[VTTCleaner] OpenRouter error for ${transcriptionId}:`, errorText);
+			console.warn("[VTTCleaner] Falling back to uncleaned VTT");
+			return vttContent;
 		}
-	}
 
-	// Assign paragraph-based IDs to segments
-	for (let i = 0; i < cleanedSegments.length; i++) {
-		const seg = cleanedSegments[i];
-		if (!seg) continue;
+		const result = await response.json();
+		const cleanedVTT = result.choices?.[0]?.message?.content?.trim();
 
-		// Find which paragraph this segment belongs to
-		let paraIndex = 0;
-		let segmentInPara = 1;
-		for (let p = 0; p < paragraphBoundaries.length; p++) {
-			const para = paragraphBoundaries[p];
-			if (i >= para.startSegmentIndex && i <= para.endSegmentIndex) {
-				paraIndex = p + 1;
-				segmentInPara = i - para.startSegmentIndex + 1;
-				break;
+		if (!cleanedVTT) {
+			console.warn("[VTTCleaner] Empty response from AI, returning uncleaned VTT");
+			return vttContent;
+		}
+
+		// Extract VTT content if the model wrapped it in markdown
+		let finalVTT = cleanedVTT;
+		if (cleanedVTT.includes("```")) {
+			const vttMatch = cleanedVTT.match(/```(?:vtt)?\n([\s\S]*?)```/);
+			if (vttMatch?.[1]) {
+				finalVTT = vttMatch[1].trim();
 			}
 		}
 
-		// Use paragraph-based ID: "Paragraph N-M" where N is paragraph number, M is segment within paragraph
-		seg.index = `Paragraph ${paraIndex}-${segmentInPara}`;
+		// Ensure it starts with WEBVTT
+		if (!finalVTT.startsWith("WEBVTT")) {
+			const webvttIndex = finalVTT.indexOf("WEBVTT");
+			if (webvttIndex !== -1) {
+				finalVTT = finalVTT.substring(webvttIndex);
+			} else {
+				finalVTT = `WEBVTT\n\n${finalVTT}`;
+			}
+		}
+
+		console.log(
+			`[VTTCleaner] Successfully cleaned ${segments.length} segments using AI`,
+		);
+
+		return finalVTT;
+	} catch (err) {
+		console.error("[VTTCleaner] Exception:", err);
+		console.warn("[VTTCleaner] Falling back to uncleaned VTT");
+		return vttContent;
 	}
-
-	// Build output VTT with cleaned segment cues having paragraph-based IDs
-	let output = "WEBVTT\n\n";
-	for (const seg of cleanedSegments) {
-		if (!seg || !seg.timestamp || !seg.text) continue;
-		output += `${seg.index}\n`;
-		output += `${seg.timestamp}\n`;
-		output += `${seg.text}\n\n`;
-	}
-
-	console.log(
-		`[VTTCleaner] Completed for ${transcriptionId}: ${cleanedSegments.length} segments in ${paragraphBoundaries.length} paragraphs`,
-	);
-
-	return output;
 }

@@ -3,7 +3,6 @@ import { createEventSource } from "eventsource-client";
 import { ErrorCode } from "./errors";
 import { saveTranscriptVTT } from "./transcript-storage";
 import { cleanVTT } from "./vtt-cleaner";
-import { parseVTT } from "./vtt-cleaner";
 
 // Constants
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB

@@ -62,7 +62,16 @@ try {
 }
 
 // Periodic sync every 5 minutes as backup (SSE handles real-time updates)
-setInterval(() => whisperService.syncWithWhisper(), 5 * 60 * 1000);
+setInterval(async () => {
+	try {
+		await whisperService.syncWithWhisper();
+	} catch (error) {
+		console.warn(
+			"[Sync] Failed to sync with Murmur:",
+			error instanceof Error ? error.message : "Unknown error",
+		);
+	}
+}, 5 * 60 * 1000);
 
 // Clean up stale files daily
 setInterval(() => whisperService.cleanupStaleFiles(), 24 * 60 * 60 * 1000);

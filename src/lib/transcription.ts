@@ -396,7 +396,8 @@ export class WhisperServiceManager {
 	async syncWithWhisper(): Promise<void> {
 		const whisperJobs = await this.fetchWhisperJobs();
 		if (!whisperJobs) {
-			throw new Error("Murmur service unavailable");
+			console.warn("[Sync] Murmur service unavailable");
+			return;
 		}
 
 		const activeDbJobs = this.getActiveDbJobs();

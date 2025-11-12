@@ -3,6 +3,7 @@ import { createEventSource } from "eventsource-client";
 import { ErrorCode } from "./errors";
 import { saveTranscriptVTT } from "./transcript-storage";
 import { cleanVTT } from "./vtt-cleaner";
+import { parseVTT } from "./vtt-cleaner";
 
 // Constants
 export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -300,10 +301,11 @@ export class WhisperServiceManager {
 						`${this.serviceUrl}/transcribe/${whisperJobId}?format=vtt`,
 					);
 					if (vttResponse.ok) {
-						const vttContent = await vttResponse.text();
-						const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
-						await saveTranscriptVTT(transcriptionId, cleanedVTT);
-					}
+					const vttContent = await vttResponse.text();
+					const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
+					await saveTranscriptVTT(transcriptionId, cleanedVTT);
+					this.updateTranscription(transcriptionId, {});
+				}
 				} catch (error) {
 					console.warn(
 						`[Transcription] Failed to fetch VTT for ${transcriptionId}:`,
@@ -361,6 +363,7 @@ export class WhisperServiceManager {
 			status?: TranscriptionStatus;
 			progress?: number;
 			error_message?: string;
+			vttContent?: string;
 		},
 	) {
 		const updates: string[] = [];
@@ -378,6 +381,7 @@ export class WhisperServiceManager {
 			updates.push("error_message = ?");
 			values.push(data.error_message);
 		}
+
 
 		updates.push("updated_at = ?");
 		values.push(Math.floor(Date.now() / 1000));
@@ -519,10 +523,11 @@ export class WhisperServiceManager {
 						`${this.serviceUrl}/transcribe/${whisperJob.id}?format=vtt`,
 					);
 					if (vttResponse.ok) {
-						const vttContent = await vttResponse.text();
-						const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
-						await saveTranscriptVTT(transcriptionId, cleanedVTT);
-					}
+					const vttContent = await vttResponse.text();
+					const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
+					await saveTranscriptVTT(transcriptionId, cleanedVTT);
+					this.updateTranscription(transcriptionId, {});
+				}
 				} catch (error) {
 					console.warn(
 						`[Sync] Failed to fetch VTT for ${transcriptionId}:`,

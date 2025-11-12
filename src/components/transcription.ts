@@ -1,5 +1,6 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { parseVTT } from "../lib/vtt-cleaner";
 
 interface TranscriptionJob {
 	id: string;
@@ -10,12 +11,14 @@ interface TranscriptionJob {
 	created_at: number;
 	audioUrl?: string;
 	vttSegments?: VTTSegment[];
+	vttContent?: string;
 }
 
 interface VTTSegment {
 	start: number;
 	end: number;
 	text: string;
+	index?: string;
 }
 
 
@@ -26,14 +29,21 @@ function parseVTT(vttContent: string): VTTSegment[] {
 
 	let i = 0;
 	// Skip WEBVTT header
-	while (i < lines.length && !lines[i]?.includes("-->")) {
+	while (i < lines.length && lines[i]?.trim() !== "WEBVTT") {
 		i++;
 	}
+	i++; // Skip WEBVTT
 
 	while (i < lines.length) {
-		const line = lines[i];
-		if (line?.includes("-->")) {
-			const [startStr, endStr] = line.split("-->").map((s) => s.trim());
+		let index: string | undefined;
+		// Check for cue ID (line before timestamp)
+		if (lines[i]?.trim() && !lines[i]?.includes("-->")) {
+			index = lines[i]?.trim();
+			i++;
+		}
+
+		if (i < lines.length && lines[i]?.includes("-->")) {
+			const [startStr, endStr] = lines[i].split("-->").map((s) => s.trim());
 			const start = parseVTTTimestamp(startStr || "");
 			const end = parseVTTTimestamp(endStr || "");
 
@@ -49,9 +59,11 @@ function parseVTT(vttContent: string): VTTSegment[] {
 				start,
 				end,
 				text: textLines.join(" ").trim(),
+				index,
 			});
+		} else {
+			i++;
 		}
-		i++;
 	}
 
 	return segments;
@@ -305,6 +317,12 @@ export class TranscriptionComponent extends LitElement {
       border-radius: 2px;
     }
 
+    .paragraph {
+      display: block;
+      margin: 0 0 1rem 0;
+      line-height: 1.6;
+    }
+
     .audio-player {
       margin-top: 1rem;
       width: 100%;
@@ -546,10 +564,11 @@ export class TranscriptionComponent extends LitElement {
 			if (response.ok) {
 				const vttContent = await response.text();
 				const segments = parseVTT(vttContent);
-				
-				// Update job with VTT segments
+
+				// Update job with VTT content and segments
 				const job = this.jobs.find((j) => j.id === jobId);
 				if (job) {
+					job.vttContent = vttContent;
 					job.vttSegments = segments;
 					job.audioUrl = `/api/transcriptions/${jobId}/audio`;
 					this.jobs = [...this.jobs];
@@ -656,6 +675,7 @@ export class TranscriptionComponent extends LitElement {
 			"audio/wav", // WAV
 			"audio/x-wav", // WAV (alternative)
 			"audio/m4a", // M4A
+			"audio/x-m4a", // M4A (alternative)
 			"audio/mp4", // MP4 audio
 			"audio/aac", // AAC
 			"audio/ogg", // OGG
@@ -716,20 +736,55 @@ export class TranscriptionComponent extends LitElement {
 	}
 
 	private renderTranscript(job: TranscriptionJob) {
-		if (!job.vttSegments) {
+		if (!job.vttContent) {
 			const displayed = this.displayedTranscripts.get(job.id) || "";
 			return displayed;
 		}
 
-		const segments = job.vttSegments;
-		// Render segments as clickable spans
-		return html`${segments.map(
-			(segment, idx) => html`<span
-          class="segment"
-          data-start="${segment.start}"
-          data-end="${segment.end}"
-        >${segment.text}</span>${idx < segments.length - 1 ? " " : ""}`,
-		)}`;
+		const segments = parseVTT(job.vttContent);
+		// Group segments by paragraph (extract paragraph number from ID like "Paragraph 1-1" -> "1")
+		const paragraphGroups = new Map<string, typeof segments>();
+		for (const segment of segments) {
+		const id = (segment.index || '').trim();
+		const match = id.match(/^Paragraph\s+(\d+)-/);
+		const paraNum = match ? match[1] : '0';
+		if (!paragraphGroups.has(paraNum)) {
+		paragraphGroups.set(paraNum, []);
+		}
+		paragraphGroups.get(paraNum)!.push(segment);
+		}
+
+		// Render each paragraph group
+		const paragraphs = Array.from(paragraphGroups.entries()).map(([paraNum, groupSegments]) => {
+		// Concatenate all text in the group
+		const fullText = groupSegments.map(s => s.text || '').join(' ');
+		// Split into sentences
+		const sentences = fullText.split(/(?<=[\.\!\?])\s+/g).filter(Boolean);
+		// Calculate word counts for timing
+		const wordCounts = sentences.map((s) => s.split(/\s+/).filter(Boolean).length);
+		 const totalWords = Math.max(1, wordCounts.reduce((a, b) => a + b, 0));
+
+			// Overall paragraph timing
+			const paraStart = Math.min(...groupSegments.map(s => s.start ?? 0));
+			const paraEnd = Math.max(...groupSegments.map(s => s.end ?? paraStart));
+
+			let acc = 0;
+			const paraDuration = paraEnd - paraStart;
+
+			return html`<div class="paragraph">
+			${sentences.map((sent, si) => {
+			const startOffset = (acc / totalWords) * paraDuration;
+			acc += wordCounts[si];
+			const sentenceDuration = (wordCounts[si] / totalWords) * paraDuration;
+			const endOffset = si < sentences.length - 1 ? startOffset + sentenceDuration - 0.001 : paraEnd - paraStart;
+			const spanStart = paraStart + startOffset;
+			const spanEnd = paraStart + endOffset;
+			 return html`<span class="segment" data-start="${spanStart}" data-end="${spanEnd}">${sent}</span>${si < sentences.length - 1 ? ' ' : ''}`;
+			 })}
+			</div>`;
+		});
+
+		return html`${paragraphs}`;
 	}
 
 

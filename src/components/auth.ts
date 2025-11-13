@@ -130,6 +130,11 @@ export class AuthComponent extends LitElement {
 			box-sizing: border-box;
 		}
 
+		input::placeholder {
+			color: var(--secondary);
+			opacity: 1;
+		}
+
 		input:focus {
 			outline: none;
 			border-color: var(--primary);
@@ -328,6 +333,11 @@ export class AuthComponent extends LitElement {
 
 				if (!response.ok) {
 					const data = await response.json();
+					if (response.status === 401) {
+						this.needsRegistration = true;
+						this.error = "";
+						return;
+					}
 					this.error = data.error || "Login failed";
 					return;
 				}
@@ -424,8 +434,7 @@ export class AuthComponent extends LitElement {
 									this.needsRegistration
 										? html`
 											<p class="info-text">
-												That email isn't registered yet. Let's create an
-												account!
+												Looks like you might not have an account yet. Create one below!
 											</p>
 										`
 										: ""
@@ -433,10 +442,10 @@ export class AuthComponent extends LitElement {
 
 								<form @submit=${this.handleSubmit}>
 									<div class="form-group">
-										<label for="email">Email</label>
 										<input
 											type="email"
 											id="email"
+											placeholder="heidi@awesome.net"
 											.value=${this.email}
 											@input=${this.handleEmailInput}
 											required
@@ -452,6 +461,7 @@ export class AuthComponent extends LitElement {
 													<input
 														type="text"
 														id="name"
+														placeholder="Heidi VanCoolbeans"
 														.value=${this.name}
 														@input=${this.handleNameInput}
 														?disabled=${this.isSubmitting}
@@ -466,6 +476,7 @@ export class AuthComponent extends LitElement {
 										<input
 											type="password"
 											id="password"
+											placeholder="*************"
 											.value=${this.password}
 											@input=${this.handlePasswordInput}
 											required

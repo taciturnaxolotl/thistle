@@ -1,6 +1,9 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { hashPasswordClient } from "../lib/client-auth";
+import type { PasswordStrength } from "./password-strength";
+import "./password-strength";
+import type { PasswordStrengthResult } from "./password-strength";
 
 interface User {
 	email: string;
@@ -19,6 +22,7 @@ export class AuthComponent extends LitElement {
 	@state() error = "";
 	@state() isSubmitting = false;
 	@state() needsRegistration = false;
+	@state() passwordStrength: PasswordStrengthResult | null = null;
 
 	static override styles = css`
 		:host {
@@ -379,6 +383,21 @@ export class AuthComponent extends LitElement {
 		this.password = (e.target as HTMLInputElement).value;
 	}
 
+	private handlePasswordBlur() {
+		if (!this.needsRegistration) return;
+
+		const strengthComponent = this.shadowRoot?.querySelector(
+			"password-strength",
+		) as PasswordStrength | null;
+		if (strengthComponent && this.password) {
+			strengthComponent.checkHIBP(this.password);
+		}
+	}
+
+	private handleStrengthChange(e: CustomEvent<PasswordStrengthResult>) {
+		this.passwordStrength = e.detail;
+	}
+
 	override render() {
 		if (this.loading) {
 			return html`<div class="loading">Loading...</div>`;
@@ -479,9 +498,18 @@ export class AuthComponent extends LitElement {
 											placeholder="*************"
 											.value=${this.password}
 											@input=${this.handlePasswordInput}
+											@blur=${this.handlePasswordBlur}
 											required
 											?disabled=${this.isSubmitting}
 										/>
+										${
+											this.needsRegistration
+												? html`<password-strength
+														.password=${this.password}
+														@strength-change=${this.handleStrengthChange}
+													></password-strength>`
+												: ""
+										}
 									</div>
 
 									${
@@ -494,7 +522,9 @@ export class AuthComponent extends LitElement {
 										<button
 											type="submit"
 											class="btn-primary"
-											?disabled=${this.isSubmitting}
+											?disabled=${this.isSubmitting ||
+											(this.passwordStrength?.isChecking ?? false) ||
+											(this.needsRegistration && !(this.passwordStrength?.isValid ?? false))}
 										>
 											${
 												this.isSubmitting

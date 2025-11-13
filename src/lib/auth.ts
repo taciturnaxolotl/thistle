@@ -169,4 +169,5 @@ export async function updateUserPassword(
 		newPassword,
 		userId,
 	]);
+	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
 }

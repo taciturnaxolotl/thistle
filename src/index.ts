@@ -17,6 +17,7 @@ import {
 } from "./lib/auth";
 import { handleError, ValidationErrors } from "./lib/errors";
 import { requireAuth } from "./lib/middleware";
+import { enforceRateLimit } from "./lib/rate-limit";
 import {
 	MAX_FILE_SIZE,
 	TranscriptionEventEmitter,
@@ -86,6 +87,12 @@ const server = Bun.serve({
 		"/api/auth/register": {
 			POST: async (req) => {
 				try {
+					// Rate limiting
+					const rateLimitError = enforceRateLimit(req, "register", {
+						ip: { max: 5, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const body = await req.json();
 					const { email, password, name } = body;
 					if (!email || !password) {
@@ -142,6 +149,14 @@ const server = Bun.serve({
 							{ status: 400 },
 						);
 					}
+
+					// Rate limiting: Per IP and per account
+					const rateLimitError = enforceRateLimit(req, "login", {
+						ip: { max: 10, windowSeconds: 15 * 60 },
+						account: { max: 5, windowSeconds: 15 * 60, email },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					// Password is client-side hashed (PBKDF2), should be 64 char hex
 					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
 						return Response.json(
@@ -267,6 +282,13 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				// Rate limiting
+				const rateLimitError = enforceRateLimit(req, "delete-user", {
+					ip: { max: 3, windowSeconds: 60 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				deleteUser(user.id);
 				return Response.json(
 					{ success: true },
@@ -289,6 +311,13 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				// Rate limiting
+				const rateLimitError = enforceRateLimit(req, "update-email", {
+					ip: { max: 5, windowSeconds: 60 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				const body = await req.json();
 				const { email } = body;
 				if (!email) {
@@ -322,6 +351,13 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				// Rate limiting
+				const rateLimitError = enforceRateLimit(req, "update-password", {
+					ip: { max: 5, windowSeconds: 60 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				const body = await req.json();
 				const { password } = body;
 				if (!password) {

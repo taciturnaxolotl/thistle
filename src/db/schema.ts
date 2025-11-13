@@ -76,6 +76,19 @@ const migrations = [
       ALTER TABLE transcriptions DROP COLUMN transcript;
     `,
 	},
+	{
+		version: 5,
+		name: "Add rate limiting table",
+		sql: `
+      CREATE TABLE IF NOT EXISTS rate_limit_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rate_limit_key_timestamp ON rate_limit_attempts(key, timestamp);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

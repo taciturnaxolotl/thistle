@@ -273,6 +273,14 @@ export class AuthComponent extends LitElement {
 		}
 	}
 
+	public isAuthenticated(): boolean {
+		return this.user !== null;
+	}
+
+	public openAuthModal() {
+		this.openModal();
+	}
+
 	private openModal() {
 		this.showModal = true;
 		this.needsRegistration = false;

@@ -99,12 +99,23 @@
     <p class="hero-subtitle">AI-powered audio transcription made simple</p>
 
     <div class="cta-buttons">
-      <a href="/transcribe" class="btn btn-primary">Start Transcribing</a>
-      <a href="/settings" class="btn btn-secondary">Settings</a>
+      <button id="start-btn" class="btn btn-primary">Start Transcribing</button>
     </div>
   </main>
 
   <script type="module" src="../components/auth.ts"></script>
+  <script type="module">
+    document.getElementById('start-btn').addEventListener('click', async () => {
+      const authComponent = document.querySelector('auth-component');
+      const isLoggedIn = await authComponent.isAuthenticated();
+      
+      if (isLoggedIn) {
+        window.location.href = '/transcribe';
+      } else {
+        authComponent.openAuthModal();
+      }
+    });
+  </script>
 </body>
 
 </html>

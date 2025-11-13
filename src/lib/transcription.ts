@@ -13,6 +13,7 @@ export type TranscriptionStatus =
 	| "uploading"
 	| "processing"
 	| "transcribing"
+	| "finalizing"
 	| "completed"
 	| "failed";
 
@@ -287,6 +288,17 @@ export class WhisperServiceManager {
 				transcript: transcript || undefined,
 			});
 		} else if (update.status === "completed") {
+			// Set to finalizing state while we fetch and process the VTT
+			this.updateTranscription(transcriptionId, {
+				status: "finalizing",
+				progress: 100,
+			});
+
+			this.events.emit(transcriptionId, {
+				status: "finalizing",
+				progress: 100,
+			});
+
 			// Fetch and save VTT file from Murmur
 			const whisperJobId = this.db
 				.query<{ whisper_job_id: string }, [string]>(
@@ -535,6 +547,18 @@ export class WhisperServiceManager {
 					);
 				}
 
+				// Set to finalizing state while we process
+				this.updateTranscription(transcriptionId, {
+					status: "finalizing",
+					progress: 100,
+				});
+
+				this.events.emit(transcriptionId, {
+					status: "finalizing",
+					progress: 100,
+				});
+
+				// Then immediately mark as completed
 				this.updateTranscription(transcriptionId, {
 					status: "completed",
 					progress: 100,

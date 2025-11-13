@@ -94,9 +94,10 @@ const server = Bun.serve({
 							{ status: 400 },
 						);
 					}
-					if (password.length < 8) {
+					// Password is client-side hashed (PBKDF2), should be 64 char hex
+					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
 						return Response.json(
-							{ error: "Password must be at least 8 characters" },
+							{ error: "Invalid password format" },
 							{ status: 400 },
 						);
 					}
@@ -138,6 +139,13 @@ const server = Bun.serve({
 					if (!email || !password) {
 						return Response.json(
 							{ error: "Email and password required" },
+							{ status: 400 },
+						);
+					}
+					// Password is client-side hashed (PBKDF2), should be 64 char hex
+					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
+						return Response.json(
+							{ error: "Invalid password format" },
 							{ status: 400 },
 						);
 					}
@@ -319,9 +327,10 @@ const server = Bun.serve({
 				if (!password) {
 					return Response.json({ error: "Password required" }, { status: 400 });
 				}
-				if (password.length < 8) {
+				// Password is client-side hashed (PBKDF2), should be 64 char hex
+				if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
 					return Response.json(
-						{ error: "Password must be at least 8 characters" },
+						{ error: "Invalid password format" },
 						{ status: 400 },
 					);
 				}

@@ -19,21 +19,6 @@ export interface Session {
 	expires_at: number;
 }
 
-export async function hashPassword(password: string): Promise<string> {
-	return await Bun.password.hash(password, {
-		algorithm: "argon2id",
-		memoryCost: 19456,
-		timeCost: 2,
-	});
-}
-
-export async function verifyPassword(
-	password: string,
-	hash: string,
-): Promise<boolean> {
-	return await Bun.password.verify(password, hash, "argon2id");
-}
-
 export function createSession(
 	userId: number,
 	ipAddress?: string,
@@ -89,15 +74,15 @@ export async function createUser(
 	password: string,
 	name?: string,
 ): Promise<User> {
-	const passwordHash = await hashPassword(password);
-
 	const result = db.run(
 		"INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)",
-		[email, passwordHash, name ?? null],
+		[email, password, name ?? null],
 	);
 
 	const user = db
-		.query<User, [number]>("SELECT id, email, name, avatar, created_at FROM users WHERE id = ?")
+		.query<User, [number]>(
+			"SELECT id, email, name, avatar, created_at FROM users WHERE id = ?",
+		)
 		.get(Number(result.lastInsertRowid));
 
 	if (!user) {
@@ -112,15 +97,24 @@ export async function authenticateUser(
 	password: string,
 ): Promise<User | null> {
 	const result = db
-		.query<{ id: number; email: string; name: string | null; avatar: string; password_hash: string; created_at: number }, [string]>(
+		.query<
+			{
+				id: number;
+				email: string;
+				name: string | null;
+				avatar: string;
+				password_hash: string;
+				created_at: number;
+			},
+			[string]
+		>(
 			"SELECT id, email, name, avatar, password_hash, created_at FROM users WHERE email = ?",
 		)
 		.get(email);
 
 	if (!result) return null;
 
-	const isValid = await verifyPassword(password, result.password_hash);
-	if (!isValid) return null;
+	if (password !== result.password_hash) return null;
 
 	return {
 		id: result.id,
@@ -171,6 +165,8 @@ export async function updateUserPassword(
 	userId: number,
 	newPassword: string,
 ): Promise<void> {
-	const hash = await hashPassword(newPassword);
-	db.run("UPDATE users SET password_hash = ? WHERE id = ?", [hash, userId]);
+	db.run("UPDATE users SET password_hash = ? WHERE id = ?", [
+		newPassword,
+		userId,
+	]);
 }

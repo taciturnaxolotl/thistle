@@ -1,6 +1,7 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { UAParser } from "ua-parser-js";
+import { hashPasswordClient } from "../lib/client-auth";
 
 interface User {
 	email: string;
@@ -502,10 +503,16 @@ export class UserSettings extends LitElement {
 		}
 
 		try {
+			// Hash password client-side before sending
+			const passwordHash = await hashPasswordClient(
+				this.newPassword,
+				this.user?.email ?? "",
+			);
+
 			const response = await fetch("/api/user/password", {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ password: this.newPassword }),
+				body: JSON.stringify({ password: passwordHash }),
 			});
 
 			if (!response.ok) {

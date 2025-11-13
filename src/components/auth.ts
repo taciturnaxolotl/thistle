@@ -1,5 +1,6 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { hashPasswordClient } from "../lib/client-auth";
 
 interface User {
 	email: string;
@@ -287,6 +288,9 @@ export class AuthComponent extends LitElement {
 		this.isSubmitting = true;
 
 		try {
+			// Hash password client-side with expensive PBKDF2
+			const passwordHash = await hashPasswordClient(this.password, this.email);
+
 			if (this.needsRegistration) {
 				const response = await fetch("/api/auth/register", {
 					method: "POST",
@@ -295,7 +299,7 @@ export class AuthComponent extends LitElement {
 					},
 					body: JSON.stringify({
 						email: this.email,
-						password: this.password,
+						password: passwordHash,
 						name: this.name || null,
 					}),
 				});
@@ -318,7 +322,7 @@ export class AuthComponent extends LitElement {
 					},
 					body: JSON.stringify({
 						email: this.email,
-						password: this.password,
+						password: passwordHash,
 					}),
 				});
 

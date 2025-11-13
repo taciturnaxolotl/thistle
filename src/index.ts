@@ -112,7 +112,7 @@ const server = Bun.serve({
 						{ user: { id: user.id, email: user.email } },
 						{
 							headers: {
-								"Set-Cookie": `session=${sessionId}; HttpOnly; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
+								"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
 							},
 						},
 					);
@@ -166,7 +166,7 @@ const server = Bun.serve({
 						{ user: { id: user.id, email: user.email } },
 						{
 							headers: {
-								"Set-Cookie": `session=${sessionId}; HttpOnly; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
+								"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
 							},
 						},
 					);
@@ -186,7 +186,7 @@ const server = Bun.serve({
 					{
 						headers: {
 							"Set-Cookie":
-								"session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax",
+								"session=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=Lax",
 						},
 					},
 				);
@@ -273,7 +273,7 @@ const server = Bun.serve({
 					{
 						headers: {
 							"Set-Cookie":
-								"session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax",
+								"session=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=Lax",
 						},
 					},
 				);

@@ -74,9 +74,19 @@ export async function createUser(
 	password: string,
 	name?: string,
 ): Promise<User> {
+	// Generate deterministic avatar from email
+	const encoder = new TextEncoder();
+	const data = encoder.encode(email.toLowerCase());
+	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+	const avatar = hashArray
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("")
+		.substring(0, 16);
+
 	const result = db.run(
-		"INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)",
-		[email, password, name ?? null],
+		"INSERT INTO users (email, password_hash, name, avatar) VALUES (?, ?, ?, ?)",
+		[email, password, name ?? null, avatar],
 	);
 
 	const user = db

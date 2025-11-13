@@ -112,7 +112,12 @@ export async function authenticateUser(
 		)
 		.get(email);
 
-	if (!result) return null;
+	if (!result) {
+		// Dummy comparison to prevent timing-based account enumeration
+		const dummyHash = "0".repeat(64);
+		password === dummyHash;
+		return null;
+	}
 
 	if (password !== result.password_hash) return null;
 

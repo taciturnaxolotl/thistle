@@ -328,16 +328,6 @@ export class AuthComponent extends LitElement {
 
 				if (!response.ok) {
 					const data = await response.json();
-
-					if (
-						response.status === 401 &&
-						data.error?.includes("Invalid email")
-					) {
-						this.needsRegistration = true;
-						this.error = "";
-						return;
-					}
-
 					this.error = data.error || "Login failed";
 					return;
 				}

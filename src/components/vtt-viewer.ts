@@ -74,6 +74,29 @@ export class VTTViewer extends LitElement {
 	@property({ type: String }) audioId = "";
 
 	static override styles = css`
+	.viewer-container {
+		position: relative;
+	}
+
+	.copy-btn {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		background: var(--primary);
+		color: var(--background);
+		border: none;
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.875rem;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+
+	.viewer-container:hover .copy-btn {
+		opacity: 1;
+	}
+
 	.transcript {
 		background: color-mix(in srgb, var(--primary) 5%, transparent);
 		border-radius: 6px;
@@ -143,7 +166,7 @@ export class VTTViewer extends LitElement {
 		if (!audioElement || !transcriptDiv) return;
 
 		// Clear any lingering highlights from prior instances
-		transcriptDiv.querySelectorAll('.current-segment').forEach((el) => (el as HTMLElement).classList.remove('current-segment'));
+		transcriptDiv.querySelectorAll('.current-segment').forEach((el) => { (el as HTMLElement).classList.remove('current-segment'); });
 
 		this.audioElement = audioElement;
 		let currentSegmentElement: HTMLElement | null = null;
@@ -262,7 +285,52 @@ export class VTTViewer extends LitElement {
 		return html`${paragraphs}`;
 	}
 
+	private extractPlainText(): string {
+		if (!this.vttContent) return "";
+		const segments = parseVTT(this.vttContent);
+		// Group into paragraphs by index as in renderFromVTT
+		const paragraphGroups = new Map<string, string[]>();
+		for (const s of segments) {
+			const id = (s.index || "").trim();
+			const match = id.match(/^Paragraph\s+(\d+)-/);
+			const paraNum = match ? match[1] : '0';
+			if (!paragraphGroups.has(paraNum)) paragraphGroups.set(paraNum, []);
+			paragraphGroups.get(paraNum)!.push(s.text || '');
+		}
+		const paragraphs = Array.from(paragraphGroups.values()).map(group => group.join(' ').replace(/\s+/g, ' ').trim());
+		return paragraphs.join('\n\n').trim();
+	}
+
+	private async copyTranscript(e?: Event) {
+		e && e.stopPropagation();
+		const text = this.extractPlainText();
+		if (!text) return;
+		try {
+			if (navigator && (navigator as any).clipboard && (navigator as any).clipboard.writeText) {
+				await (navigator as any).clipboard.writeText(text);
+			} else {
+				// Fallback
+				const ta = document.createElement('textarea');
+				ta.value = text;
+				ta.style.position = 'fixed';
+				ta.style.opacity = '0';
+				document.body.appendChild(ta);
+				ta.select();
+				document.execCommand('copy');
+				document.body.removeChild(ta);
+			}
+			const btn = this.shadowRoot?.querySelector('.copy-btn') as HTMLButtonElement | null;
+			if (btn) {
+				const orig = btn.innerText;
+				btn.innerText = 'Copied!';
+				setTimeout(() => { btn.innerText = orig; }, 1500);
+			}
+		} catch {
+			// ignore
+		}
+	}
+
 	override render() {
-		return html`<div class="transcript">${this.renderFromVTT()}</div>`;
+		return html`<div class="viewer-container"><button class="copy-btn" @click=${this.copyTranscript} aria-label="Copy transcript">Copy</button><div class="transcript">${this.renderFromVTT()}</div></div>`;
 	}
 }

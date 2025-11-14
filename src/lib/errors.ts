@@ -85,6 +85,8 @@ export const AuthErrors = {
 			"Email already registered",
 			400,
 		),
+	adminRequired: () =>
+		new AppError(ErrorCode.AUTH_REQUIRED, "Admin access required", 403),
 };
 
 export const ValidationErrors = {

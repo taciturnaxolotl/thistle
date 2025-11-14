@@ -9,6 +9,7 @@ interface User {
 	email: string;
 	name: string | null;
 	avatar: string;
+	role?: "user" | "admin";
 }
 
 @customElement("auth-component")
@@ -242,6 +243,17 @@ export class AuthComponent extends LitElement {
 			background: var(--secondary);
 		}
 
+		.admin-link {
+			color: #dc2626;
+			border: 2px dashed #dc2626 !important;
+		}
+
+		.admin-link:hover {
+			background: #fee2e2;
+			color: #991b1b;
+			border-color: #991b1b !important;
+		}
+
 		.loading {
 			font-size: 0.875rem;
 			color: var(--text);
@@ -434,6 +446,11 @@ export class AuthComponent extends LitElement {
 										<div class="user-menu">
 											<a href="/transcribe" @click=${this.closeModal}>Transcribe</a>
 											<a href="/settings" @click=${this.closeModal}>Settings</a>
+											${
+												this.user.role === "admin"
+													? html`<a href="/admin" @click=${this.closeModal} class="admin-link">Admin</a>`
+													: ""
+											}
 											<button @click=${this.handleLogout}>Logout</button>
 										</div>
 									`

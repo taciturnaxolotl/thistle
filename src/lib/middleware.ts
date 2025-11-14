@@ -21,3 +21,13 @@ export function requireAuth(req: Request): User {
 
 	return user;
 }
+
+export function requireAdmin(req: Request): User {
+	const user = requireAuth(req);
+
+	if (user.role !== "admin") {
+		throw AuthErrors.adminRequired();
+	}
+
+	return user;
+}

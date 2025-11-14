@@ -79,6 +79,9 @@ bun test
 
 # Build files
 bun build <file.html|file.ts|file.css>
+
+# Make a user an admin
+bun scripts/make-admin.ts <email>
 ```
 
 Development workflow: `bun dev` runs the server with hot module reloading. Changes to TypeScript, HTML, or CSS files automatically reload.
@@ -403,6 +406,47 @@ Based on Bun fullstack pattern:
 4. Components self-register as custom elements
 5. Bun bundles everything automatically
 
+## Database Schema & Migrations
+
+Database migrations are managed in `src/db/schema.ts` using a versioned migration system.
+
+**Migration structure:**
+```typescript
+const migrations = [
+  {
+    version: 1,
+    name: "Description of migration",
+    sql: `
+      CREATE TABLE IF NOT EXISTS ...;
+      CREATE INDEX IF NOT EXISTS ...;
+    `,
+  },
+];
+```
+
+**Important migration rules:**
+1. **Never modify existing migrations** - they may have already run in production
+2. **Always add new migrations** with incrementing version numbers
+3. **Drop indexes before dropping columns** - SQLite will error if you try to drop a column with an index still attached
+4. **Use IF NOT EXISTS** for CREATE statements to be idempotent
+5. **Test migrations** on a copy of production data before deploying
+
+**Example: Dropping a column**
+```sql
+-- ❌ WRONG: Will error if idx_users_old_column exists
+ALTER TABLE users DROP COLUMN old_column;
+
+-- ✅ CORRECT: Drop index first, then column
+DROP INDEX IF EXISTS idx_users_old_column;
+ALTER TABLE users DROP COLUMN old_column;
+```
+
+**Migration workflow:**
+1. Add migration to `migrations` array with next version number
+2. Migrations auto-apply on server start
+3. Check `schema_migrations` table to see applied versions
+4. Migrations are transactional and show timing in console
+
 ## File Organization
 
 - `src/index.ts`: Main server entry point with `Bun.serve()` routes
@@ -485,6 +529,54 @@ Use Context7 MCP for looking up official documentation for libraries and framewo
 - [Web Components MDN](https://developer.mozilla.org/en-US/docs/Web/Web_Components)
 - Bun API docs in `node_modules/bun-types/docs/**.md`
 
+## Admin System
+
+The application includes a role-based admin system for managing users and transcriptions.
+
+**User roles:**
+- `user` - Default role, can create and manage their own transcriptions
+- `admin` - Full administrative access to all data and users
+
+**Admin privileges:**
+- View all transcriptions (with user info, status, errors)
+- Delete transcriptions
+- View all users (with emails, join dates, roles)
+- Change user roles (user ↔ admin)
+- Delete user accounts
+- Access admin dashboard at `/admin`
+
+**Making users admin:**
+Use the provided script to grant admin access:
+```bash
+bun scripts/make-admin.ts user@example.com
+```
+
+**Admin routes:**
+- `/admin` - Admin dashboard (protected by `requireAdmin` middleware)
+- `/api/admin/transcriptions` - Get all transcriptions with user info
+- `/api/admin/transcriptions/:id` - Delete a transcription (DELETE)
+- `/api/admin/users` - Get all users
+- `/api/admin/users/:id` - Delete a user account (DELETE)
+- `/api/admin/users/:id/role` - Update a user's role (PUT)
+
+**Admin UI features:**
+- Statistics cards (total users, total/failed transcriptions)
+- Tabbed interface (Transcriptions / Users)
+- Status badges for transcription states
+- Delete buttons for transcriptions with confirmation
+- Role dropdown for changing user roles
+- Delete buttons for user accounts with confirmation
+- User avatars and info display
+- Timestamp formatting
+- Admin badge on user listings
+
+**Implementation notes:**
+- `role` column in users table ('user' or 'admin', default 'user')
+- `requireAdmin()` middleware checks authentication + admin role
+- Returns 403 if non-admin tries to access admin routes
+- Admin link shows in auth menu only for admin users
+- Redirects to home page if non-admin accesses admin page
+
 ## Future Additions
 
 As the codebase grows, document:
@@ -494,3 +586,4 @@ As the codebase grows, document:
 - Transcription service integration details
 - Deployment process
 - Environment variables needed
+

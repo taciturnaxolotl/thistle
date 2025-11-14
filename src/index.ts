@@ -5,7 +5,10 @@ import {
 	createSession,
 	createUser,
 	deleteSession,
+	deleteTranscription,
 	deleteUser,
+	getAllTranscriptions,
+	getAllUsers,
 	getSession,
 	getSessionFromRequest,
 	getUserBySession,
@@ -14,9 +17,11 @@ import {
 	updateUserEmail,
 	updateUserName,
 	updateUserPassword,
+	updateUserRole,
+	type UserRole,
 } from "./lib/auth";
 import { handleError, ValidationErrors } from "./lib/errors";
-import { requireAuth } from "./lib/middleware";
+import { requireAdmin, requireAuth } from "./lib/middleware";
 import { enforceRateLimit } from "./lib/rate-limit";
 import {
 	MAX_FILE_SIZE,
@@ -26,6 +31,7 @@ import {
 } from "./lib/transcription";
 import { getTranscript, getTranscriptVTT } from "./lib/transcript-storage";
 import indexHTML from "./pages/index.html";
+import adminHTML from "./pages/admin.html";
 import settingsHTML from "./pages/settings.html";
 import transcribeHTML from "./pages/transcribe.html";
 
@@ -82,6 +88,7 @@ const server = Bun.serve({
 	idleTimeout: 120, // 120 seconds for SSE connections
 	routes: {
 		"/": indexHTML,
+		"/admin": adminHTML,
 		"/settings": settingsHTML,
 		"/transcribe": transcribeHTML,
 		"/api/auth/register": {
@@ -222,6 +229,7 @@ const server = Bun.serve({
 					name: user.name,
 					avatar: user.avatar,
 					created_at: user.created_at,
+					role: user.role,
 				});
 			},
 		},
@@ -829,6 +837,81 @@ const server = Bun.serve({
 						id: transcriptionId,
 						message: "Upload successful, transcription started",
 					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/transcriptions": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const transcriptions = getAllTranscriptions();
+					return Response.json(transcriptions);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const users = getAllUsers();
+					return Response.json(users);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/transcriptions/:id": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const transcriptionId = req.params.id;
+					deleteTranscription(transcriptionId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+					deleteUser(userId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/role": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const body = await req.json();
+					const { role } = body as { role: UserRole };
+
+					if (!role || (role !== "user" && role !== "admin")) {
+						return Response.json(
+							{ error: "Invalid role. Must be 'user' or 'admin'" },
+							{ status: 400 },
+						);
+					}
+
+					updateUserRole(userId, role);
+					return Response.json({ success: true });
 				} catch (error) {
 					return handleError(error);
 				}

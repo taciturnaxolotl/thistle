@@ -2,12 +2,15 @@ import db from "../db/schema";
 
 const SESSION_DURATION = 7 * 24 * 60 * 60; // 7 days in seconds
 
+export type UserRole = "user" | "admin";
+
 export interface User {
 	id: number;
 	email: string;
 	name: string | null;
 	avatar: string;
 	created_at: number;
+	role: UserRole;
 }
 
 export interface Session {
@@ -53,7 +56,7 @@ export function getUserBySession(sessionId: string): User | null {
 
 	const user = db
 		.query<User, [number]>(
-			"SELECT id, email, name, avatar, created_at FROM users WHERE id = ?",
+			"SELECT id, email, name, avatar, created_at, role FROM users WHERE id = ?",
 		)
 		.get(session.user_id);
 
@@ -91,7 +94,7 @@ export async function createUser(
 
 	const user = db
 		.query<User, [number]>(
-			"SELECT id, email, name, avatar, created_at FROM users WHERE id = ?",
+			"SELECT id, email, name, avatar, created_at, role FROM users WHERE id = ?",
 		)
 		.get(Number(result.lastInsertRowid));
 
@@ -115,10 +118,11 @@ export async function authenticateUser(
 				avatar: string;
 				password_hash: string;
 				created_at: number;
+				role: UserRole;
 			},
 			[string]
 		>(
-			"SELECT id, email, name, avatar, password_hash, created_at FROM users WHERE email = ?",
+			"SELECT id, email, name, avatar, password_hash, created_at, role FROM users WHERE email = ?",
 		)
 		.get(email);
 
@@ -137,6 +141,7 @@ export async function authenticateUser(
 		name: result.name,
 		avatar: result.avatar,
 		created_at: result.created_at,
+		role: result.role,
 	};
 }
 
@@ -185,4 +190,124 @@ export async function updateUserPassword(
 		userId,
 	]);
 	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+}
+
+export function isUserAdmin(userId: number): boolean {
+	const result = db
+		.query<{ role: UserRole }, [number]>("SELECT role FROM users WHERE id = ?")
+		.get(userId);
+
+	return result?.role === "admin";
+}
+
+export function updateUserRole(userId: number, role: UserRole): void {
+	db.run("UPDATE users SET role = ? WHERE id = ?", [role, userId]);
+}
+
+export function getAllUsers(): Array<{
+	id: number;
+	email: string;
+	name: string | null;
+	avatar: string;
+	created_at: number;
+	role: UserRole;
+}> {
+	return db
+		.query<
+			{
+				id: number;
+				email: string;
+				name: string | null;
+				avatar: string;
+				created_at: number;
+				role: UserRole;
+			},
+			[]
+		>("SELECT id, email, name, avatar, created_at, role FROM users ORDER BY created_at DESC")
+		.all();
+}
+
+export function getAllTranscriptions(): Array<{
+	id: string;
+	user_id: number;
+	user_email: string;
+	user_name: string | null;
+	original_filename: string;
+	status: string;
+	created_at: number;
+	error_message: string | null;
+}> {
+	return db
+		.query<
+			{
+				id: string;
+				user_id: number;
+				user_email: string;
+				user_name: string | null;
+				original_filename: string;
+				status: string;
+				created_at: number;
+				error_message: string | null;
+			},
+			[]
+		>(
+			`SELECT 
+        t.id, 
+        t.user_id, 
+        u.email as user_email, 
+        u.name as user_name, 
+        t.original_filename, 
+        t.status, 
+        t.created_at,
+        t.error_message
+      FROM transcriptions t
+      LEFT JOIN users u ON t.user_id = u.id
+      ORDER BY t.created_at DESC`,
+		)
+		.all();
+}
+
+export function deleteTranscription(transcriptionId: string): void {
+	const transcription = db
+		.query<{ id: string; filename: string }, [string]>(
+			"SELECT id, filename FROM transcriptions WHERE id = ?",
+		)
+		.get(transcriptionId);
+
+	if (!transcription) {
+		throw new Error("Transcription not found");
+	}
+
+	// Delete database record
+	db.run("DELETE FROM transcriptions WHERE id = ?", [transcriptionId]);
+
+	// Delete files (audio file and transcript files)
+	try {
+		const audioPath = `./uploads/${transcription.filename}`;
+		const transcriptPath = `./transcripts/${transcriptionId}.txt`;
+		const vttPath = `./transcripts/${transcriptionId}.vtt`;
+
+		if (Bun.file(audioPath).size) {
+			Bun.write(audioPath, "").then(() => {
+				// File deleted by overwriting with empty content, then unlink
+				import("node:fs").then((fs) => {
+					fs.unlinkSync(audioPath);
+				});
+			});
+		}
+
+		if (Bun.file(transcriptPath).size) {
+			import("node:fs").then((fs) => {
+				fs.unlinkSync(transcriptPath);
+			});
+		}
+
+		if (Bun.file(vttPath).size) {
+			import("node:fs").then((fs) => {
+				fs.unlinkSync(vttPath);
+			});
+		}
+	} catch {
+		// Files might not exist, ignore errors
+	}
 }

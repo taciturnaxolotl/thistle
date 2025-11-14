@@ -89,6 +89,17 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_rate_limit_key_timestamp ON rate_limit_attempts(key, timestamp);
     `,
 	},
+	{
+		version: 6,
+		name: "Add role-based auth system",
+		sql: `
+      -- Add role column (default to 'user')
+      ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user';
+      
+      -- Create index on role
+      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

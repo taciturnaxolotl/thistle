@@ -1,6 +1,10 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { hashPasswordClient } from "../lib/client-auth";
+import {
+	authenticateWithPasskey,
+	isPasskeySupported,
+} from "../lib/client-passkey";
 import type { PasswordStrength } from "./password-strength";
 import "./password-strength";
 import type { PasswordStrengthResult } from "./password-strength";
@@ -24,6 +28,7 @@ export class AuthComponent extends LitElement {
 	@state() isSubmitting = false;
 	@state() needsRegistration = false;
 	@state() passwordStrength: PasswordStrengthResult | null = null;
+	@state() passkeySupported = false;
 
 	static override styles = css`
 		:host {
@@ -264,10 +269,48 @@ export class AuthComponent extends LitElement {
 			font-size: 0.875rem;
 			margin: 0;
 		}
+
+	.divider {
+		display: flex;
+		align-items: center;
+		text-align: center;
+		margin: 1.5rem 0;
+		color: var(--secondary);
+		font-size: 0.875rem;
+	}
+
+	.divider::before,
+	.divider::after {
+		content: "";
+		flex: 1;
+		border-bottom: 1px solid var(--secondary);
+	}
+
+	.divider::before {
+		margin-right: 0.5rem;
+	}
+
+	.divider::after {
+		margin-left: 0.5rem;
+	}
+
+	.btn-passkey {
+		background: transparent;
+		color: var(--primary);
+		border-color: var(--primary);
+		width: 100%;
+		margin-bottom: 0;
+	}
+
+	.btn-passkey:hover:not(:disabled) {
+		background: var(--primary);
+		color: white;
+	}
 	`;
 
 	override async connectedCallback() {
 		super.connectedCallback();
+		this.passkeySupported = isPasskeySupported();
 		await this.checkAuth();
 	}
 
@@ -418,6 +461,27 @@ export class AuthComponent extends LitElement {
 		this.passwordStrength = e.detail;
 	}
 
+	private async handlePasskeyLogin() {
+		this.error = "";
+		this.isSubmitting = true;
+
+		try {
+			const result = await authenticateWithPasskey(this.email || undefined);
+
+			if (!result.success) {
+				this.error = result.error || "Passkey authentication failed";
+				return;
+			}
+
+			// Success - reload to get user info
+			await this.checkAuth();
+			this.closeModal();
+			window.dispatchEvent(new CustomEvent("auth-changed"));
+		} finally {
+			this.isSubmitting = false;
+		}
+	}
+
 	override render() {
 		if (this.loading) {
 			return html`<div class="loading">Loading...</div>`;
@@ -483,6 +547,22 @@ export class AuthComponent extends LitElement {
 										`
 										: ""
 								}
+
+							${
+								!this.needsRegistration && this.passkeySupported
+									? html`
+										<button
+											type="button"
+											class="btn-passkey"
+											@click=${this.handlePasskeyLogin}
+											?disabled=${this.isSubmitting}
+										>
+											🔑 ${this.isSubmitting ? "Loading..." : "Sign in with Passkey"}
+										</button>
+										<div class="divider">or sign in with password</div>
+									  `
+									: ""
+							}
 
 								<form @submit=${this.handleSubmit}>
 									<div class="form-group">

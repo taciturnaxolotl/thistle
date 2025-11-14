@@ -2,6 +2,10 @@ import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { UAParser } from "ua-parser-js";
 import { hashPasswordClient } from "../lib/client-auth";
+import {
+	isPasskeySupported,
+	registerPasskey,
+} from "../lib/client-passkey";
 
 interface User {
 	email: string;
@@ -19,14 +23,23 @@ interface Session {
 	is_current: boolean;
 }
 
-type SettingsPage = "account" | "sessions" | "danger";
+interface Passkey {
+	id: string;
+	name: string | null;
+	created_at: number;
+	last_used_at: number | null;
+}
+
+type SettingsPage = "account" | "sessions" | "passkeys" | "danger";
 
 @customElement("user-settings")
 export class UserSettings extends LitElement {
 	@state() user: User | null = null;
 	@state() sessions: Session[] = [];
+	@state() passkeys: Passkey[] = [];
 	@state() loading = true;
 	@state() loadingSessions = true;
+	@state() loadingPasskeys = true;
 	@state() error = "";
 	@state() showDeleteConfirm = false;
 	@state() currentPage: SettingsPage = "account";
@@ -36,6 +49,8 @@ export class UserSettings extends LitElement {
 	@state() newPassword = "";
 	@state() newName = "";
 	@state() newAvatar = "";
+	@state() passkeySupported = false;
+	@state() addingPasskey = false;
 
 	static override styles = css`
 		:host {
@@ -217,7 +232,11 @@ export class UserSettings extends LitElement {
 			position: relative;
 		}
 
-
+		.field-description {
+			font-size: 0.875rem;
+			color: var(--secondary);
+			margin: 0.5rem 0;
+		}
 
 		.danger-section {
 			border-color: var(--accent);
@@ -403,8 +422,12 @@ export class UserSettings extends LitElement {
 
 	override async connectedCallback() {
 		super.connectedCallback();
+		this.passkeySupported = isPasskeySupported();
 		await this.loadUser();
 		await this.loadSessions();
+		if (this.passkeySupported) {
+			await this.loadPasskeys();
+		}
 	}
 
 	async loadUser() {
@@ -432,6 +455,67 @@ export class UserSettings extends LitElement {
 			}
 		} finally {
 			this.loadingSessions = false;
+		}
+	}
+
+	async loadPasskeys() {
+		try {
+			const response = await fetch("/api/passkeys");
+
+			if (response.ok) {
+				const data = await response.json();
+				this.passkeys = data.passkeys;
+			}
+		} finally {
+			this.loadingPasskeys = false;
+		}
+	}
+
+	async handleAddPasskey() {
+		this.addingPasskey = true;
+		this.error = "";
+
+		try {
+			const name = prompt("Name this passkey (optional):");
+			if (name === null) {
+				// User cancelled
+				return;
+			}
+
+			const result = await registerPasskey(name || undefined);
+
+			if (!result.success) {
+				this.error = result.error || "Failed to register passkey";
+				return;
+			}
+
+			// Reload passkeys
+			await this.loadPasskeys();
+		} finally {
+			this.addingPasskey = false;
+		}
+	}
+
+	async handleDeletePasskey(passkeyId: string) {
+		if (!confirm("Are you sure you want to delete this passkey?")) {
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/passkeys/${passkeyId}`, {
+				method: "DELETE",
+			});
+
+			if (!response.ok) {
+				const error = await response.json();
+				this.error = error.error || "Failed to delete passkey";
+				return;
+			}
+
+			// Reload passkeys
+			await this.loadPasskeys();
+		} catch {
+			this.error = "Failed to delete passkey";
 		}
 	}
 
@@ -832,6 +916,71 @@ export class UserSettings extends LitElement {
 						  `
 					}
 				</div>
+
+			${
+				this.passkeySupported
+					? html`
+						<div class="field-group">
+							<label class="field-label">Passkeys</label>
+							<p class="field-description">
+								Passkeys provide a more secure and convenient way to sign in without passwords. 
+								They use biometric authentication or your device's security features.
+							</p>
+							${
+								this.loadingPasskeys
+									? html`<div class="field-value">Loading passkeys...</div>`
+									: this.passkeys.length === 0
+										? html`<div class="field-value" style="color: var(--secondary);">No passkeys registered yet</div>`
+										: html`
+											<div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+												${this.passkeys.map(
+													(passkey) => html`
+														<div class="session-card">
+															<div class="session-details">
+																<div class="session-row">
+																	<span class="session-label">Name</span>
+																	<span class="session-value">${passkey.name || "Unnamed passkey"}</span>
+																</div>
+																<div class="session-row">
+																	<span class="session-label">Created</span>
+																	<span class="session-value">${new Date(passkey.created_at * 1000).toLocaleDateString()}</span>
+																</div>
+																${
+																	passkey.last_used_at
+																		? html`
+																			<div class="session-row">
+																				<span class="session-label">Last used</span>
+																				<span class="session-value">${new Date(passkey.last_used_at * 1000).toLocaleDateString()}</span>
+																			</div>
+																		  `
+																		: ""
+																}
+															</div>
+															<button
+																class="btn btn-rejection btn-small"
+																@click=${() => this.handleDeletePasskey(passkey.id)}
+																style="margin-top: 0.75rem;"
+															>
+																Delete
+															</button>
+														</div>
+													`,
+												)}
+											</div>
+										  `
+							}
+							<button
+								class="btn btn-affirmative"
+								style="margin-top: 1rem;"
+								@click=${this.handleAddPasskey}
+								?disabled=${this.addingPasskey}
+							>
+								${this.addingPasskey ? "Adding..." : "Add Passkey"}
+							</button>
+						</div>
+					  `
+					: ""
+			}
 
 				<div class="field-group">
 					<label class="field-label">Member Since</label>

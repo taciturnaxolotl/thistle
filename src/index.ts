@@ -20,6 +20,15 @@ import {
 	updateUserRole,
 	type UserRole,
 } from "./lib/auth";
+import {
+	createAuthenticationOptions,
+	createRegistrationOptions,
+	deletePasskey,
+	getPasskeysForUser,
+	updatePasskeyName,
+	verifyAndAuthenticatePasskey,
+	verifyAndCreatePasskey,
+} from "./lib/passkey";
 import { handleError, ValidationErrors } from "./lib/errors";
 import { requireAdmin, requireAuth } from "./lib/middleware";
 import { enforceRateLimit } from "./lib/rate-limit";
@@ -231,6 +240,141 @@ const server = Bun.serve({
 					created_at: user.created_at,
 					role: user.role,
 				});
+			},
+		},
+		"/api/passkeys/register/options": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const options = await createRegistrationOptions(user);
+					return Response.json(options);
+				} catch (err) {
+					return handleError(err);
+				}
+			},
+		},
+		"/api/passkeys/register/verify": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const body = await req.json();
+					const { response: credentialResponse, challenge, name } = body;
+
+					const passkey = await verifyAndCreatePasskey(
+						credentialResponse,
+						challenge,
+						name,
+					);
+
+					return Response.json({
+						success: true,
+						passkey: {
+							id: passkey.id,
+							name: passkey.name,
+							created_at: passkey.created_at,
+						},
+					});
+				} catch (err) {
+					return handleError(err);
+				}
+			},
+		},
+		"/api/passkeys/authenticate/options": {
+			POST: async (req) => {
+				try {
+					const body = await req.json();
+					const { email } = body;
+
+					const options = await createAuthenticationOptions(email);
+					return Response.json(options);
+				} catch (err) {
+					return handleError(err);
+				}
+			},
+		},
+		"/api/passkeys/authenticate/verify": {
+			POST: async (req) => {
+				try {
+					const body = await req.json();
+					const { response: credentialResponse, challenge } = body;
+
+					const { user } = await verifyAndAuthenticatePasskey(
+						credentialResponse,
+						challenge,
+					);
+
+					// Create session
+					const ipAddress =
+						req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+						req.headers.get("x-real-ip") ||
+						"unknown";
+					const userAgent = req.headers.get("user-agent") || "unknown";
+					const sessionId = createSession(user.id, ipAddress, userAgent);
+
+					return Response.json(
+						{
+							email: user.email,
+							name: user.name,
+							avatar: user.avatar,
+							created_at: user.created_at,
+							role: user.role,
+						},
+						{
+							headers: {
+								"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
+							},
+						},
+					);
+				} catch (err) {
+					return handleError(err);
+				}
+			},
+		},
+		"/api/passkeys": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const passkeys = getPasskeysForUser(user.id);
+					return Response.json({
+						passkeys: passkeys.map((p) => ({
+							id: p.id,
+							name: p.name,
+							created_at: p.created_at,
+							last_used_at: p.last_used_at,
+						})),
+					});
+				} catch (err) {
+					return handleError(err);
+				}
+			},
+		},
+		"/api/passkeys/:id": {
+			PUT: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const body = await req.json();
+					const { name } = body;
+					const passkeyId = req.params.id;
+
+					if (!name) {
+						return Response.json({ error: "Name required" }, { status: 400 });
+					}
+
+					updatePasskeyName(passkeyId, user.id, name);
+					return Response.json({ success: true });
+				} catch (err) {
+					return handleError(err);
+				}
+			},
+			DELETE: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const passkeyId = req.params.id;
+					deletePasskey(passkeyId, user.id);
+					return Response.json({ success: true });
+				} catch (err) {
+					return handleError(err);
+				}
 			},
 		},
 		"/api/sessions": {

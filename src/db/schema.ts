@@ -100,6 +100,44 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     `,
 	},
+	{
+		version: 7,
+		name: "Add WebAuthn passkey support",
+		sql: `
+      CREATE TABLE IF NOT EXISTS passkeys (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        credential_id TEXT NOT NULL UNIQUE,
+        public_key TEXT NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0,
+        transports TEXT,
+        name TEXT,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        last_used_at INTEGER,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_passkeys_user_id ON passkeys(user_id);
+      CREATE INDEX IF NOT EXISTS idx_passkeys_credential_id ON passkeys(credential_id);
+
+      -- Make password optional for users who only use passkeys
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        name TEXT,
+        avatar TEXT DEFAULT 'd',
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        role TEXT NOT NULL DEFAULT 'user'
+      );
+
+      INSERT INTO users_new SELECT * FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

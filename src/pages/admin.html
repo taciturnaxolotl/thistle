@@ -274,11 +274,19 @@
       cursor: not-allowed;
     }
 
-    tbody tr {
+    .users-table tbody tr {
       cursor: pointer;
     }
 
-    tbody tr:hover {
+    .users-table tbody tr:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .transcriptions-table tbody tr {
+      cursor: pointer;
+    }
+
+    .transcriptions-table tbody tr:hover {
       background: rgba(0, 0, 0, 0.04);
     }
 
@@ -370,7 +378,8 @@
       <div id="transcriptions-tab" class="tab-content active">
         <div class="section">
           <h2 class="section-title">All Transcriptions</h2>
-          <div id="transcriptions-table"></div>
+          <input type="text" id="transcript-search" class="search" placeholder="Search by filename or user..." />
+          <div id="transcriptions-table" class="transcriptions-table"></div>
         </div>
       </div>
 
@@ -378,16 +387,18 @@
         <div class="section">
           <h2 class="section-title">All Users</h2>
           <input type="text" id="user-search" class="search" placeholder="Search by name or email..." />
-          <div id="users-table"></div>
+          <div id="users-table" class="users-table"></div>
         </div>
       </div>
     </div>
   </main>
 
   <user-modal id="user-modal"></user-modal>
+  <transcript-modal id="transcript-modal"></transcript-modal>
 
   <script type="module" src="../components/auth.ts"></script>
   <script type="module" src="../components/user-modal.ts"></script>
+  <script type="module" src="../components/transcript-view-modal.ts"></script>
   <script type="module">
     const errorMessage = document.getElementById('error-message');
     const loading = document.getElementById('loading');
@@ -395,12 +406,17 @@
     const transcriptionsTable = document.getElementById('transcriptions-table');
     const usersTable = document.getElementById('users-table');
     const userModal = document.getElementById('user-modal');
+    const transcriptModal = document.getElementById('transcript-modal');
 
     let currentUserEmail = null;
     let allUsers = [];
+    let allTranscriptions = [];
     let userSortKey = 'created_at';
     let userSortDirection = 'desc';
     let userSearchTerm = '';
+    let transcriptSortKey = 'created_at';
+    let transcriptSortDirection = 'desc';
+    let transcriptSearchTerm = '';
 
     // Get current user info
     async function getCurrentUser() {
@@ -437,6 +453,16 @@
       userModal.userId = null;
     }
 
+    function openTranscriptModal(transcriptId) {
+      transcriptModal.setAttribute('open', '');
+      transcriptModal.transcriptId = transcriptId;
+    }
+
+    function closeTranscriptModal() {
+      transcriptModal.removeAttribute('open');
+      transcriptModal.transcriptId = null;
+    }
+
     // Listen for modal close and user update events
     userModal.addEventListener('close', closeUserModal);
     userModal.addEventListener('user-updated', () => loadData());
@@ -446,10 +472,52 @@
       }
     });
 
+    // Listen for transcript modal events
+    transcriptModal.addEventListener('close', closeTranscriptModal);
+    transcriptModal.addEventListener('transcript-deleted', () => loadData());
+    transcriptModal.addEventListener('click', (e) => {
+      if (e.target === transcriptModal) {
+        closeTranscriptModal();
+      }
+    });
+
 
     function renderTranscriptions(transcriptions) {
-      if (transcriptions.length === 0) {
-        transcriptionsTable.innerHTML = '<div class="empty-state">No transcriptions yet</div>';
+      allTranscriptions = transcriptions;
+
+      // Filter transcriptions based on search term
+      let filteredTranscriptions = transcriptions.filter(t => {
+        if (!transcriptSearchTerm) return true;
+        const term = transcriptSearchTerm.toLowerCase();
+        const filename = (t.original_filename || '').toLowerCase();
+        const userName = (t.user_name || '').toLowerCase();
+        const userEmail = (t.user_email || '').toLowerCase();
+        return filename.includes(term) || userName.includes(term) || userEmail.includes(term);
+      });
+
+      // Sort transcriptions
+      filteredTranscriptions.sort((a, b) => {
+        let aVal = a[transcriptSortKey];
+        let bVal = b[transcriptSortKey];
+
+        // Handle null values
+        if (aVal === null || aVal === undefined) aVal = '';
+        if (bVal === null || bVal === undefined) bVal = '';
+
+        let comparison = 0;
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          comparison = aVal.localeCompare(bVal);
+        } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+
+        return transcriptSortDirection === 'asc' ? comparison : -comparison;
+      });
+
+      if (filteredTranscriptions.length === 0) {
+        transcriptionsTable.innerHTML = '<div class="empty-state">No transcriptions found</div>';
         return;
       }
 
@@ -460,17 +528,16 @@
       table.innerHTML = `
         <thead>
           <tr>
-            <th>File Name</th>
+            <th class="sortable ${transcriptSortKey === 'original_filename' ? transcriptSortDirection : ''}" data-sort="original_filename">File Name</th>
             <th>User</th>
-            <th>Status</th>
-            <th>Created At</th>
-            <th>Error</th>
+            <th class="sortable ${transcriptSortKey === 'status' ? transcriptSortDirection : ''}" data-sort="status">Status</th>
+            <th class="sortable ${transcriptSortKey === 'created_at' ? transcriptSortDirection : ''}" data-sort="created_at">Created At</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          ${transcriptions.map(t => `
-            <tr>
+          ${filteredTranscriptions.map(t => `
+            <tr data-id="${t.id}">
               <td>${t.original_filename}</td>
               <td>
                 <div class="user-info">
@@ -484,7 +551,6 @@
               </td>
               <td><span class="status-badge status-${t.status}">${t.status}</span></td>
               <td class="timestamp">${formatTimestamp(t.created_at)}</td>
-              <td>${t.error_message || '-'}</td>
               <td>
                 <button class="delete-btn" data-id="${t.id}">Delete</button>
               </td>
@@ -495,9 +561,24 @@
       transcriptionsTable.innerHTML = '';
       transcriptionsTable.appendChild(table);
 
+      // Add sort event listeners
+      table.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const sortKey = th.dataset.sort;
+          if (transcriptSortKey === sortKey) {
+            transcriptSortDirection = transcriptSortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            transcriptSortKey = sortKey;
+            transcriptSortDirection = 'asc';
+          }
+          renderTranscriptions(allTranscriptions);
+        });
+      });
+
       // Add delete event listeners
       table.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
+          e.stopPropagation(); // Prevent row click
           const button = e.target;
           const id = button.dataset.id;
 
@@ -524,6 +605,19 @@
             button.disabled = false;
             button.textContent = 'Delete';
           }
+        });
+      });
+
+      // Add click event to table rows to open modal
+      table.querySelectorAll('tbody tr').forEach(row => {
+        row.addEventListener('click', (e) => {
+          // Don't open modal if clicking on delete button
+          if (e.target.closest('.delete-btn')) {
+            return;
+          }
+          
+          const transcriptId = row.dataset.id;
+          openTranscriptModal(transcriptId);
         });
       });
     }
@@ -785,6 +879,12 @@
     document.getElementById('user-search').addEventListener('input', (e) => {
       userSearchTerm = e.target.value.trim();
       renderUsers(allUsers);
+    });
+
+    // Transcript search
+    document.getElementById('transcript-search').addEventListener('input', (e) => {
+      transcriptSearchTerm = e.target.value.trim();
+      renderTranscriptions(allTranscriptions);
     });
 
     // Initialize

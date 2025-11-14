@@ -1,6 +1,6 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { parseVTT } from "../lib/vtt-cleaner";
+import "./vtt-viewer.ts";
 
 interface TranscriptionJob {
 	id: string;
@@ -23,62 +23,7 @@ interface VTTSegment {
 
 
 
-function parseVTT(vttContent: string): VTTSegment[] {
-	const segments: VTTSegment[] = [];
-	const lines = vttContent.split("\n");
 
-	let i = 0;
-	// Skip WEBVTT header
-	while (i < lines.length && lines[i]?.trim() !== "WEBVTT") {
-		i++;
-	}
-	i++; // Skip WEBVTT
-
-	while (i < lines.length) {
-		let index: string | undefined;
-		// Check for cue ID (line before timestamp)
-		if (lines[i]?.trim() && !lines[i]?.includes("-->")) {
-			index = lines[i]?.trim();
-			i++;
-		}
-
-		if (i < lines.length && lines[i]?.includes("-->")) {
-			const [startStr, endStr] = lines[i].split("-->").map((s) => s.trim());
-			const start = parseVTTTimestamp(startStr || "");
-			const end = parseVTTTimestamp(endStr || "");
-
-			// Collect text lines until empty line
-			const textLines: string[] = [];
-			i++;
-			while (i < lines.length && lines[i]?.trim()) {
-				textLines.push(lines[i] || "");
-				i++;
-			}
-
-			segments.push({
-				start,
-				end,
-				text: textLines.join(" ").trim(),
-				index,
-			});
-		} else {
-			i++;
-		}
-	}
-
-	return segments;
-}
-
-function parseVTTTimestamp(timestamp: string): number {
-	const parts = timestamp.split(":");
-	if (parts.length === 3) {
-		const hours = Number.parseFloat(parts[0] || "0");
-		const minutes = Number.parseFloat(parts[1] || "0");
-		const seconds = Number.parseFloat(parts[2] || "0");
-		return hours * 3600 + minutes * 60 + seconds;
-	}
-	return 0;
-}
 
 class WordStreamer {
 	private queue: string[] = [];
@@ -469,7 +414,6 @@ export class TranscriptionComponent extends LitElement {
 					// Load VTT for completed jobs
 					if (update.status === "completed") {
 						await this.loadVTTForJob(jobId);
-						this.setupWordHighlighting(jobId);
 					}
 				}
 			}
@@ -540,8 +484,6 @@ export class TranscriptionComponent extends LitElement {
 					// Fetch VTT for completed jobs
 					if (job.status === "completed") {
 						await this.loadVTTForJob(job.id);
-						await this.updateComplete;
-						this.setupWordHighlighting(job.id);
 					}
 				}
 				// Don't override serviceAvailable - it's set by checkHealth()
@@ -563,13 +505,11 @@ export class TranscriptionComponent extends LitElement {
 			const response = await fetch(`/api/transcriptions/${jobId}?format=vtt`);
 			if (response.ok) {
 				const vttContent = await response.text();
-				const segments = parseVTT(vttContent);
 
-				// Update job with VTT content and segments
+				// Update job with VTT content
 				const job = this.jobs.find((j) => j.id === jobId);
 				if (job) {
 					job.vttContent = vttContent;
-					job.vttSegments = segments;
 					job.audioUrl = `/api/transcriptions/${jobId}/audio`;
 					this.jobs = [...this.jobs];
 				}
@@ -579,66 +519,7 @@ export class TranscriptionComponent extends LitElement {
 		}
 	}
 
-	private setupWordHighlighting(jobId: string) {
-		const job = this.jobs.find((j) => j.id === jobId);
-		if (!job?.audioUrl || !job.vttSegments) return;
-
-		// Wait for next frame to ensure DOM is updated
-		requestAnimationFrame(() => {
-			const audioElement = this.shadowRoot?.querySelector(
-				`#audio-${jobId}`,
-			) as HTMLAudioElement;
-			const transcriptDiv = this.shadowRoot?.querySelector(
-				`#transcript-${jobId}`,
-			) as HTMLDivElement;
-
-			if (!audioElement || !transcriptDiv) {
-				console.warn("Could not find audio or transcript elements");
-				return;
-			}
-
-			// Track current segment
-			let currentSegmentElement: HTMLElement | null = null;
-
-			// Update highlighting on timeupdate
-			audioElement.addEventListener("timeupdate", () => {
-				const currentTime = audioElement.currentTime;
-				const segmentElements = transcriptDiv.querySelectorAll("[data-start]");
-
-				for (const el of segmentElements) {
-					const start = Number.parseFloat(
-						(el as HTMLElement).dataset.start || "0",
-					);
-					const end = Number.parseFloat((el as HTMLElement).dataset.end || "0");
-
-					if (currentTime >= start && currentTime <= end) {
-						if (currentSegmentElement !== el) {
-							currentSegmentElement?.classList.remove("current-segment");
-							(el as HTMLElement).classList.add("current-segment");
-							currentSegmentElement = el as HTMLElement;
-
-							// Auto-scroll to current segment
-							el.scrollIntoView({
-								behavior: "smooth",
-								block: "center",
-							});
-						}
-						break;
-					}
-				}
-			});
-
-			// Handle segment clicks
-			transcriptDiv.addEventListener("click", (e) => {
-				const target = e.target as HTMLElement;
-				if (target.dataset.start) {
-					const start = Number.parseFloat(target.dataset.start);
-					audioElement.currentTime = start;
-					audioElement.play();
-				}
-			});
-		});
-	}
+	
 
 	private handleDragOver(e: DragEvent) {
 		e.preventDefault();
@@ -741,50 +622,8 @@ export class TranscriptionComponent extends LitElement {
 			return displayed;
 		}
 
-		const segments = parseVTT(job.vttContent);
-		// Group segments by paragraph (extract paragraph number from ID like "Paragraph 1-1" -> "1")
-		const paragraphGroups = new Map<string, typeof segments>();
-		for (const segment of segments) {
-		const id = (segment.index || '').trim();
-		const match = id.match(/^Paragraph\s+(\d+)-/);
-		const paraNum = match ? match[1] : '0';
-		if (!paragraphGroups.has(paraNum)) {
-		paragraphGroups.set(paraNum, []);
-		}
-		paragraphGroups.get(paraNum)!.push(segment);
-		}
-
-		// Render each paragraph group
-		const paragraphs = Array.from(paragraphGroups.entries()).map(([paraNum, groupSegments]) => {
-		// Concatenate all text in the group
-		const fullText = groupSegments.map(s => s.text || '').join(' ');
-		// Split into sentences
-		const sentences = fullText.split(/(?<=[\.\!\?])\s+/g).filter(Boolean);
-		// Calculate word counts for timing
-		const wordCounts = sentences.map((s) => s.split(/\s+/).filter(Boolean).length);
-		 const totalWords = Math.max(1, wordCounts.reduce((a, b) => a + b, 0));
-
-			// Overall paragraph timing
-			const paraStart = Math.min(...groupSegments.map(s => s.start ?? 0));
-			const paraEnd = Math.max(...groupSegments.map(s => s.end ?? paraStart));
-
-			let acc = 0;
-			const paraDuration = paraEnd - paraStart;
-
-			return html`<div class="paragraph">
-			${sentences.map((sent, si) => {
-			const startOffset = (acc / totalWords) * paraDuration;
-			acc += wordCounts[si];
-			const sentenceDuration = (wordCounts[si] / totalWords) * paraDuration;
-			const endOffset = si < sentences.length - 1 ? startOffset + sentenceDuration - 0.001 : paraEnd - paraStart;
-			const spanStart = paraStart + startOffset;
-			const spanEnd = paraStart + endOffset;
-			 return html`<span class="segment" data-start="${spanStart}" data-end="${spanEnd}">${sent}</span>${si < sentences.length - 1 ? ' ' : ''}`;
-			 })}
-			</div>`;
-		});
-
-		return html`${paragraphs}`;
+		// Delegate VTT rendering and highlighting to the vtt-viewer component
+		return html`<vtt-viewer .vttContent=${job.vttContent ?? ""} .audioId=${`audio-${job.id}`}></vtt-viewer>`;
 	}
 
 
@@ -835,14 +674,12 @@ export class TranscriptionComponent extends LitElement {
 						}
 
             ${
-							job.status === "completed" && job.audioUrl && job.vttSegments
+							job.status === "completed" && job.audioUrl && job.vttContent
 								? html`
               <div class="audio-player">
                 <audio id="audio-${job.id}" preload="metadata" controls src="${job.audioUrl}"></audio>
               </div>
-              <div class="job-transcript" id="transcript-${job.id}">
-                ${this.renderTranscript(job)}
-              </div>
+              ${this.renderTranscript(job)}
             `
 								: this.displayedTranscripts.has(job.id) && this.displayedTranscripts.get(job.id)
 									? html`

@@ -1,10 +1,6 @@
 import { expect, test } from "bun:test";
 import {
-	deleteTranscript,
-	getTranscript,
 	getTranscriptVTT,
-	hasTranscript,
-	saveTranscript,
 	saveTranscriptVTT,
 } from "./transcript-storage";
 

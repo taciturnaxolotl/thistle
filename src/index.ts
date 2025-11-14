@@ -43,7 +43,7 @@ import {
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
-import { getTranscript, getTranscriptVTT } from "./lib/transcript-storage";
+import { getTranscriptVTT } from "./lib/transcript-storage";
 import indexHTML from "./pages/index.html";
 import adminHTML from "./pages/admin.html";
 import settingsHTML from "./pages/settings.html";
@@ -83,16 +83,19 @@ try {
 }
 
 // Periodic sync every 5 minutes as backup (SSE handles real-time updates)
-setInterval(async () => {
-	try {
-		await whisperService.syncWithWhisper();
-	} catch (error) {
-		console.warn(
-			"[Sync] Failed to sync with Murmur:",
-			error instanceof Error ? error.message : "Unknown error",
-		);
-	}
-}, 5 * 60 * 1000);
+setInterval(
+	async () => {
+		try {
+			await whisperService.syncWithWhisper();
+		} catch (error) {
+			console.warn(
+				"[Sync] Failed to sync with Murmur:",
+				error instanceof Error ? error.message : "Unknown error",
+			);
+		}
+	},
+	5 * 60 * 1000,
+);
 
 // Clean up stale files daily
 setInterval(() => whisperService.cleanupStaleFiles(), 24 * 60 * 60 * 1000);
@@ -652,20 +655,12 @@ const server = Bun.serve({
 									progress: number;
 								},
 								[string]
-							>(
-								"SELECT status, progress FROM transcriptions WHERE id = ?",
-							)
+							>("SELECT status, progress FROM transcriptions WHERE id = ?")
 							.get(transcriptionId);
 						if (current) {
-							// Load transcript from file if completed
-							let transcript: string | undefined;
-							if (current.status === "completed") {
-								transcript = (await getTranscript(transcriptionId)) || undefined;
-							}
 							sendEvent({
 								status: current.status as TranscriptionUpdate["status"],
 								progress: current.progress,
-								transcript,
 							});
 						}
 						// If already complete, close immediately
@@ -737,22 +732,33 @@ const server = Bun.serve({
 					const user = requireAuth(req);
 					const transcriptionId = req.params.id;
 
-					// Verify ownership
+					// Verify ownership or admin
 					const transcription = db
 						.query<
 							{
 								id: string;
 								user_id: number;
-								status: string;
+								filename: string;
 								original_filename: string;
+								status: string;
+								progress: number;
+								created_at: number;
 							},
 							[string]
 						>(
-							"SELECT id, user_id, status, original_filename FROM transcriptions WHERE id = ?",
+							"SELECT id, user_id, filename, original_filename, status, progress, created_at FROM transcriptions WHERE id = ?",
 						)
 						.get(transcriptionId);
 
-					if (!transcription || transcription.user_id !== user.id) {
+					if (!transcription) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					// Allow access if user owns it or is admin
+					if (transcription.user_id !== user.id && user.role !== "admin") {
 						return Response.json(
 							{ error: "Transcription not found" },
 							{ status: 404 },
@@ -789,18 +795,17 @@ const server = Bun.serve({
 						});
 					}
 
-					// Default: return plain text transcript from file
-					const transcript = await getTranscript(transcriptionId);
-					if (!transcript) {
-						return Response.json(
-							{ error: "Transcript not available" },
-							{ status: 404 },
-						);
+					// return info on transcript
+					const transcript = {
+     					id: transcription.id,
+     					filename: transcription.original_filename,
+     					status: transcription.status,
+     					progress: transcription.progress,
+     					created_at: transcription.created_at,
 					}
-
-					return new Response(transcript, {
+					return new Response(JSON.stringify(transcript), {
 						headers: {
-							"Content-Type": "text/plain",
+							"Content-Type": "application/json",
 						},
 					});
 				} catch (error) {
@@ -814,7 +819,7 @@ const server = Bun.serve({
 					const user = requireAuth(req);
 					const transcriptionId = req.params.id;
 
-					// Verify ownership and get filename
+					// Verify ownership or admin
 					const transcription = db
 						.query<
 							{
@@ -824,10 +829,20 @@ const server = Bun.serve({
 								status: string;
 							},
 							[string]
-						>("SELECT id, user_id, filename, status FROM transcriptions WHERE id = ?")
+						>(
+							"SELECT id, user_id, filename, status FROM transcriptions WHERE id = ?",
+						)
 						.get(transcriptionId);
 
-					if (!transcription || transcription.user_id !== user.id) {
+					if (!transcription) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					// Allow access if user owns it or is admin
+					if (transcription.user_id !== user.id && user.role !== "admin") {
 						return Response.json(
 							{ error: "Transcription not found" },
 							{ status: 404 },
@@ -846,7 +861,10 @@ const server = Bun.serve({
 					const file = Bun.file(filePath);
 
 					if (!(await file.exists())) {
-						return Response.json({ error: "Audio file not found" }, { status: 404 });
+						return Response.json(
+							{ error: "Audio file not found" },
+							{ status: 404 },
+						);
 					}
 
 					const fileSize = file.size;
@@ -909,16 +927,11 @@ const server = Bun.serve({
 					// Load transcripts from files for completed jobs
 					const jobs = await Promise.all(
 						transcriptions.map(async (t) => {
-							let transcript: string | null = null;
-							if (t.status === "completed") {
-								transcript = await getTranscript(t.id);
-							}
 							return {
 								id: t.id,
 								filename: t.original_filename,
 								status: t.status,
 								progress: t.progress,
-								transcript,
 								created_at: t.created_at,
 							};
 						}),
@@ -1101,11 +1114,12 @@ const server = Bun.serve({
 					const sessions = getSessionsForUser(userId);
 
 					// Get transcription count
-					const transcriptionCount = db
-						.query<{ count: number }, [number]>(
-							"SELECT COUNT(*) as count FROM transcriptions WHERE user_id = ?",
-						)
-						.get(userId)?.count ?? 0;
+					const transcriptionCount =
+						db
+							.query<{ count: number }, [number]>(
+								"SELECT COUNT(*) as count FROM transcriptions WHERE user_id = ?",
+							)
+							.get(userId)?.count ?? 0;
 
 					return Response.json({
 						id: user.id,
@@ -1295,6 +1309,58 @@ const server = Bun.serve({
 					}
 
 					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/transcriptions/:id/details": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const transcriptionId = req.params.id;
+
+					const transcription = db
+						.query<
+							{
+								id: string;
+								original_filename: string;
+								status: string;
+								created_at: number;
+								updated_at: number;
+								error_message: string | null;
+								user_id: number;
+							},
+							[string]
+						>(
+							"SELECT id, original_filename, status, created_at, updated_at, error_message, user_id FROM transcriptions WHERE id = ?",
+						)
+						.get(transcriptionId);
+
+					if (!transcription) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					const user = db
+						.query<{ email: string; name: string | null }, [number]>(
+							"SELECT email, name FROM users WHERE id = ?",
+						)
+						.get(transcription.user_id);
+
+					return Response.json({
+						id: transcription.id,
+						original_filename: transcription.original_filename,
+						status: transcription.status,
+						created_at: transcription.created_at,
+						completed_at: transcription.updated_at,
+						error_message: transcription.error_message,
+						user_id: transcription.user_id,
+						user_email: user?.email || "Unknown",
+						user_name: user?.name || null,
+					});
 				} catch (error) {
 					return handleError(error);
 				}

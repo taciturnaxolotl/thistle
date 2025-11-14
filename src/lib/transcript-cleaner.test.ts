@@ -1,7 +1,9 @@
 import { test, expect } from "bun:test";
 import { cleanAndGetParagraphBoundaries } from "./transcript-cleaner";
 
-test("cleanAndGetParagraphBoundaries cleans transcript and returns paragraph boundaries", async () => {
+// AI integration test - skip by default to avoid burning credits
+// Run with: bun test src/lib/transcript-cleaner.test.ts --test-name-pattern "AI"
+test.skip("cleanAndGetParagraphBoundaries cleans transcript and returns paragraph boundaries", async () => {
 // Use a longer, more realistic transcript sample with natural paragraph breaks
 const rawTranscript = `[SIDE CONVERSATION] Today in chapel we are talking about the fact that we believe in having gospel conversations. I'm gonna run my own PowerPoint. I'm gonna jump around. It's gonna be a little more conversational than normal. It's not gonna be like one of the normal sermons, although I know me and my tendency it'll turn into a sermon at some point just because that's the way God made me, so I can't help it.
 

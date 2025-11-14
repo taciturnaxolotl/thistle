@@ -60,8 +60,9 @@ test("cleanVTT preserves empty VTT", async () => {
 	expect(result).toBe(emptyVTT);
 });
 
-// Integration test - only runs if API key is available
-test("cleanVTT uses AI when available", async () => {
+// AI integration test - skip by default to avoid burning credits
+// Run with: bun test src/lib/vtt-cleaner.test.ts --test-name-pattern "AI"
+test.skip("cleanVTT uses AI when available", async () => {
 	if (!process.env.LLM_API_KEY) {
 		console.log("Skipping AI test - no LLM_API_KEY set");
 		return;

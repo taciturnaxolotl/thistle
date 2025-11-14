@@ -2,6 +2,10 @@ import { expect, test } from "bun:test";
 import {
 	getTranscriptVTT,
 	saveTranscriptVTT,
+	hasTranscript,
+	saveTranscript,
+	getTranscript,
+	deleteTranscript,
 } from "./transcript-storage";
 
 test("transcript storage", async () => {

@@ -273,6 +273,360 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    tbody tr {
+      cursor: pointer;
+    }
+
+    tbody tr:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--background);
+      border-radius: 8px;
+      max-width: 40rem;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+      padding: 1.5rem;
+      border-bottom: 2px solid var(--secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0;
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: var(--text);
+      padding: 0;
+      width: 2rem;
+      height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .modal-close:hover {
+      background: var(--secondary);
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+    }
+
+    .detail-section {
+      margin-bottom: 2rem;
+    }
+
+    .detail-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .detail-section-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--secondary);
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--secondary);
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-label {
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .detail-value {
+      color: var(--text);
+      opacity: 0.8;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 2px solid var(--secondary);
+      border-radius: 4px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: var(--background);
+      color: var(--text);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .btn {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--gunmetal);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-danger {
+      background: #dc2626;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #b91c1c;
+    }
+
+    .btn-danger:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .passkey-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .passkey-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      border: 2px solid var(--secondary);
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+    }
+
+    .passkey-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .passkey-info {
+      flex: 1;
+    }
+
+    .passkey-name {
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+
+    .passkey-meta {
+      font-size: 0.875rem;
+      color: var(--text);
+      opacity: 0.6;
+    }
+
+    .passkey-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-small {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.875rem;
+    }
+
+    .empty-passkeys {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text);
+      opacity: 0.6;
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 4px;
+    }
+
+    .password-status {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .password-status.has-password {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .password-status.no-password {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .search {
+      width: 100%;
+      max-width: 30rem;
+      margin-bottom: 1rem;
+      padding: 0.5rem 0.75rem;
+      border: 2px solid var(--secondary);
+      border-radius: 4px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: var(--background);
+      color: var(--text);
+    }
+
+    .search:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+    }
+
+    th.sortable:hover {
+      background: var(--gunmetal);
+    }
+
+    th.sortable::after {
+      content: '';
+      margin-left: 0.5rem;
+      opacity: 0.3;
+    }
+
+    th.sortable.asc::after {
+      content: '▲';
+      opacity: 1;
+    }
+
+    th.sortable.desc::after {
+      content: '▼';
+      opacity: 1;
+    }
+
+    .session-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .session-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      border: 2px solid var(--secondary);
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+    }
+
+    .session-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .session-info {
+      flex: 1;
+    }
+
+    .session-device {
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+
+    .session-meta {
+      font-size: 0.875rem;
+      color: var(--text);
+      opacity: 0.6;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .empty-sessions {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text);
+      opacity: 0.6;
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 4px;
+    }
+
+    .section-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
   </style>
 </head>
 
@@ -325,11 +679,105 @@
       <div id="users-tab" class="tab-content">
         <div class="section">
           <h2 class="section-title">All Users</h2>
+          <input type="text" id="user-search" class="search" placeholder="Search by name or email..." />
           <div id="users-table"></div>
         </div>
       </div>
     </div>
   </main>
+
+  <div id="user-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">User Details</h2>
+        <button class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-section">
+          <h3 class="detail-section-title">User Information</h3>
+          <div class="detail-row">
+            <span class="detail-label">Email</span>
+            <span class="detail-value" id="modal-email">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Name</span>
+            <span class="detail-value" id="modal-name">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Role</span>
+            <span class="detail-value" id="modal-role">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Joined</span>
+            <span class="detail-value" id="modal-joined">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Last Login</span>
+            <span class="detail-value" id="modal-last-login">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Transcriptions</span>
+            <span class="detail-value" id="modal-transcription-count">-</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Password Status</span>
+            <span id="modal-password-status">-</span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h3 class="detail-section-title">Change Name</h3>
+          <form id="change-name-form">
+            <div class="form-group">
+              <label class="form-label" for="new-name">New Name</label>
+              <input type="text" id="new-name" class="form-input" placeholder="Enter new name">
+            </div>
+            <button type="submit" class="btn btn-primary">Update Name</button>
+          </form>
+        </div>
+
+        <div class="detail-section">
+          <h3 class="detail-section-title">Change Email</h3>
+          <form id="change-email-form">
+            <div class="form-group">
+              <label class="form-label" for="new-email">New Email</label>
+              <input type="email" id="new-email" class="form-input" placeholder="Enter new email">
+            </div>
+            <button type="submit" class="btn btn-primary">Update Email</button>
+          </form>
+        </div>
+
+        <div class="detail-section">
+          <h3 class="detail-section-title">Change Password</h3>
+          <form id="change-password-form">
+            <div class="form-group">
+              <label class="form-label" for="new-password">New Password</label>
+              <input type="password" id="new-password" class="form-input" placeholder="Enter new password (min 8 characters)">
+            </div>
+            <button type="submit" class="btn btn-primary">Update Password</button>
+          </form>
+        </div>
+
+        <div class="detail-section">
+          <h3 class="detail-section-title">Active Sessions</h3>
+          <div class="section-actions">
+            <span class="detail-label" id="session-count">0 active sessions</span>
+            <button id="logout-all-btn" class="btn btn-danger btn-small">Logout All Devices</button>
+          </div>
+          <div id="sessions-container">
+            <div class="loading">Loading sessions...</div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h3 class="detail-section-title">Passkeys</h3>
+          <div id="passkeys-container">
+            <div class="loading">Loading passkeys...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="../components/auth.ts"></script>
   <script type="module">
@@ -338,8 +786,15 @@
     const content = document.getElementById('content');
     const transcriptionsTable = document.getElementById('transcriptions-table');
     const usersTable = document.getElementById('users-table');
+    const userModal = document.getElementById('user-modal');
+    const modalClose = userModal.querySelector('.modal-close');
 
     let currentUserEmail = null;
+    let currentModalUserId = null;
+    let allUsers = [];
+    let userSortKey = 'created_at';
+    let userSortDirection = 'desc';
+    let userSearchTerm = '';
 
     // Get current user info
     async function getCurrentUser() {
@@ -364,6 +819,342 @@
       const date = new Date(timestamp * 1000);
       return date.toLocaleString();
     }
+
+    function parseUserAgent(userAgent) {
+      if (!userAgent) return '🖥️ Unknown Device';
+      if (userAgent.includes('iPhone')) return '📱 iPhone';
+      if (userAgent.includes('iPad')) return '📱 iPad';
+      if (userAgent.includes('Android')) return '📱 Android';
+      if (userAgent.includes('Mac')) return '💻 Mac';
+      if (userAgent.includes('Windows')) return '💻 Windows';
+      if (userAgent.includes('Linux')) return '💻 Linux';
+      return '🖥️ Unknown Device';
+    }
+
+    // Modal functions
+    function openUserModal(userId) {
+      currentModalUserId = userId;
+      userModal.classList.add('active');
+      loadUserDetails(userId);
+    }
+
+    function closeUserModal() {
+      userModal.classList.remove('active');
+      currentModalUserId = null;
+    }
+
+    async function loadUserDetails(userId) {
+      try {
+        const res = await fetch(`/api/admin/users/${userId}/details`);
+        if (!res.ok) {
+          throw new Error('Failed to load user details');
+        }
+
+        const user = await res.json();
+
+        document.getElementById('modal-email').textContent = user.email;
+        document.getElementById('modal-name').textContent = user.name || 'Not set';
+        document.getElementById('modal-role').textContent = user.role;
+        document.getElementById('modal-joined').textContent = formatTimestamp(user.created_at);
+        document.getElementById('modal-last-login').textContent = user.last_login ? formatTimestamp(user.last_login) : 'Never';
+        document.getElementById('modal-transcription-count').textContent = user.transcriptionCount;
+
+        const passwordStatus = document.getElementById('modal-password-status');
+        if (user.hasPassword) {
+          passwordStatus.innerHTML = '<span class="password-status has-password">Has password</span>';
+        } else {
+          passwordStatus.innerHTML = '<span class="password-status no-password">No password (passkey only)</span>';
+        }
+
+        document.getElementById('new-name').value = user.name || '';
+        document.getElementById('new-email').value = user.email;
+
+        renderSessions(user.sessions, userId);
+        renderPasskeys(user.passkeys, userId);
+      } catch {
+        alert('Failed to load user details');
+        closeUserModal();
+      }
+    }
+
+    function renderSessions(sessions, userId) {
+      const container = document.getElementById('sessions-container');
+      const sessionCount = document.getElementById('session-count');
+      const logoutAllBtn = document.getElementById('logout-all-btn');
+
+      sessionCount.textContent = `${sessions.length} active session${sessions.length !== 1 ? 's' : ''}`;
+
+      if (sessions.length === 0) {
+        container.innerHTML = '<div class="empty-sessions">No active sessions</div>';
+        logoutAllBtn.disabled = true;
+        return;
+      }
+
+      logoutAllBtn.disabled = false;
+
+      const list = document.createElement('ul');
+      list.className = 'session-list';
+      list.innerHTML = sessions.map(s => `
+        <li class="session-item">
+          <div class="session-info">
+            <div class="session-device">${parseUserAgent(s.user_agent)}</div>
+            <div class="session-meta">
+              IP: ${s.ip_address || 'Unknown'} • 
+              Created: ${formatTimestamp(s.created_at)} • 
+              Expires: ${formatTimestamp(s.expires_at)}
+            </div>
+          </div>
+          <div class="session-actions">
+            <button class="btn btn-danger btn-small revoke-session-btn" data-session-id="${s.id}" data-user-id="${userId}">
+              Revoke
+            </button>
+          </div>
+        </li>
+      `).join('');
+
+      container.innerHTML = '';
+      container.appendChild(list);
+
+      // Add revoke event listeners
+      list.querySelectorAll('.revoke-session-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const button = e.target;
+          const sessionId = button.dataset.sessionId;
+          const userId = button.dataset.userId;
+
+          if (!confirm('Revoke this session? The user will be logged out of this device.')) {
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = 'Revoking...';
+
+          try {
+            const res = await fetch(`/api/admin/users/${userId}/sessions/${sessionId}`, {
+              method: 'DELETE'
+            });
+
+            if (!res.ok) {
+              throw new Error('Failed to revoke session');
+            }
+
+            await loadUserDetails(userId);
+          } catch {
+            alert('Failed to revoke session');
+            button.disabled = false;
+            button.textContent = 'Revoke';
+          }
+        });
+      });
+    }
+
+    function renderPasskeys(passkeys, userId) {
+      const container = document.getElementById('passkeys-container');
+
+      if (passkeys.length === 0) {
+        container.innerHTML = '<div class="empty-passkeys">No passkeys registered</div>';
+        return;
+      }
+
+      const list = document.createElement('ul');
+      list.className = 'passkey-list';
+      list.innerHTML = passkeys.map(pk => `
+        <li class="passkey-item">
+          <div class="passkey-info">
+            <div class="passkey-name">${pk.name || 'Unnamed Passkey'}</div>
+            <div class="passkey-meta">
+              Created: ${formatTimestamp(pk.created_at)}
+              ${pk.last_used_at ? ` • Last used: ${formatTimestamp(pk.last_used_at)}` : ''}
+            </div>
+          </div>
+          <div class="passkey-actions">
+            <button class="btn btn-danger btn-small revoke-passkey-btn" data-passkey-id="${pk.id}" data-user-id="${userId}">
+              Revoke
+            </button>
+          </div>
+        </li>
+      `).join('');
+
+      container.innerHTML = '';
+      container.appendChild(list);
+
+      list.querySelectorAll('.revoke-passkey-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const button = e.target;
+          const passkeyId = button.dataset.passkeyId;
+          const userId = button.dataset.userId;
+
+          if (!confirm('Are you sure you want to revoke this passkey? The user will no longer be able to use it to sign in.')) {
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = 'Revoking...';
+
+          try {
+            const res = await fetch(`/api/admin/users/${userId}/passkeys/${passkeyId}`, {
+              method: 'DELETE'
+            });
+
+            if (!res.ok) {
+              throw new Error('Failed to revoke passkey');
+            }
+
+            await loadUserDetails(userId);
+          } catch {
+            alert('Failed to revoke passkey');
+            button.disabled = false;
+            button.textContent = 'Revoke';
+          }
+        });
+      });
+    }
+
+    modalClose.addEventListener('click', closeUserModal);
+    userModal.addEventListener('click', (e) => {
+      if (e.target === userModal) {
+        closeUserModal();
+      }
+    });
+
+    document.getElementById('change-name-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('new-name').value.trim();
+
+      if (!name) {
+        alert('Please enter a name');
+        return;
+      }
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Updating...';
+
+      try {
+        const res = await fetch(`/api/admin/users/${currentModalUserId}/name`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name})
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to update name');
+        }
+
+        alert('Name updated successfully');
+        await loadUserDetails(currentModalUserId);
+        await loadData();
+      } catch {
+        alert('Failed to update name');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Update Name';
+      }
+    });
+
+    document.getElementById('change-email-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('new-email').value.trim();
+
+      if (!email || !email.includes('@')) {
+        alert('Please enter a valid email');
+        return;
+      }
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Updating...';
+
+      try {
+        const res = await fetch(`/api/admin/users/${currentModalUserId}/email`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({email})
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || 'Failed to update email');
+        }
+
+        alert('Email updated successfully');
+        await loadUserDetails(currentModalUserId);
+        await loadData();
+      } catch (error) {
+        alert(error.message || 'Failed to update email');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Update Email';
+      }
+    });
+
+    document.getElementById('change-password-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('new-password').value;
+
+      if (password.length < 8) {
+        alert('Password must be at least 8 characters');
+        return;
+      }
+
+      if (!confirm('Are you sure you want to change this user\'s password? This will log them out of all devices.')) {
+        return;
+      }
+
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Updating...';
+
+      try {
+        const res = await fetch(`/api/admin/users/${currentModalUserId}/password`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({password})
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to update password');
+        }
+
+        alert('Password updated successfully. User has been logged out of all devices.');
+        document.getElementById('new-password').value = '';
+        await loadUserDetails(currentModalUserId);
+      } catch {
+        alert('Failed to update password');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Update Password';
+      }
+    });
+
+    document.getElementById('logout-all-btn').addEventListener('click', async (e) => {
+      if (!confirm('Are you sure you want to logout this user from ALL devices? This will terminate all active sessions.')) {
+        return;
+      }
+
+      const button = e.target;
+      button.disabled = true;
+      button.textContent = 'Logging out...';
+
+      try {
+        const res = await fetch(`/api/admin/users/${currentModalUserId}/sessions`, {
+          method: 'DELETE'
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to logout all devices');
+        }
+
+        alert('User logged out from all devices');
+        await loadUserDetails(currentModalUserId);
+      } catch {
+        alert('Failed to logout all devices');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Logout All Devices';
+      }
+    });
+
 
     function renderTranscriptions(transcriptions) {
       if (transcriptions.length === 0) {
@@ -447,8 +1238,40 @@
     }
 
     function renderUsers(users) {
-      if (users.length === 0) {
-        usersTable.innerHTML = '<div class="empty-state">No users yet</div>';
+      allUsers = users;
+
+      // Filter users based on search term
+      let filteredUsers = users.filter(u => {
+        if (!userSearchTerm) return true;
+        const term = userSearchTerm.toLowerCase();
+        const name = (u.name || '').toLowerCase();
+        const email = u.email.toLowerCase();
+        return name.includes(term) || email.includes(term);
+      });
+
+      // Sort users
+      filteredUsers.sort((a, b) => {
+        let aVal = a[userSortKey];
+        let bVal = b[userSortKey];
+
+        // Handle null values
+        if (aVal === null || aVal === undefined) aVal = '';
+        if (bVal === null || bVal === undefined) bVal = '';
+
+        let comparison = 0;
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          comparison = aVal.localeCompare(bVal);
+        } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+          comparison = aVal - bVal;
+        } else {
+          comparison = String(aVal).localeCompare(String(bVal));
+        }
+
+        return userSortDirection === 'asc' ? comparison : -comparison;
+      });
+
+      if (filteredUsers.length === 0) {
+        usersTable.innerHTML = '<div class="empty-state">No users found</div>';
         return;
       }
 
@@ -456,15 +1279,17 @@
       table.innerHTML = `
         <thead>
           <tr>
-            <th>User</th>
-            <th>Email</th>
-            <th>Role</th>
-            <th>Joined</th>
+            <th class="sortable ${userSortKey === 'name' ? userSortDirection : ''}" data-sort="name">User</th>
+            <th class="sortable ${userSortKey === 'email' ? userSortDirection : ''}" data-sort="email">Email</th>
+            <th class="sortable ${userSortKey === 'role' ? userSortDirection : ''}" data-sort="role">Role</th>
+            <th class="sortable ${userSortKey === 'transcription_count' ? userSortDirection : ''}" data-sort="transcription_count">Transcriptions</th>
+            <th class="sortable ${userSortKey === 'last_login' ? userSortDirection : ''}" data-sort="last_login">Last Login</th>
+            <th class="sortable ${userSortKey === 'created_at' ? userSortDirection : ''}" data-sort="created_at">Joined</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          ${users.map(u => `
+          ${filteredUsers.map(u => `
             <tr>
               <td>
                 <div class="user-info">
@@ -484,9 +1309,13 @@
                   <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
                 </select>
               </td>
+              <td>${u.transcription_count}</td>
+              <td class="timestamp">${u.last_login ? formatTimestamp(u.last_login) : 'Never'}</td>
               <td class="timestamp">${formatTimestamp(u.created_at)}</td>
               <td>
-                <button class="delete-user-btn" data-user-id="${u.id}" data-user-email="${u.email}">Delete</button>
+                <div class="actions">
+                  <button class="delete-user-btn" data-user-id="${u.id}" data-user-email="${u.email}">Delete</button>
+                </div>
               </td>
             </tr>
           `).join('')}
@@ -494,6 +1323,20 @@
       `;
       usersTable.innerHTML = '';
       usersTable.appendChild(table);
+
+      // Add sort event listeners
+      table.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const sortKey = th.dataset.sort;
+          if (userSortKey === sortKey) {
+            userSortDirection = userSortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+            userSortKey = sortKey;
+            userSortDirection = 'asc';
+          }
+          renderUsers(allUsers);
+        });
+      });
 
       // Add role change event listeners
       table.querySelectorAll('.role-select').forEach(select => {
@@ -584,6 +1427,19 @@
           }
         });
       });
+
+      // Add click event to table rows to open modal
+      table.querySelectorAll('tbody tr').forEach(row => {
+        row.addEventListener('click', (e) => {
+          // Don't open modal if clicking on delete button or role select
+          if (e.target.closest('.delete-user-btn') || e.target.closest('.role-select')) {
+            return;
+          }
+          
+          const userId = row.querySelector('.delete-user-btn').dataset.userId;
+          openUserModal(userId);
+        });
+      });
     }
 
     async function loadData() {
@@ -632,6 +1488,12 @@
         tab.classList.add('active');
         document.getElementById(`${tabName}-tab`).classList.add('active');
       });
+    });
+
+    // User search
+    document.getElementById('user-search').addEventListener('input', (e) => {
+      userSearchTerm = e.target.value.trim();
+      renderUsers(allUsers);
     });
 
     // Initialize

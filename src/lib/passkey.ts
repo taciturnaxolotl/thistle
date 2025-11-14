@@ -297,17 +297,20 @@ export async function verifyAndAuthenticatePasskey(
 	// Remove used challenge
 	authenticationChallenges.delete(expectedChallenge);
 
-	// Update last used timestamp and counter
+	// Update last used timestamp and counter for passkey
 	const now = Math.floor(Date.now() / 1000);
 	db.run(
 		"UPDATE passkeys SET last_used_at = ?, counter = ? WHERE id = ?",
 		[now, verification.authenticationInfo.newCounter, passkey.id],
 	);
 
+	// Update user's last_login
+	db.run("UPDATE users SET last_login = ? WHERE id = ?", [now, passkey.user_id]);
+
 	// Get user
 	const user = db
 		.query<User, [number]>(
-			"SELECT id, email, name, avatar, created_at, role FROM users WHERE id = ?",
+			"SELECT id, email, name, avatar, created_at, role, last_login FROM users WHERE id = ?",
 		)
 		.get(passkey.user_id);
 

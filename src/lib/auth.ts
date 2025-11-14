@@ -11,6 +11,7 @@ export interface User {
 	avatar: string;
 	created_at: number;
 	role: UserRole;
+	last_login: number | null;
 }
 
 export interface Session {
@@ -56,7 +57,7 @@ export function getUserBySession(sessionId: string): User | null {
 
 	const user = db
 		.query<User, [number]>(
-			"SELECT id, email, name, avatar, created_at, role FROM users WHERE id = ?",
+			"SELECT id, email, name, avatar, created_at, role, last_login FROM users WHERE id = ?",
 		)
 		.get(session.user_id);
 
@@ -94,7 +95,7 @@ export async function createUser(
 
 	const user = db
 		.query<User, [number]>(
-			"SELECT id, email, name, avatar, created_at, role FROM users WHERE id = ?",
+			"SELECT id, email, name, avatar, created_at, role, last_login FROM users WHERE id = ?",
 		)
 		.get(Number(result.lastInsertRowid));
 
@@ -119,10 +120,11 @@ export async function authenticateUser(
 				password_hash: string;
 				created_at: number;
 				role: UserRole;
+				last_login: number | null;
 			},
 			[string]
 		>(
-			"SELECT id, email, name, avatar, password_hash, created_at, role FROM users WHERE email = ?",
+			"SELECT id, email, name, avatar, password_hash, created_at, role, last_login FROM users WHERE email = ?",
 		)
 		.get(email);
 
@@ -135,6 +137,10 @@ export async function authenticateUser(
 
 	if (password !== result.password_hash) return null;
 
+	// Update last_login
+	const now = Math.floor(Date.now() / 1000);
+	db.run("UPDATE users SET last_login = ? WHERE id = ?", [now, result.id]);
+
 	return {
 		id: result.id,
 		email: result.email,
@@ -142,6 +148,7 @@ export async function authenticateUser(
 		avatar: result.avatar,
 		created_at: result.created_at,
 		role: result.role,
+		last_login: now,
 	};
 }
 
@@ -221,9 +228,10 @@ export function getAllUsers(): Array<{
 				avatar: string;
 				created_at: number;
 				role: UserRole;
+				last_login: number | null;
 			},
 			[]
-		>("SELECT id, email, name, avatar, created_at, role FROM users ORDER BY created_at DESC")
+		>("SELECT id, email, name, avatar, created_at, role, last_login FROM users ORDER BY created_at DESC")
 		.all();
 }
 
@@ -310,4 +318,66 @@ export function deleteTranscription(transcriptionId: string): void {
 	} catch {
 		// Files might not exist, ignore errors
 	}
+}
+
+export function getSessionsForUser(userId: number): Session[] {
+	const now = Math.floor(Date.now() / 1000);
+	return db
+		.query<Session, [number, number]>(
+			"SELECT id, user_id, ip_address, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC",
+		)
+		.all(userId, now);
+}
+
+export function deleteSessionById(
+	sessionId: string,
+	userId: number,
+): boolean {
+	const result = db.run(
+		"DELETE FROM sessions WHERE id = ? AND user_id = ?",
+		[sessionId, userId],
+	);
+	return result.changes > 0;
+}
+
+export function deleteAllUserSessions(userId: number): void {
+	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+}
+
+export function updateUserEmailAddress(
+	userId: number,
+	newEmail: string,
+): void {
+	db.run("UPDATE users SET email = ? WHERE id = ?", [newEmail, userId]);
+}
+
+export interface UserWithStats {
+	id: number;
+	email: string;
+	name: string | null;
+	avatar: string;
+	created_at: number;
+	role: UserRole;
+	last_login: number | null;
+	transcription_count: number;
+}
+
+export function getAllUsersWithStats(): UserWithStats[] {
+	return db
+		.query<UserWithStats, []>(
+			`SELECT 
+        u.id, 
+        u.email, 
+        u.name, 
+        u.avatar, 
+        u.created_at, 
+        u.role,
+        u.last_login,
+        COUNT(t.id) as transcription_count
+      FROM users u
+      LEFT JOIN transcriptions t ON u.id = t.user_id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC`,
+		)
+		.all();
 }

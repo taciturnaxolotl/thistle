@@ -138,6 +138,14 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     `,
 	},
+	{
+		version: 8,
+		name: "Add last_login to users",
+		sql: `
+      ALTER TABLE users ADD COLUMN last_login INTEGER;
+      CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

@@ -4,17 +4,22 @@ import {
 	cleanupExpiredSessions,
 	createSession,
 	createUser,
+	deleteAllUserSessions,
 	deleteSession,
+	deleteSessionById,
 	deleteTranscription,
 	deleteUser,
 	getAllTranscriptions,
 	getAllUsers,
+	getAllUsersWithStats,
 	getSession,
 	getSessionFromRequest,
+	getSessionsForUser,
 	getUserBySession,
 	getUserSessionsForUser,
 	updateUserAvatar,
 	updateUserEmail,
+	updateUserEmailAddress,
 	updateUserName,
 	updateUserPassword,
 	updateUserRole,
@@ -1001,7 +1006,7 @@ const server = Bun.serve({
 			GET: async (req) => {
 				try {
 					requireAdmin(req);
-					const users = getAllUsers();
+					const users = getAllUsersWithStats();
 					return Response.json(users);
 				} catch (error) {
 					return handleError(error);
@@ -1055,6 +1060,240 @@ const server = Bun.serve({
 					}
 
 					updateUserRole(userId, role);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/details": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const user = db
+						.query<
+							{
+								id: number;
+								email: string;
+								name: string | null;
+								avatar: string;
+								created_at: number;
+								role: UserRole;
+								password_hash: string | null;
+								last_login: number | null;
+							},
+							[number]
+						>(
+							"SELECT id, email, name, avatar, created_at, role, password_hash, last_login FROM users WHERE id = ?",
+						)
+						.get(userId);
+
+					if (!user) {
+						return Response.json({ error: "User not found" }, { status: 404 });
+					}
+
+					const passkeys = getPasskeysForUser(userId);
+					const sessions = getSessionsForUser(userId);
+
+					// Get transcription count
+					const transcriptionCount = db
+						.query<{ count: number }, [number]>(
+							"SELECT COUNT(*) as count FROM transcriptions WHERE user_id = ?",
+						)
+						.get(userId)?.count ?? 0;
+
+					return Response.json({
+						id: user.id,
+						email: user.email,
+						name: user.name,
+						avatar: user.avatar,
+						created_at: user.created_at,
+						role: user.role,
+						last_login: user.last_login,
+						hasPassword: !!user.password_hash,
+						transcriptionCount,
+						passkeys: passkeys.map((pk) => ({
+							id: pk.id,
+							name: pk.name,
+							created_at: pk.created_at,
+							last_used_at: pk.last_used_at,
+						})),
+						sessions: sessions.map((s) => ({
+							id: s.id,
+							ip_address: s.ip_address,
+							user_agent: s.user_agent,
+							created_at: s.created_at,
+							expires_at: s.expires_at,
+						})),
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/password": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const body = await req.json();
+					const { password } = body as { password: string };
+
+					if (!password || password.length < 8) {
+						return Response.json(
+							{ error: "Password must be at least 8 characters" },
+							{ status: 400 },
+						);
+					}
+
+					await updateUserPassword(userId, password);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/passkeys/:passkeyId": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const { passkeyId } = req.params;
+					deletePasskey(passkeyId, userId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/name": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const body = await req.json();
+					const { name } = body as { name: string };
+
+					if (!name || name.trim().length === 0) {
+						return Response.json(
+							{ error: "Name cannot be empty" },
+							{ status: 400 },
+						);
+					}
+
+					updateUserName(userId, name.trim());
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/email": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const body = await req.json();
+					const { email } = body as { email: string };
+
+					if (!email || !email.includes("@")) {
+						return Response.json(
+							{ error: "Invalid email address" },
+							{ status: 400 },
+						);
+					}
+
+					// Check if email already exists
+					const existing = db
+						.query<{ id: number }, [string, number]>(
+							"SELECT id FROM users WHERE email = ? AND id != ?",
+						)
+						.get(email, userId);
+
+					if (existing) {
+						return Response.json(
+							{ error: "Email already in use" },
+							{ status: 400 },
+						);
+					}
+
+					updateUserEmailAddress(userId, email);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/sessions": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const sessions = getSessionsForUser(userId);
+					return Response.json(sessions);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					deleteAllUserSessions(userId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/sessions/:sessionId": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const { sessionId } = req.params;
+					const success = deleteSessionById(sessionId, userId);
+
+					if (!success) {
+						return Response.json(
+							{ error: "Session not found" },
+							{ status: 404 },
+						);
+					}
+
 					return Response.json({ success: true });
 				} catch (error) {
 					return handleError(error);

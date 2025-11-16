@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { cleanVTT, parseVTT } from "./vtt-cleaner";
 
 const sampleVTT = `WEBVTT
@@ -38,15 +38,15 @@ test("parseVTT handles empty VTT", () => {
 test("cleanVTT preserves VTT format when AI key not available", async () => {
 	// Save original env var
 	const originalKey = process.env.LLM_API_KEY;
-	
+
 	// Remove key to test fallback
 	delete process.env.LLM_API_KEY;
-	
+
 	const result = await cleanVTT("test-vtt", sampleVTT);
 
 	expect(result).toContain("WEBVTT");
 	expect(result).toContain("-->");
-	
+
 	// Restore original key
 	if (originalKey) {
 		process.env.LLM_API_KEY = originalKey;
@@ -72,13 +72,13 @@ test.skip("cleanVTT uses AI when available", async () => {
 
 	expect(result).toContain("WEBVTT");
 	expect(result).toContain("-->");
-	
+
 	// AI should clean up tags
 	expect(result).not.toContain("<|startoftranscript|>");
 	expect(result).not.toContain("[SIDE CONVERSATION]");
-	
+
 	// Should have paragraph formatting
 	expect(result).toContain("Paragraph");
-	
+
 	console.log("AI-cleaned VTT preview:", result.substring(0, 300));
 }, 30000);

@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import {
+	deleteTranscript,
+	getTranscript,
 	getTranscriptVTT,
-	saveTranscriptVTT,
 	hasTranscript,
 	saveTranscript,
-	getTranscript,
-	deleteTranscript,
+	saveTranscriptVTT,
 } from "./transcript-storage";
 
 test("transcript storage", async () => {
@@ -107,4 +107,3 @@ test("VTT transcript storage", async () => {
 	// Clean up
 	await deleteTranscript(testId);
 });
-

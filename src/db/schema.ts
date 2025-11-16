@@ -146,6 +146,14 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login);
     `,
 	},
+	{
+		version: 9,
+		name: "Add class_name to transcriptions",
+		sql: `
+      ALTER TABLE transcriptions ADD COLUMN class_name TEXT;
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_class_name ON transcriptions(class_name);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

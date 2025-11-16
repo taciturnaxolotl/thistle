@@ -68,8 +68,7 @@ export async function registerPasskey(
 	} catch (err) {
 		return {
 			success: false,
-			error:
-				err instanceof Error ? err.message : "Failed to register passkey",
+			error: err instanceof Error ? err.message : "Failed to register passkey",
 		};
 	}
 }
@@ -137,7 +136,9 @@ export async function authenticateWithPasskey(
 		return {
 			success: false,
 			error:
-				err instanceof Error ? err.message : "Failed to authenticate with passkey",
+				err instanceof Error
+					? err.message
+					: "Failed to authenticate with passkey",
 		};
 	}
 }

@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import { hashPasswordClient } from "./client-auth";
 
 test("hashPasswordClient produces consistent output", async () => {

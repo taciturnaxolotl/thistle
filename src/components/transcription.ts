@@ -5,6 +5,7 @@ import "./vtt-viewer.ts";
 interface TranscriptionJob {
 	id: string;
 	filename: string;
+	class_name?: string;
 	status: "uploading" | "processing" | "transcribing" | "completed" | "failed";
 	progress: number;
 	transcript?: string;
@@ -20,10 +21,6 @@ interface VTTSegment {
 	text: string;
 	index?: string;
 }
-
-
-
-
 
 class WordStreamer {
 	private queue: string[] = [];
@@ -51,7 +48,8 @@ class WordStreamer {
 		this.isProcessing = true;
 
 		while (this.queue.length > 0) {
-			const word = this.queue.shift()!;
+			const word = this.queue.shift();
+			if (!word) break;
 			this.onWord(word);
 			await new Promise((resolve) => setTimeout(resolve, this.wordDelay));
 		}
@@ -62,7 +60,8 @@ class WordStreamer {
 	showAll() {
 		// Drain entire queue immediately
 		while (this.queue.length > 0) {
-			const word = this.queue.shift()!;
+			const word = this.queue.shift();
+			if (!word) break;
 			this.onWord(word);
 		}
 		this.isProcessing = false;
@@ -80,6 +79,8 @@ export class TranscriptionComponent extends LitElement {
 	@state() isUploading = false;
 	@state() dragOver = false;
 	@state() serviceAvailable = true;
+	@state() existingClasses: string[] = [];
+	@state() showNewClassInput = false;
 	// Word streamers for each job
 	private wordStreamers = new Map<string, WordStreamer>();
 	// Displayed transcripts
@@ -285,19 +286,110 @@ export class TranscriptionComponent extends LitElement {
     .file-input {
       display: none;
     }
+
+    .upload-form {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .class-input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--secondary);
+      border-radius: 4px;
+      font-size: 0.875rem;
+      color: var(--text);
+      background: var(--background);
+    }
+
+    .class-input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .class-input::placeholder {
+      color: var(--paynes-gray);
+      opacity: 0.6;
+    }
+
+    .class-select {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--secondary);
+      border-radius: 4px;
+      font-size: 0.875rem;
+      color: var(--text);
+      background: var(--background);
+      cursor: pointer;
+    }
+
+    .class-select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .class-select option {
+      padding: 0.5rem;
+    }
+
+    .class-group {
+      margin-bottom: 2rem;
+    }
+
+    .class-header {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    .no-class-header {
+      border-bottom-color: var(--secondary);
+    }
   `;
 
 	private eventSources: Map<string, EventSource> = new Map();
 	private handleAuthChange = async () => {
 		await this.checkHealth();
 		await this.loadJobs();
+		await this.loadExistingClasses();
 		this.connectToJobStreams();
 	};
+
+	private async loadExistingClasses() {
+		try {
+			const response = await fetch("/api/transcriptions");
+			if (!response.ok) {
+				this.existingClasses = [];
+				return;
+			}
+
+			const data = await response.json();
+			const jobs = data.jobs || [];
+
+			// Extract unique class names
+			const classSet = new Set<string>();
+			for (const job of jobs) {
+				if (job.class_name) {
+					classSet.add(job.class_name);
+				}
+			}
+
+			this.existingClasses = Array.from(classSet).sort();
+		} catch (error) {
+			console.error("Failed to load classes:", error);
+			this.existingClasses = [];
+		}
+	}
 
 	override async connectedCallback() {
 		super.connectedCallback();
 		await this.checkHealth();
 		await this.loadJobs();
+		await this.loadExistingClasses();
 		this.connectToJobStreams();
 
 		// Listen for auth changes to reload jobs
@@ -311,14 +403,14 @@ export class TranscriptionComponent extends LitElement {
 			es.close();
 		}
 		this.eventSources.clear();
-		
+
 		for (const streamer of this.wordStreamers.values()) {
 			streamer.clear();
 		}
 		this.wordStreamers.clear();
 		this.displayedTranscripts.clear();
 		this.lastTranscripts.clear();
-		
+
 		window.removeEventListener("auth-changed", this.handleAuthChange);
 	}
 
@@ -354,7 +446,7 @@ export class TranscriptionComponent extends LitElement {
 				if (update.progress !== undefined) job.progress = update.progress;
 				if (update.transcript !== undefined) {
 					job.transcript = update.transcript;
-					
+
 					// Get or create word streamer for this job
 					if (!this.wordStreamers.has(jobId)) {
 						const streamer = new WordStreamer(50, (word) => {
@@ -364,11 +456,12 @@ export class TranscriptionComponent extends LitElement {
 						});
 						this.wordStreamers.set(jobId, streamer);
 					}
-					
-					const streamer = this.wordStreamers.get(jobId)!;
+
+					const streamer = this.wordStreamers.get(jobId);
+					if (!streamer) return;
 					const lastTranscript = this.lastTranscripts.get(jobId) || "";
 					const newTranscript = update.transcript;
-					
+
 					// Check if this is new content we haven't seen
 					if (newTranscript !== lastTranscript) {
 						// If new transcript starts with last transcript, it's cumulative - add diff
@@ -386,7 +479,7 @@ export class TranscriptionComponent extends LitElement {
 						}
 						this.lastTranscripts.set(jobId, newTranscript);
 					}
-					
+
 					// On completion, show everything immediately
 					if (update.status === "completed") {
 						streamer.showAll();
@@ -402,7 +495,7 @@ export class TranscriptionComponent extends LitElement {
 				if (update.status === "completed" || update.status === "failed") {
 					eventSource.close();
 					this.eventSources.delete(jobId);
-					
+
 					// Clean up streamer
 					const streamer = this.wordStreamers.get(jobId);
 					if (streamer) {
@@ -410,7 +503,7 @@ export class TranscriptionComponent extends LitElement {
 						this.wordStreamers.delete(jobId);
 					}
 					this.lastTranscripts.delete(jobId);
-					
+
 					// Load VTT for completed jobs
 					if (update.status === "completed") {
 						await this.loadVTTForJob(jobId);
@@ -474,13 +567,16 @@ export class TranscriptionComponent extends LitElement {
 			if (response.ok) {
 				const data = await response.json();
 				this.jobs = data.jobs;
-				
+
 				// Initialize displayedTranscripts for completed/failed jobs
 				for (const job of this.jobs) {
-					if ((job.status === "completed" || job.status === "failed") && job.transcript) {
+					if (
+						(job.status === "completed" || job.status === "failed") &&
+						job.transcript
+					) {
 						this.displayedTranscripts.set(job.id, job.transcript);
 					}
-					
+
 					// Fetch VTT for completed jobs
 					if (job.status === "completed") {
 						await this.loadVTTForJob(job.id);
@@ -519,8 +615,6 @@ export class TranscriptionComponent extends LitElement {
 		}
 	}
 
-	
-
 	private handleDragOver(e: DragEvent) {
 		e.preventDefault();
 		this.dragOver = true;
@@ -548,6 +642,11 @@ export class TranscriptionComponent extends LitElement {
 		if (file) {
 			await this.uploadFile(file);
 		}
+	}
+
+	private handleClassSelectChange(e: Event) {
+		const select = e.target as HTMLSelectElement;
+		this.showNewClassInput = select.value === "__new__";
 	}
 
 	private async uploadFile(file: File) {
@@ -585,8 +684,33 @@ export class TranscriptionComponent extends LitElement {
 		this.isUploading = true;
 
 		try {
+			// Get class name from dropdown or input
+			let className = "";
+
+			if (this.showNewClassInput) {
+				const classInput = this.shadowRoot?.querySelector(
+					"#class-name-input",
+				) as HTMLInputElement;
+				className = classInput?.value?.trim() || "";
+			} else {
+				const classSelect = this.shadowRoot?.querySelector(
+					"#class-select",
+				) as HTMLSelectElement;
+				const selectedValue = classSelect?.value;
+				if (
+					selectedValue &&
+					selectedValue !== "__new__" &&
+					selectedValue !== ""
+				) {
+					className = selectedValue;
+				}
+			}
+
 			const formData = new FormData();
 			formData.append("audio", file);
+			if (className) {
+				formData.append("class_name", className);
+			}
 
 			const response = await fetch("/api/transcriptions", {
 				method: "POST",
@@ -600,10 +724,34 @@ export class TranscriptionComponent extends LitElement {
 						"Upload failed - transcription service may be unavailable",
 				);
 			} else {
-				const result = await response.json();
-				await this.loadJobs();
-				// Connect to SSE stream for this new job
-				this.connectToJobStream(result.id);
+				await response.json();
+				// Redirect to class page after successful upload
+				let className = "";
+
+				if (this.showNewClassInput) {
+					const classInput = this.shadowRoot?.querySelector(
+						"#class-name-input",
+					) as HTMLInputElement;
+					className = classInput?.value?.trim() || "";
+				} else {
+					const classSelect = this.shadowRoot?.querySelector(
+						"#class-select",
+					) as HTMLSelectElement;
+					const selectedValue = classSelect?.value;
+					if (
+						selectedValue &&
+						selectedValue !== "__new__" &&
+						selectedValue !== ""
+					) {
+						className = selectedValue;
+					}
+				}
+
+				if (className) {
+					window.location.href = `/class/${encodeURIComponent(className)}`;
+				} else {
+					window.location.href = "/class/uncategorized";
+				}
 			}
 		} catch {
 			alert("Upload failed - transcription service may be unavailable");
@@ -611,22 +759,6 @@ export class TranscriptionComponent extends LitElement {
 			this.isUploading = false;
 		}
 	}
-
-	private getStatusClass(status: string) {
-		return `status-${status}`;
-	}
-
-	private renderTranscript(job: TranscriptionJob) {
-		if (!job.vttContent) {
-			const displayed = this.displayedTranscripts.get(job.id) || "";
-			return displayed;
-		}
-
-		// Delegate VTT rendering and highlighting to the vtt-viewer component
-		return html`<vtt-viewer .vttContent=${job.vttContent ?? ""} .audioId=${`audio-${job.id}`}></vtt-viewer>`;
-	}
-
-
 
 	override render() {
 		return html`
@@ -651,46 +783,42 @@ export class TranscriptionComponent extends LitElement {
         <input type="file" class="file-input" accept="audio/mpeg,audio/wav,audio/m4a,audio/mp4,audio/aac,audio/ogg,audio/webm,audio/flac,.m4a" @change=${this.handleFileSelect} ${!this.serviceAvailable ? "disabled" : ""} />
       </div>
 
-      <div class="jobs-section ${this.jobs.length === 0 ? "hidden" : ""}">
-        <h3 class="jobs-title">Your Transcriptions</h3>
-        ${this.jobs.map(
-					(job) => html`
-          <div class="job-card">
-            <div class="job-header">
-              <span class="job-filename">${job.filename}</span>
-              <span class="job-status ${this.getStatusClass(job.status)}">${job.status}</span>
-            </div>
-
-            ${
-							job.status === "uploading" ||
-							job.status === "processing" ||
-							job.status === "transcribing"
-								? html`
-              <div class="progress-bar">
-                <div class="progress-fill ${job.status === "processing" ? "indeterminate" : ""}" style="${job.status === "processing" ? "" : `width: ${job.progress}%`}"></div>
-              </div>
-            `
-								: ""
-						}
-
-            ${
-							job.status === "completed" && job.audioUrl && job.vttContent
-								? html`
-              <div class="audio-player">
-                <audio id="audio-${job.id}" preload="metadata" controls src="${job.audioUrl}"></audio>
-              </div>
-              ${this.renderTranscript(job)}
-            `
-								: this.displayedTranscripts.has(job.id) && this.displayedTranscripts.get(job.id)
-									? html`
-              <div class="job-transcript">${this.renderTranscript(job)}</div>
-            `
-									: ""
-						}
-          </div>
-        `,
-				)}
-      </div>
+      ${
+				this.serviceAvailable
+					? html`
+        <div class="upload-form">
+          <select
+            id="class-select"
+            class="class-select"
+            ?disabled=${this.isUploading}
+            @change=${this.handleClassSelectChange}
+          >
+            <option value="">Select a class (optional)</option>
+            ${this.existingClasses.map(
+							(className) => html`
+              <option value=${className}>${className}</option>
+            `,
+						)}
+            <option value="__new__">+ Add new class</option>
+          </select>
+          
+          ${
+						this.showNewClassInput
+							? html`
+            <input
+              type="text"
+              id="class-name-input"
+              class="class-input"
+              placeholder="Enter new class name"
+              ?disabled=${this.isUploading}
+            />
+          `
+							: ""
+					}
+        </div>
+      `
+					: ""
+			}
     `;
 	}
 }

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 
 let testDb: Database;
 
@@ -183,4 +183,3 @@ test("updating password clears user sessions", async () => {
 		.all(userId);
 	expect(sessions.length).toBe(0);
 });
-

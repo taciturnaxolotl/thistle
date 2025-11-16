@@ -110,7 +110,7 @@
       const isLoggedIn = await authComponent.isAuthenticated();
       
       if (isLoggedIn) {
-        window.location.href = '/transcribe';
+        window.location.href = '/classes';
       } else {
         authComponent.openAuthModal();
       }

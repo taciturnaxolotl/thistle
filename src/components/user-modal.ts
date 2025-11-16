@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 interface Session {
@@ -327,7 +327,8 @@ export class UserModal extends LitElement {
 
 			this.user = await res.json();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to load user details";
+			this.error =
+				err instanceof Error ? err.message : "Failed to load user details";
 			this.user = null;
 		} finally {
 			this.loading = false;
@@ -335,7 +336,9 @@ export class UserModal extends LitElement {
 	}
 
 	private close() {
-		this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
+		this.dispatchEvent(
+			new CustomEvent("close", { bubbles: true, composed: true }),
+		);
 	}
 
 	private formatTimestamp(timestamp: number) {
@@ -365,7 +368,9 @@ export class UserModal extends LitElement {
 			return;
 		}
 
-		const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+		const submitBtn = form.querySelector(
+			'button[type="submit"]',
+		) as HTMLButtonElement;
 		submitBtn.disabled = true;
 		submitBtn.textContent = "Updating...";
 
@@ -382,7 +387,9 @@ export class UserModal extends LitElement {
 
 			alert("Name updated successfully");
 			await this.loadUserDetails();
-			this.dispatchEvent(new CustomEvent("user-updated", { bubbles: true, composed: true }));
+			this.dispatchEvent(
+				new CustomEvent("user-updated", { bubbles: true, composed: true }),
+			);
 		} catch {
 			alert("Failed to update name");
 		} finally {
@@ -402,7 +409,9 @@ export class UserModal extends LitElement {
 			return;
 		}
 
-		const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+		const submitBtn = form.querySelector(
+			'button[type="submit"]',
+		) as HTMLButtonElement;
 		submitBtn.disabled = true;
 		submitBtn.textContent = "Updating...";
 
@@ -420,7 +429,9 @@ export class UserModal extends LitElement {
 
 			alert("Email updated successfully");
 			await this.loadUserDetails();
-			this.dispatchEvent(new CustomEvent("user-updated", { bubbles: true, composed: true }));
+			this.dispatchEvent(
+				new CustomEvent("user-updated", { bubbles: true, composed: true }),
+			);
 		} catch (error) {
 			alert(error instanceof Error ? error.message : "Failed to update email");
 		} finally {
@@ -440,11 +451,17 @@ export class UserModal extends LitElement {
 			return;
 		}
 
-		if (!confirm("Are you sure you want to change this user's password? This will log them out of all devices.")) {
+		if (
+			!confirm(
+				"Are you sure you want to change this user's password? This will log them out of all devices.",
+			)
+		) {
 			return;
 		}
 
-		const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+		const submitBtn = form.querySelector(
+			'button[type="submit"]',
+		) as HTMLButtonElement;
 		submitBtn.disabled = true;
 		submitBtn.textContent = "Updating...";
 
@@ -459,7 +476,9 @@ export class UserModal extends LitElement {
 				throw new Error("Failed to update password");
 			}
 
-			alert("Password updated successfully. User has been logged out of all devices.");
+			alert(
+				"Password updated successfully. User has been logged out of all devices.",
+			);
 			input.value = "";
 			await this.loadUserDetails();
 		} catch {
@@ -471,7 +490,11 @@ export class UserModal extends LitElement {
 	}
 
 	private async handleLogoutAll() {
-		if (!confirm("Are you sure you want to logout this user from ALL devices? This will terminate all active sessions.")) {
+		if (
+			!confirm(
+				"Are you sure you want to logout this user from ALL devices? This will terminate all active sessions.",
+			)
+		) {
 			return;
 		}
 
@@ -492,14 +515,21 @@ export class UserModal extends LitElement {
 	}
 
 	private async handleRevokeSession(sessionId: string) {
-		if (!confirm("Revoke this session? The user will be logged out of this device.")) {
+		if (
+			!confirm(
+				"Revoke this session? The user will be logged out of this device.",
+			)
+		) {
 			return;
 		}
 
 		try {
-			const res = await fetch(`/api/admin/users/${this.userId}/sessions/${sessionId}`, {
-				method: "DELETE",
-			});
+			const res = await fetch(
+				`/api/admin/users/${this.userId}/sessions/${sessionId}`,
+				{
+					method: "DELETE",
+				},
+			);
 
 			if (!res.ok) {
 				throw new Error("Failed to revoke session");
@@ -512,14 +542,21 @@ export class UserModal extends LitElement {
 	}
 
 	private async handleRevokePasskey(passkeyId: string) {
-		if (!confirm("Are you sure you want to revoke this passkey? The user will no longer be able to use it to sign in.")) {
+		if (
+			!confirm(
+				"Are you sure you want to revoke this passkey? The user will no longer be able to use it to sign in.",
+			)
+		) {
 			return;
 		}
 
 		try {
-			const res = await fetch(`/api/admin/users/${this.userId}/passkeys/${passkeyId}`, {
-				method: "DELETE",
-			});
+			const res = await fetch(
+				`/api/admin/users/${this.userId}/passkeys/${passkeyId}`,
+				{
+					method: "DELETE",
+				},
+			);
 
 			if (!res.ok) {
 				throw new Error("Failed to revoke passkey");

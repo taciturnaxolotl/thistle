@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 interface VTTSegment {
@@ -132,13 +132,13 @@ export class VTTViewer extends LitElement {
 	`;
 
 	private audioElement: HTMLAudioElement | null = null;
-	private boundTimeUpdate: ((this: HTMLAudioElement, ev: Event) => any) | null = null;
-	private boundTranscriptClick: ((e: Event) => any) | null = null;
-
-	private _viewerId = `vtt-${Math.random().toString(36).slice(2,9)}`;
+	private boundTimeUpdate:
+		| ((this: HTMLAudioElement, ev: Event) => void)
+		| null = null;
+	private boundTranscriptClick: ((e: Event) => void) | null = null;
 
 	private findAudioElementById(id: string): HTMLAudioElement | null {
-		let root: any = this.getRootNode();
+		let root: Node | Document = this.getRootNode();
 		let depth = 0;
 		while (root && depth < 10) {
 			if (root instanceof ShadowRoot) {
@@ -162,31 +162,40 @@ export class VTTViewer extends LitElement {
 		this.detachHighlighting();
 
 		const audioElement = this.findAudioElementById(this.audioId);
-		const transcriptDiv = this.shadowRoot?.querySelector('.transcript') as HTMLDivElement | null;
+		const transcriptDiv = this.shadowRoot?.querySelector(
+			".transcript",
+		) as HTMLDivElement | null;
 		if (!audioElement || !transcriptDiv) return;
 
 		// Clear any lingering highlights from prior instances
-		transcriptDiv.querySelectorAll('.current-segment').forEach((el) => { (el as HTMLElement).classList.remove('current-segment'); });
+		transcriptDiv.querySelectorAll(".current-segment").forEach((el) => {
+			(el as HTMLElement).classList.remove("current-segment");
+		});
 
 		this.audioElement = audioElement;
 		let currentSegmentElement: HTMLElement | null = null;
 
 		this.boundTimeUpdate = () => {
 			const currentTime = this.audioElement?.currentTime ?? 0;
-			const segmentElements = transcriptDiv.querySelectorAll('[data-start]');
+			const segmentElements = transcriptDiv.querySelectorAll("[data-start]");
 			let found = false;
 
 			for (const el of Array.from(segmentElements)) {
-				const start = Number.parseFloat((el as HTMLElement).dataset.start || '0');
-				const end = Number.parseFloat((el as HTMLElement).dataset.end || '0');
+				const start = Number.parseFloat(
+					(el as HTMLElement).dataset.start || "0",
+				);
+				const end = Number.parseFloat((el as HTMLElement).dataset.end || "0");
 
 				if (currentTime >= start && currentTime <= end) {
 					found = true;
 					if (currentSegmentElement !== el) {
-						currentSegmentElement?.classList.remove('current-segment');
-						(el as HTMLElement).classList.add('current-segment');
+						currentSegmentElement?.classList.remove("current-segment");
+						(el as HTMLElement).classList.add("current-segment");
 						currentSegmentElement = el as HTMLElement;
-						(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+						(el as HTMLElement).scrollIntoView({
+							behavior: "smooth",
+							block: "center",
+						});
 					}
 					break;
 				}
@@ -194,40 +203,48 @@ export class VTTViewer extends LitElement {
 
 			// If no segment matched, clear any existing highlight
 			if (!found && currentSegmentElement) {
-				currentSegmentElement.classList.remove('current-segment');
+				currentSegmentElement.classList.remove("current-segment");
 				currentSegmentElement = null;
 			}
 		};
 
-		audioElement.addEventListener('timeupdate', this.boundTimeUpdate as EventListener);
+		audioElement.addEventListener(
+			"timeupdate",
+			this.boundTimeUpdate as EventListener,
+		);
 
 		this.boundTranscriptClick = (e: Event) => {
 			const target = e.target as HTMLElement;
-			if (target.dataset.start) {
-				this.audioElement!.currentTime = Number.parseFloat(target.dataset.start);
-				this.audioElement!.play();
+			if (target.dataset.start && this.audioElement) {
+				this.audioElement.currentTime = Number.parseFloat(target.dataset.start);
+				this.audioElement.play();
 			}
 		};
 
-		transcriptDiv.addEventListener('click', this.boundTranscriptClick);
+		transcriptDiv.addEventListener("click", this.boundTranscriptClick);
 	}
 
 	private detachHighlighting() {
 		try {
-			const transcriptDiv = this.shadowRoot?.querySelector('.transcript') as HTMLDivElement | null;
+			const transcriptDiv = this.shadowRoot?.querySelector(
+				".transcript",
+			) as HTMLDivElement | null;
 			if (this.audioElement) {
 				// Pause playback to avoid audio continuing after the viewer is removed
 				try {
 					this.audioElement.pause();
-				} catch (e) {
+				} catch (_e) {
 					// ignore
 				}
 				if (this.boundTimeUpdate) {
-					this.audioElement.removeEventListener('timeupdate', this.boundTimeUpdate);
+					this.audioElement.removeEventListener(
+						"timeupdate",
+						this.boundTimeUpdate,
+					);
 				}
 			}
 			if (transcriptDiv && this.boundTranscriptClick) {
-				transcriptDiv.removeEventListener('click', this.boundTranscriptClick);
+				transcriptDiv.removeEventListener("click", this.boundTranscriptClick);
 			}
 		} finally {
 			this.audioElement = null;
@@ -238,12 +255,12 @@ export class VTTViewer extends LitElement {
 
 	override disconnectedCallback() {
 		this.detachHighlighting();
-		super.disconnectedCallback && super.disconnectedCallback();
+		super.disconnectedCallback?.();
 	}
 
-	override updated(changed: Map<string, any>) {
+	override updated(changed: Map<string, unknown>) {
 		super.updated(changed);
-		if (changed.has('vttContent') || changed.has('audioId')) {
+		if (changed.has("vttContent") || changed.has("audioId")) {
 			this.setupHighlighting();
 		}
 	}
@@ -256,31 +273,47 @@ export class VTTViewer extends LitElement {
 		for (const segment of segments) {
 			const id = (segment.index || "").trim();
 			const match = id.match(/^Paragraph\s+(\d+)-/);
-			const paraNum = match ? match[1] : '0';
+			const paraNum = match?.[1] ?? "0";
 			if (!paragraphGroups.has(paraNum)) paragraphGroups.set(paraNum, []);
-			paragraphGroups.get(paraNum)!.push(segment);
+			const group = paragraphGroups.get(paraNum);
+			if (group) group.push(segment);
 		}
 
-		const paragraphs = Array.from(paragraphGroups.entries()).map(([_, groupSegments]) => {
-			const fullText = groupSegments.map(s => s.text || '').join(' ');
-			const sentences = fullText.split(/(?<=[\.\!\?])\s+/g).filter(Boolean);
-			const wordCounts = sentences.map((s) => s.split(/\s+/).filter(Boolean).length);
-			const totalWords = Math.max(1, wordCounts.reduce((a, b) => a + b, 0));
-			const paraStart = Math.min(...groupSegments.map(s => s.start ?? 0));
-			const paraEnd = Math.max(...groupSegments.map(s => s.end ?? paraStart));
-			let acc = 0;
-			const paraDuration = paraEnd - paraStart;
+		const paragraphs = Array.from(paragraphGroups.entries()).map(
+			([_, groupSegments]) => {
+				const fullText = groupSegments.map((s) => s.text || "").join(" ");
+				const sentences = fullText.split(/(?<=[.!?])\s+/g).filter(Boolean);
+				const wordCounts = sentences.map(
+					(s) => s.split(/\s+/).filter(Boolean).length,
+				);
+				const totalWords = Math.max(
+					1,
+					wordCounts.reduce((a, b) => a + b, 0),
+				);
+				const paraStart = Math.min(...groupSegments.map((s) => s.start ?? 0));
+				const paraEnd = Math.max(
+					...groupSegments.map((s) => s.end ?? paraStart),
+				);
+				let acc = 0;
+				const paraDuration = paraEnd - paraStart;
 
-			return html`<div class="paragraph">${sentences.map((sent, si) => {
-				const startOffset = (acc / totalWords) * paraDuration;
-				acc += wordCounts[si];
-				const sentenceDuration = (wordCounts[si] / totalWords) * paraDuration;
-				const endOffset = si < sentences.length - 1 ? startOffset + sentenceDuration - 0.001 : paraEnd - paraStart;
-				const spanStart = paraStart + startOffset;
-				const spanEnd = paraStart + endOffset;
-				return html`<span class="segment" data-start="${spanStart}" data-end="${spanEnd}">${sent}</span>${si < sentences.length - 1 ? ' ' : ''}`;
-			})}</div>`;
-		});
+				return html`<div class="paragraph">${sentences.map((sent, si) => {
+					const wordCount = wordCounts[si];
+					if (wordCount === undefined) return "";
+
+					const startOffset = (acc / totalWords) * paraDuration;
+					acc += wordCount;
+					const sentenceDuration = (wordCount / totalWords) * paraDuration;
+					const endOffset =
+						si < sentences.length - 1
+							? startOffset + sentenceDuration - 0.001
+							: paraEnd - paraStart;
+					const spanStart = paraStart + startOffset;
+					const spanEnd = paraStart + endOffset;
+					return html`<span class="segment" data-start="${spanStart}" data-end="${spanEnd}">${sent}</span>${si < sentences.length - 1 ? " " : ""}`;
+				})}</div>`;
+			},
+		);
 
 		return html`${paragraphs}`;
 	}
@@ -293,37 +326,44 @@ export class VTTViewer extends LitElement {
 		for (const s of segments) {
 			const id = (s.index || "").trim();
 			const match = id.match(/^Paragraph\s+(\d+)-/);
-			const paraNum = match ? match[1] : '0';
+			const paraNum = match?.[1] ?? "0";
 			if (!paragraphGroups.has(paraNum)) paragraphGroups.set(paraNum, []);
-			paragraphGroups.get(paraNum)!.push(s.text || '');
+			const group = paragraphGroups.get(paraNum);
+			if (group) group.push(s.text || "");
 		}
-		const paragraphs = Array.from(paragraphGroups.values()).map(group => group.join(' ').replace(/\s+/g, ' ').trim());
-		return paragraphs.join('\n\n').trim();
+		const paragraphs = Array.from(paragraphGroups.values()).map((group) =>
+			group.join(" ").replace(/\s+/g, " ").trim(),
+		);
+		return paragraphs.join("\n\n").trim();
 	}
 
 	private async copyTranscript(e?: Event) {
-		e && e.stopPropagation();
+		e?.stopPropagation();
 		const text = this.extractPlainText();
 		if (!text) return;
 		try {
-			if (navigator && (navigator as any).clipboard && (navigator as any).clipboard.writeText) {
-				await (navigator as any).clipboard.writeText(text);
+			if (navigator?.clipboard?.writeText) {
+				await navigator.clipboard.writeText(text);
 			} else {
 				// Fallback
-				const ta = document.createElement('textarea');
+				const ta = document.createElement("textarea");
 				ta.value = text;
-				ta.style.position = 'fixed';
-				ta.style.opacity = '0';
+				ta.style.position = "fixed";
+				ta.style.opacity = "0";
 				document.body.appendChild(ta);
 				ta.select();
-				document.execCommand('copy');
+				document.execCommand("copy");
 				document.body.removeChild(ta);
 			}
-			const btn = this.shadowRoot?.querySelector('.copy-btn') as HTMLButtonElement | null;
+			const btn = this.shadowRoot?.querySelector(
+				".copy-btn",
+			) as HTMLButtonElement | null;
 			if (btn) {
 				const orig = btn.innerText;
-				btn.innerText = 'Copied!';
-				setTimeout(() => { btn.innerText = orig; }, 1500);
+				btn.innerText = "Copied!";
+				setTimeout(() => {
+					btn.innerText = orig;
+				}, 1500);
 			}
 		} catch {
 			// ignore

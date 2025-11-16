@@ -1,10 +1,10 @@
 import {
 	generateAuthenticationOptions,
 	generateRegistrationOptions,
-	verifyAuthenticationResponse,
-	verifyRegistrationResponse,
 	type VerifiedAuthenticationResponse,
 	type VerifiedRegistrationResponse,
+	verifyAuthenticationResponse,
+	verifyRegistrationResponse,
 } from "@simplewebauthn/server";
 import type {
 	AuthenticationResponseJSON,
@@ -163,7 +163,9 @@ export async function verifyAndCreatePasskey(
 	// credential.publicKey is a Uint8Array that needs conversion
 	const passkeyId = crypto.randomUUID();
 	const credentialIdBase64 = credential.id;
-	const publicKeyBase64 = Buffer.from(credential.publicKey).toString("base64url");
+	const publicKeyBase64 = Buffer.from(credential.publicKey).toString(
+		"base64url",
+	);
 	const transports = response.response.transports?.join(",") || null;
 
 	db.run(
@@ -224,7 +226,8 @@ export async function createAuthenticationOptions(email?: string) {
 
 	const options = await generateAuthenticationOptions({
 		rpID,
-		allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
+		allowCredentials:
+			allowCredentials.length > 0 ? allowCredentials : undefined,
 		userVerification: "preferred",
 	});
 
@@ -299,13 +302,17 @@ export async function verifyAndAuthenticatePasskey(
 
 	// Update last used timestamp and counter for passkey
 	const now = Math.floor(Date.now() / 1000);
-	db.run(
-		"UPDATE passkeys SET last_used_at = ?, counter = ? WHERE id = ?",
-		[now, verification.authenticationInfo.newCounter, passkey.id],
-	);
+	db.run("UPDATE passkeys SET last_used_at = ?, counter = ? WHERE id = ?", [
+		now,
+		verification.authenticationInfo.newCounter,
+		passkey.id,
+	]);
 
 	// Update user's last_login
-	db.run("UPDATE users SET last_login = ? WHERE id = ?", [now, passkey.user_id]);
+	db.run("UPDATE users SET last_login = ? WHERE id = ?", [
+		now,
+		passkey.user_id,
+	]);
 
 	// Get user
 	const user = db

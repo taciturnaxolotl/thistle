@@ -2,10 +2,7 @@ import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { UAParser } from "ua-parser-js";
 import { hashPasswordClient } from "../lib/client-auth";
-import {
-	isPasskeySupported,
-	registerPasskey,
-} from "../lib/client-passkey";
+import { isPasskeySupported, registerPasskey } from "../lib/client-passkey";
 
 interface User {
 	email: string;
@@ -1029,8 +1026,8 @@ export class UserSettings extends LitElement {
 												</div>
 												<div style="margin-top: 1rem;">
 												${
-												session.is_current
-												? html`
+													session.is_current
+														? html`
 												<button
 												 class="btn btn-rejection"
 												 @click=${this.handleLogout}
@@ -1038,7 +1035,7 @@ export class UserSettings extends LitElement {
 												 Logout
 												 </button>
 												 `
-												 : html`
+														: html`
 												    <button
 												class="btn btn-rejection"
 												@click=${() => this.handleKillSession(session.id)}
@@ -1046,7 +1043,7 @@ export class UserSettings extends LitElement {
 												Kill Session
 											</button>
 										  `
-								}
+												}
 							</div>
 											</div>
 										`,

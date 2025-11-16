@@ -1,11 +1,11 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
+import db from "../db/schema";
 import {
 	createSession,
-	getSession,
 	deleteSession,
+	getSession,
 	getSessionFromRequest,
 } from "./auth";
-import db from "../db/schema";
 
 test("createSession generates UUID and stores in database", () => {
 	const userId = 1;
@@ -125,8 +125,8 @@ test("prevents SQL injection in session lookup", () => {
 	}
 
 	// Verify sessions table still exists
-	const result = db
-		.query("SELECT COUNT(*) as count FROM sessions")
-		.get() as { count: number };
+	const result = db.query("SELECT COUNT(*) as count FROM sessions").get() as {
+		count: number;
+	};
 	expect(typeof result.count).toBe("number");
 });

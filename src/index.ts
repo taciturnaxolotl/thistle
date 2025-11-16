@@ -10,21 +10,22 @@ import {
 	deleteTranscription,
 	deleteUser,
 	getAllTranscriptions,
-	getAllUsers,
 	getAllUsersWithStats,
 	getSession,
 	getSessionFromRequest,
 	getSessionsForUser,
 	getUserBySession,
 	getUserSessionsForUser,
+	type UserRole,
 	updateUserAvatar,
 	updateUserEmail,
 	updateUserEmailAddress,
 	updateUserName,
 	updateUserPassword,
 	updateUserRole,
-	type UserRole,
 } from "./lib/auth";
+import { handleError, ValidationErrors } from "./lib/errors";
+import { requireAdmin, requireAuth } from "./lib/middleware";
 import {
 	createAuthenticationOptions,
 	createRegistrationOptions,
@@ -34,18 +35,18 @@ import {
 	verifyAndAuthenticatePasskey,
 	verifyAndCreatePasskey,
 } from "./lib/passkey";
-import { handleError, ValidationErrors } from "./lib/errors";
-import { requireAdmin, requireAuth } from "./lib/middleware";
 import { enforceRateLimit } from "./lib/rate-limit";
+import { getTranscriptVTT } from "./lib/transcript-storage";
 import {
 	MAX_FILE_SIZE,
 	TranscriptionEventEmitter,
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
-import { getTranscriptVTT } from "./lib/transcript-storage";
-import indexHTML from "./pages/index.html";
 import adminHTML from "./pages/admin.html";
+import classHTML from "./pages/class.html";
+import classesHTML from "./pages/classes.html";
+import indexHTML from "./pages/index.html";
 import settingsHTML from "./pages/settings.html";
 import transcribeHTML from "./pages/transcribe.html";
 
@@ -108,6 +109,8 @@ const server = Bun.serve({
 		"/admin": adminHTML,
 		"/settings": settingsHTML,
 		"/transcribe": transcribeHTML,
+		"/classes": classesHTML,
+		"/class/:className": classHTML,
 		"/api/auth/register": {
 			POST: async (req) => {
 				try {
@@ -264,7 +267,7 @@ const server = Bun.serve({
 		"/api/passkeys/register/verify": {
 			POST: async (req) => {
 				try {
-					const user = requireAuth(req);
+					const _user = requireAuth(req);
 					const body = await req.json();
 					const { response: credentialResponse, challenge, name } = body;
 
@@ -797,12 +800,12 @@ const server = Bun.serve({
 
 					// return info on transcript
 					const transcript = {
-     					id: transcription.id,
-     					filename: transcription.original_filename,
-     					status: transcription.status,
-     					progress: transcription.progress,
-     					created_at: transcription.created_at,
-					}
+						id: transcription.id,
+						filename: transcription.original_filename,
+						status: transcription.status,
+						progress: transcription.progress,
+						created_at: transcription.created_at,
+					};
 					return new Response(JSON.stringify(transcript), {
 						headers: {
 							"Content-Type": "application/json",
@@ -914,13 +917,14 @@ const server = Bun.serve({
 								id: string;
 								filename: string;
 								original_filename: string;
+								class_name: string | null;
 								status: string;
 								progress: number;
 								created_at: number;
 							},
 							[number]
 						>(
-							"SELECT id, filename, original_filename, status, progress, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
+							"SELECT id, filename, original_filename, class_name, status, progress, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
 						)
 						.all(user.id);
 
@@ -930,6 +934,7 @@ const server = Bun.serve({
 							return {
 								id: t.id,
 								filename: t.original_filename,
+								class_name: t.class_name,
 								status: t.status,
 								progress: t.progress,
 								created_at: t.created_at,
@@ -948,6 +953,7 @@ const server = Bun.serve({
 
 					const formData = await req.formData();
 					const file = formData.get("audio") as File;
+					const className = formData.get("class_name") as string | null;
 
 					if (!file) throw ValidationErrors.missingField("audio");
 
@@ -986,11 +992,25 @@ const server = Bun.serve({
 					const uploadDir = "./uploads";
 					await Bun.write(`${uploadDir}/${filename}`, file);
 
-					// Create database record
-					db.run(
-						"INSERT INTO transcriptions (id, user_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?)",
-						[transcriptionId, user.id, filename, file.name, "uploading"],
-					);
+					// Create database record with optional class_name
+					if (className?.trim()) {
+						db.run(
+							"INSERT INTO transcriptions (id, user_id, filename, original_filename, class_name, status) VALUES (?, ?, ?, ?, ?, ?)",
+							[
+								transcriptionId,
+								user.id,
+								filename,
+								file.name,
+								className.trim(),
+								"uploading",
+							],
+						);
+					} else {
+						db.run(
+							"INSERT INTO transcriptions (id, user_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?)",
+							[transcriptionId, user.id, filename, file.name, "uploading"],
+						);
+					}
 
 					// Start transcription in background
 					whisperService.startTranscription(transcriptionId, filename);

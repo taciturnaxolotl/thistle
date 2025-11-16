@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import "./vtt-viewer.ts";
 
@@ -277,7 +277,9 @@ export class TranscriptViewModal extends LitElement {
 			// Fetch transcript details
 			const [detailsRes, vttRes] = await Promise.all([
 				fetch(`/api/admin/transcriptions/${this.transcriptId}/details`),
-				fetch(`/api/transcriptions/${this.transcriptId}?format=vtt`).catch(() => null),
+				fetch(`/api/transcriptions/${this.transcriptId}?format=vtt`).catch(
+					() => null,
+				),
 			]);
 
 			if (!detailsRes.ok) {
@@ -302,7 +304,10 @@ export class TranscriptViewModal extends LitElement {
 				vtt_content: vttContent,
 			};
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to load transcript details";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to load transcript details";
 			this.transcript = null;
 		} finally {
 			this.loading = false;
@@ -311,7 +316,9 @@ export class TranscriptViewModal extends LitElement {
 
 	private close() {
 		this.stopAudioPlayback();
-		this.dispatchEvent(new CustomEvent("close", { bubbles: true, composed: true }));
+		this.dispatchEvent(
+			new CustomEvent("close", { bubbles: true, composed: true }),
+		);
 	}
 
 	private formatTimestamp(timestamp: number) {
@@ -322,10 +329,16 @@ export class TranscriptViewModal extends LitElement {
 	private stopAudioPlayback() {
 		try {
 			// stop audio inside this modal's shadow root
-			const aud = this.shadowRoot?.querySelector('audio') as HTMLAudioElement | null;
+			const aud = this.shadowRoot?.querySelector(
+				"audio",
+			) as HTMLAudioElement | null;
 			if (aud) {
 				aud.pause();
-				try { aud.currentTime = 0; } catch (e) { /* ignore */ }
+				try {
+					aud.currentTime = 0;
+				} catch (_e) {
+					/* ignore */
+				}
 			}
 
 			// Also stop any audio elements in light DOM that match the transcript audio id
@@ -334,29 +347,45 @@ export class TranscriptViewModal extends LitElement {
 				const outside = document.getElementById(id) as HTMLAudioElement | null;
 				if (outside && outside !== aud) {
 					outside.pause();
-					try { outside.currentTime = 0; } catch (e) { /* ignore */ }
+					try {
+						outside.currentTime = 0;
+					} catch (_e) {
+						/* ignore */
+					}
 				}
 			}
-		} catch (e) {
+		} catch (_e) {
 			// ignore
 		}
 	}
 
 	private async handleDelete() {
-		if (!confirm("Are you sure you want to delete this transcription? This cannot be undone.")) {
+		if (
+			!confirm(
+				"Are you sure you want to delete this transcription? This cannot be undone.",
+			)
+		) {
 			return;
 		}
 
 		try {
-			const res = await fetch(`/api/admin/transcriptions/${this.transcriptId}`, {
-				method: "DELETE",
-			});
+			const res = await fetch(
+				`/api/admin/transcriptions/${this.transcriptId}`,
+				{
+					method: "DELETE",
+				},
+			);
 
 			if (!res.ok) {
 				throw new Error("Failed to delete transcription");
 			}
 
-			this.dispatchEvent(new CustomEvent("transcript-deleted", { bubbles: true, composed: true }));
+			this.dispatchEvent(
+				new CustomEvent("transcript-deleted", {
+					bubbles: true,
+					composed: true,
+				}),
+			);
 			this.close();
 		} catch {
 			alert("Failed to delete transcription");
@@ -375,13 +404,15 @@ export class TranscriptViewModal extends LitElement {
           ${this.error ? html`<div class="error">${this.error}</div>` : ""}
           ${this.transcript ? this.renderTranscriptDetails() : ""}
         </div>
-        ${this.transcript
-					? html`
+        ${
+					this.transcript
+						? html`
           <div class="modal-footer">
             <button class="btn-danger" @click=${this.handleDelete}>Delete Transcription</button>
           </div>
         `
-					: ""}
+						: ""
+				}
       </div>
     `;
 	}
@@ -404,22 +435,26 @@ export class TranscriptViewModal extends LitElement {
           <span class="detail-label">Created At</span>
           <span class="detail-value">${this.formatTimestamp(this.transcript.created_at)}</span>
         </div>
-        ${this.transcript.completed_at
-					? html`
+        ${
+					this.transcript.completed_at
+						? html`
           <div class="detail-row">
             <span class="detail-label">Completed At</span>
             <span class="detail-value">${this.formatTimestamp(this.transcript.completed_at)}</span>
           </div>
         `
-					: ""}
-        ${this.transcript.error_message
-					? html`
+						: ""
+				}
+        ${
+					this.transcript.error_message
+						? html`
           <div class="detail-row">
             <span class="detail-label">Error Message</span>
             <span class="detail-value" style="color: #dc2626;">${this.transcript.error_message}</span>
           </div>
         `
-					: ""}
+						: ""
+				}
       </div>
 
       <div class="detail-section">
@@ -441,8 +476,9 @@ export class TranscriptViewModal extends LitElement {
         </div>
       </div>
 
-      ${this.transcript.status === "completed"
-				? html`
+      ${
+				this.transcript.status === "completed"
+					? html`
         <div class="detail-section">
           <h3 class="detail-section-title">Audio</h3>
           <div class="audio-player">
@@ -450,13 +486,16 @@ export class TranscriptViewModal extends LitElement {
           </div>
         </div>
       `
-				: ""}
+					: ""
+			}
 
       <div class="detail-section">
         <h3 class="detail-section-title">Transcript</h3>
-        ${this.transcript.status === "completed" && this.transcript.vtt_content
-					? html`<vtt-viewer .vttContent=${this.transcript.vtt_content ?? ""} .audioId=${`audio-${this.transcript.id}`}></vtt-viewer>`
-					: html`<div class="transcript-text">${this.transcript.vtt_content || "No transcript available"}</div>`}
+        ${
+					this.transcript.status === "completed" && this.transcript.vtt_content
+						? html`<vtt-viewer .vttContent=${this.transcript.vtt_content ?? ""} .audioId=${`audio-${this.transcript.id}`}></vtt-viewer>`
+						: html`<div class="transcript-text">${this.transcript.vtt_content || "No transcript available"}</div>`
+				}
       </div>
     `;
 	}

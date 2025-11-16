@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { checkRateLimit, cleanupOldAttempts } from "./rate-limit";
 import db from "../db/schema";
+import { checkRateLimit, cleanupOldAttempts } from "./rate-limit";
 
 // Clean up before tests
 db.run("DELETE FROM rate_limit_attempts");

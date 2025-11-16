@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { css, html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
 export interface TableColumn {
@@ -14,7 +14,7 @@ export class AdminDataTable extends LitElement {
 	@property({ type: Array }) data: unknown[] = [];
 	@property({ type: String }) searchPlaceholder = "Search...";
 	@property({ type: String }) emptyMessage = "No data available";
-	@property({ type: Boolean}) loading = false;
+	@property({ type: Boolean }) loading = false;
 
 	@property({ type: String }) private searchTerm = "";
 	@property({ type: String }) private sortKey = "";

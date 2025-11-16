@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="../styles/main.css">
   <style>
     main {
-      max-width: 80rem !important;
+      max-width: 80rem;
       margin: 0 auto;
       padding: 2rem;
     }
@@ -486,7 +486,7 @@
       allTranscriptions = transcriptions;
 
       // Filter transcriptions based on search term
-      let filteredTranscriptions = transcriptions.filter(t => {
+      const filteredTranscriptions = transcriptions.filter(t => {
         if (!transcriptSearchTerm) return true;
         const term = transcriptSearchTerm.toLowerCase();
         const filename = (t.original_filename || '').toLowerCase();
@@ -626,7 +626,7 @@
       allUsers = users;
 
       // Filter users based on search term
-      let filteredUsers = users.filter(u => {
+      const filteredUsers = users.filter(u => {
         if (!userSearchTerm) return true;
         const term = userSearchTerm.toLowerCase();
         const name = (u.name || '').toLowerCase();

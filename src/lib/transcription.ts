@@ -190,10 +190,7 @@ export class WhisperServiceManager {
 		}
 	}
 
-	private streamWhisperJob(
-		transcriptionId: string,
-		jobId: string,
-	) {
+	private streamWhisperJob(transcriptionId: string, jobId: string) {
 		// Prevent duplicate streams using locks
 		if (this.streamLocks.has(transcriptionId)) {
 			return;
@@ -312,11 +309,11 @@ export class WhisperServiceManager {
 						`${this.serviceUrl}/transcribe/${whisperJobId}?format=vtt`,
 					);
 					if (vttResponse.ok) {
-					const vttContent = await vttResponse.text();
-					const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
-					await saveTranscriptVTT(transcriptionId, cleanedVTT);
-					this.updateTranscription(transcriptionId, {});
-				}
+						const vttContent = await vttResponse.text();
+						const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
+						await saveTranscriptVTT(transcriptionId, cleanedVTT);
+						this.updateTranscription(transcriptionId, {});
+					}
 				} catch (error) {
 					console.warn(
 						`[Transcription] Failed to fetch VTT for ${transcriptionId}:`,
@@ -392,7 +389,6 @@ export class WhisperServiceManager {
 			updates.push("error_message = ?");
 			values.push(data.error_message);
 		}
-
 
 		updates.push("updated_at = ?");
 		values.push(Math.floor(Date.now() / 1000));
@@ -535,11 +531,11 @@ export class WhisperServiceManager {
 						`${this.serviceUrl}/transcribe/${whisperJob.id}?format=vtt`,
 					);
 					if (vttResponse.ok) {
-					const vttContent = await vttResponse.text();
-					const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
-					await saveTranscriptVTT(transcriptionId, cleanedVTT);
-					this.updateTranscription(transcriptionId, {});
-				}
+						const vttContent = await vttResponse.text();
+						const cleanedVTT = await cleanVTT(transcriptionId, vttContent);
+						await saveTranscriptVTT(transcriptionId, cleanedVTT);
+						this.updateTranscription(transcriptionId, {});
+					}
 				} catch (error) {
 					console.warn(
 						`[Sync] Failed to fetch VTT for ${transcriptionId}:`,

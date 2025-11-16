@@ -231,7 +231,9 @@ export function getAllUsers(): Array<{
 				last_login: number | null;
 			},
 			[]
-		>("SELECT id, email, name, avatar, created_at, role, last_login FROM users ORDER BY created_at DESC")
+		>(
+			"SELECT id, email, name, avatar, created_at, role, last_login FROM users ORDER BY created_at DESC",
+		)
 		.all();
 }
 
@@ -329,14 +331,11 @@ export function getSessionsForUser(userId: number): Session[] {
 		.all(userId, now);
 }
 
-export function deleteSessionById(
-	sessionId: string,
-	userId: number,
-): boolean {
-	const result = db.run(
-		"DELETE FROM sessions WHERE id = ? AND user_id = ?",
-		[sessionId, userId],
-	);
+export function deleteSessionById(sessionId: string, userId: number): boolean {
+	const result = db.run("DELETE FROM sessions WHERE id = ? AND user_id = ?", [
+		sessionId,
+		userId,
+	]);
 	return result.changes > 0;
 }
 
@@ -344,10 +343,7 @@ export function deleteAllUserSessions(userId: number): void {
 	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
 }
 
-export function updateUserEmailAddress(
-	userId: number,
-	newEmail: string,
-): void {
+export function updateUserEmailAddress(userId: number, newEmail: string): void {
 	db.run("UPDATE users SET email = ? WHERE id = ?", [newEmail, userId]);
 }
 

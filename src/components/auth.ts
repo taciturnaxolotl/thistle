@@ -627,9 +627,12 @@ export class AuthComponent extends LitElement {
 										<button
 											type="submit"
 											class="btn-primary"
-											?disabled=${this.isSubmitting ||
-											(this.passwordStrength?.isChecking ?? false) ||
-											(this.needsRegistration && !(this.passwordStrength?.isValid ?? false))}
+											?disabled=${
+												this.isSubmitting ||
+												(this.passwordStrength?.isChecking ?? false) ||
+												(this.needsRegistration &&
+													!(this.passwordStrength?.isValid ?? false))
+											}
 										>
 											${
 												this.isSubmitting

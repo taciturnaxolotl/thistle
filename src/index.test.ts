@@ -73,10 +73,11 @@ function authRequest(
 // Cleanup helpers
 function cleanupTestData() {
 	// Delete test users and their related data (cascade will handle most of it)
-	db.run("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%')");
-	db.run("DELETE FROM passkeys WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%')");
-	db.run("DELETE FROM transcriptions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%')");
-	db.run("DELETE FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%'");
+	// Include 'newemail%' to catch users whose emails were updated during tests
+	db.run("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%')");
+	db.run("DELETE FROM passkeys WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%')");
+	db.run("DELETE FROM transcriptions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%')");
+	db.run("DELETE FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%'");
 
 	// Clear ALL rate limit data to prevent accumulation across tests
 	// (IP-based rate limits don't contain test/admin in the key)

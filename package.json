@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "bun run src/index.ts --hot",
-    "clean": "rm -rf transcripts uploads thistle.db"
+    "clean": "rm -rf transcripts uploads thistle.db",
+    "test": "bun test",
+    "test:integration": "bun test src/index.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.2",

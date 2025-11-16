@@ -78,8 +78,8 @@ function cleanupTestData() {
 	db.run("DELETE FROM transcriptions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%')");
 	db.run("DELETE FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%'");
 
-	// Clear rate limit data
-	db.run("DELETE FROM rate_limits WHERE identifier LIKE 'test%' OR identifier LIKE 'admin%'");
+	// Clear rate limit data (keys are formatted as "endpoint:type:identifier")
+	db.run("DELETE FROM rate_limit_attempts WHERE key LIKE '%test%' OR key LIKE '%admin%'");
 }
 
 beforeEach(() => {

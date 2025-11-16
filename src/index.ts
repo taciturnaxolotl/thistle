@@ -981,7 +981,7 @@ const server = Bun.serve({
 					}
 
 					if (file.size > MAX_FILE_SIZE) {
-						throw ValidationErrors.fileTooLarge("25MB");
+						throw ValidationErrors.fileTooLarge("100MB");
 					}
 
 					// Generate unique filename

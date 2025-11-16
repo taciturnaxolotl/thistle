@@ -102,7 +102,7 @@ setInterval(
 setInterval(() => whisperService.cleanupStaleFiles(), 24 * 60 * 60 * 1000);
 
 const server = Bun.serve({
-	port: 3000,
+	port: process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000,
 	idleTimeout: 120, // 120 seconds for SSE connections
 	routes: {
 		"/": indexHTML,

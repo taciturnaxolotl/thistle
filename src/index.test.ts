@@ -78,8 +78,9 @@ function cleanupTestData() {
 	db.run("DELETE FROM transcriptions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%')");
 	db.run("DELETE FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%'");
 
-	// Clear rate limit data (keys are formatted as "endpoint:type:identifier")
-	db.run("DELETE FROM rate_limit_attempts WHERE key LIKE '%test%' OR key LIKE '%admin%'");
+	// Clear ALL rate limit data to prevent accumulation across tests
+	// (IP-based rate limits don't contain test/admin in the key)
+	db.run("DELETE FROM rate_limit_attempts");
 }
 
 beforeEach(() => {

@@ -55,53 +55,56 @@ export class UserSettings extends LitElement {
 		}
 
 		.settings-container {
-			display: flex;
-			gap: 3rem;
+			max-width: 80rem;
+			margin: 0 auto;
+			padding: 2rem;
 		}
 
-		.sidebar {
-			width: 250px;
-			background: var(--background);
-			padding: 2rem 0;
-			display: flex;
-			flex-direction: column;
+		h1 {
+			margin-bottom: 1rem;
+			color: var(--text);
 		}
 
-		.sidebar-item {
+		.tabs {
+			display: flex;
+			gap: 1rem;
+			border-bottom: 2px solid var(--secondary);
+			margin-bottom: 2rem;
+		}
+
+		.tab {
 			padding: 0.75rem 1.5rem;
+			border: none;
 			background: transparent;
 			color: var(--text);
-			border-radius: 6px;
-			border: 2px solid rgba(191, 192, 192, 0.3);
 			cursor: pointer;
-			font-family: inherit;
 			font-size: 1rem;
 			font-weight: 500;
-			text-align: left;
+			font-family: inherit;
+			border-bottom: 2px solid transparent;
+			margin-bottom: -2px;
 			transition: all 0.2s;
-			margin: 0.25rem 1rem;
 		}
 
-		.sidebar-item:hover {
-			background: rgba(79, 93, 117, 0.1);
-			border-color: var(--secondary);
+		.tab:hover {
 			color: var(--primary);
 		}
 
-		.sidebar-item.active {
-			background: var(--primary);
-			color: white;
-			border-color: var(--primary);
+		.tab.active {
+			color: var(--primary);
+			border-bottom-color: var(--primary);
 		}
 
-		.content {
-			flex: 1;
-			background: var(--background);
+		.tab-content {
+			display: none;
+		}
+
+		.tab-content.active {
+			display: block;
 		}
 
 		.content-inner {
-			max-width: 900px;
-			padding: 3rem 2rem 0rem 0;
+			max-width: 56rem;
 		}
 
 		.section {
@@ -390,29 +393,19 @@ export class UserSettings extends LitElement {
 
 		@media (max-width: 768px) {
 			.settings-container {
-				flex-direction: column;
+				padding: 1rem;
 			}
 
-			.sidebar {
-				width: 100%;
-				flex-direction: row;
+			.tabs {
 				overflow-x: auto;
-				padding: 1rem 0;
 			}
 
-			.sidebar-item {
+			.tab {
 				white-space: nowrap;
-				border-left: none;
-				border-bottom: 3px solid transparent;
-			}
-
-			.sidebar-item.active {
-				border-left-color: transparent;
-				border-bottom-color: var(--accent);
 			}
 
 			.content-inner {
-				padding: 2rem 1rem;
+				padding: 0;
 			}
 		}
 	`;
@@ -783,6 +776,7 @@ export class UserSettings extends LitElement {
 		).toLocaleDateString();
 
 		return html`
+			<div class="content-inner">
 			<div class="section">
 				<h2 class="section-title">Profile Information</h2>
 
@@ -984,12 +978,13 @@ export class UserSettings extends LitElement {
 					<div class="field-value">${createdDate}</div>
 				</div>
 			</div>
-			
+			</div>
 		`;
 	}
 
 	renderSessionsPage() {
 		return html`
+			<div class="content-inner">
 			<div class="section">
 				<h2 class="section-title">Active Sessions</h2>
 				${
@@ -1052,11 +1047,13 @@ export class UserSettings extends LitElement {
 							  `
 				}
 			</div>
+			</div>
 		`;
 	}
 
 	renderDangerPage() {
 		return html`
+			<div class="content-inner">
 			<div class="section danger-section">
 				<h2 class="section-title">Delete Account</h2>
 				<p class="danger-text">
@@ -1071,6 +1068,7 @@ export class UserSettings extends LitElement {
 				>
 					Delete Account
 				</button>
+			</div>
 			</div>
 		`;
 	}
@@ -1090,9 +1088,11 @@ export class UserSettings extends LitElement {
 
 		return html`
 			<div class="settings-container">
-				<div class="sidebar">
+				<h1>Settings</h1>
+
+				<div class="tabs">
 					<button
-						class="sidebar-item ${this.currentPage === "account" ? "active" : ""}"
+						class="tab ${this.currentPage === "account" ? "active" : ""}"
 						@click=${() => {
 							this.currentPage = "account";
 						}}
@@ -1100,7 +1100,7 @@ export class UserSettings extends LitElement {
 						Account
 					</button>
 					<button
-						class="sidebar-item ${this.currentPage === "sessions" ? "active" : ""}"
+						class="tab ${this.currentPage === "sessions" ? "active" : ""}"
 						@click=${() => {
 							this.currentPage = "sessions";
 						}}
@@ -1108,7 +1108,7 @@ export class UserSettings extends LitElement {
 						Sessions
 					</button>
 					<button
-						class="sidebar-item ${this.currentPage === "danger" ? "active" : ""}"
+						class="tab ${this.currentPage === "danger" ? "active" : ""}"
 						@click=${() => {
 							this.currentPage = "danger";
 						}}
@@ -1117,17 +1117,9 @@ export class UserSettings extends LitElement {
 					</button>
 				</div>
 
-				<div class="content">
-					<div class="content-inner">
-						${
-							this.currentPage === "account"
-								? this.renderAccountPage()
-								: this.currentPage === "sessions"
-									? this.renderSessionsPage()
-									: this.renderDangerPage()
-						}
-					</div>
-				</div>
+				${this.currentPage === "account" ? this.renderAccountPage() : ""}
+				${this.currentPage === "sessions" ? this.renderSessionsPage() : ""}
+				${this.currentPage === "danger" ? this.renderDangerPage() : ""}
 			</div>
 
 			${

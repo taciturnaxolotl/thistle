@@ -265,7 +265,7 @@ export function searchClassesByCourseCode(courseCode: string): Class[] {
 			`SELECT * FROM classes 
        WHERE UPPER(course_code) LIKE UPPER(?) 
        AND archived = 0
-       ORDER BY year DESC, semester DESC, professor ASC, section ASC`,
+       ORDER BY year DESC, semester DESC, professor ASC`,
 		)
 		.all(`%${courseCode}%`);
 }

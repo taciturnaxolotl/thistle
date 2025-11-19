@@ -1,5 +1,7 @@
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import type { MeetingTime } from "./meeting-time-picker";
+import "./meeting-time-picker";
 
 interface ClassResult {
 	id: string;
@@ -27,7 +29,7 @@ export class ClassRegistrationModal extends LitElement {
 		semester: "",
 		year: new Date().getFullYear(),
 		additionalInfo: "",
-		meetingTimes: [""],
+		meetingTimes: [] as MeetingTime[],
 	};
 
 	static override styles = css`
@@ -389,59 +391,6 @@ export class ClassRegistrationModal extends LitElement {
       padding: 2rem;
       color: var(--paynes-gray);
     }
-
-    .meeting-times-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .meeting-time-row {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-    }
-
-    .meeting-time-row input {
-      flex: 1;
-    }
-
-    .btn-remove {
-      padding: 0.5rem 1rem;
-      background: transparent;
-      color: #dc2626;
-      border: 2px solid #dc2626;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-weight: 500;
-      transition: all 0.2s;
-      font-family: inherit;
-    }
-
-    .btn-remove:hover {
-      background: #dc2626;
-      color: white;
-    }
-
-    .btn-add {
-      margin-top: 0.5rem;
-      padding: 0.5rem 1rem;
-      background: transparent;
-      color: var(--primary);
-      border: 2px solid var(--primary);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-weight: 500;
-      transition: all 0.2s;
-      font-family: inherit;
-    }
-
-    .btn-add:hover {
-      background: var(--primary);
-      color: white;
-    }
   `;
 
 	private handleClose() {
@@ -457,7 +406,7 @@ export class ClassRegistrationModal extends LitElement {
 			semester: "",
 			year: new Date().getFullYear(),
 			additionalInfo: "",
-			meetingTimes: [""],
+			meetingTimes: [],
 		};
 		this.dispatchEvent(new CustomEvent("close"));
 	}
@@ -566,26 +515,11 @@ export class ClassRegistrationModal extends LitElement {
 		this.showWaitlistForm = false;
 	}
 
-	private addMeetingTime() {
+	private handleMeetingTimesChange(e: CustomEvent) {
 		this.waitlistData = {
 			...this.waitlistData,
-			meetingTimes: [...this.waitlistData.meetingTimes, ""],
+			meetingTimes: e.detail,
 		};
-	}
-
-	private removeMeetingTime(index: number) {
-		this.waitlistData = {
-			...this.waitlistData,
-			meetingTimes: this.waitlistData.meetingTimes.filter(
-				(_, i) => i !== index,
-			),
-		};
-	}
-
-	private updateMeetingTime(index: number, value: string) {
-		const newTimes = [...this.waitlistData.meetingTimes];
-		newTimes[index] = value;
-		this.waitlistData = { ...this.waitlistData, meetingTimes: newTimes };
 	}
 
 	override render() {
@@ -696,47 +630,10 @@ export class ClassRegistrationModal extends LitElement {
                           </div>
                           <div class="form-group form-group-full">
                             <label>Meeting Times *</label>
-                            <div class="meeting-times-list">
-                              ${this.waitlistData.meetingTimes.map(
-																(time, index) => html`
-                                <div class="meeting-time-row">
-                                  <input
-                                    type="text"
-                                    required
-                                    placeholder="e.g., Monday Lecture, Wednesday Lecture"
-                                    .value=${time}
-                                    @input=${(e: Event) =>
-																			this.updateMeetingTime(
-																				index,
-																				(e.target as HTMLInputElement).value,
-																			)}
-                                    @keydown=${(e: KeyboardEvent) => {
-																			if (e.key === "Enter") {
-																				e.preventDefault();
-																				this.addMeetingTime();
-																			}
-																		}}
-                                  />
-                                  ${
-																		this.waitlistData.meetingTimes.length > 1
-																			? html`
-                                    <button
-                                      type="button"
-                                      class="btn-remove"
-                                      @click=${() => this.removeMeetingTime(index)}
-                                    >
-                                      Remove
-                                    </button>
-                                  `
-																			: ""
-																	}
-                                </div>
-                              `,
-															)}
-                              <button type="button" class="btn-add" @click=${this.addMeetingTime}>
-                                + Add Meeting Time
-                              </button>
-                            </div>
+                            <meeting-time-picker
+                              .value=${this.waitlistData.meetingTimes}
+                              @change=${this.handleMeetingTimesChange}
+                            ></meeting-time-picker>
                           </div>
                           <div class="form-group form-group-full">
                             <label>Additional Info (optional)</label>

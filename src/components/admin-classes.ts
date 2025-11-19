@@ -1,5 +1,7 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import type { MeetingTime } from "./meeting-time-picker";
+import "./meeting-time-picker";
 
 interface Class {
 	id: string;
@@ -35,7 +37,14 @@ export class AdminClasses extends LitElement {
 	@state() showCreateModal = false;
 	@state() activeTab: "classes" | "waitlist" = "classes";
 	@state() approvingEntry: WaitlistEntry | null = null;
-	@state() meetingTimes: string[] = [""];
+	@state() meetingTimes: MeetingTime[] = [];
+	@state() editingClass = {
+		courseCode: "",
+		courseName: "",
+		professor: "",
+		semester: "",
+		year: new Date().getFullYear(),
+	};
 
 	static override styles = css`
     :host {
@@ -316,9 +325,33 @@ export class AdminClasses extends LitElement {
       box-sizing: border-box;
     }
 
-    .form-group input:focus {
+    .form-group input:focus,
+    .form-group select:focus {
       outline: none;
       border-color: var(--primary);
+    }
+
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem;
+      border: 2px solid var(--secondary);
+      border-radius: 6px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: var(--background);
+      color: var(--text);
+      box-sizing: border-box;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group-full {
+      grid-column: 1 / -1;
     }
 
     .meeting-times-list {
@@ -691,68 +724,81 @@ export class AdminClasses extends LitElement {
 	private handleApproveWaitlist(entry: WaitlistEntry) {
 		this.approvingEntry = entry;
 
+		// Pre-fill form with waitlist data
+		this.editingClass = {
+			courseCode: entry.course_code,
+			courseName: entry.course_name,
+			professor: entry.professor,
+			semester: entry.semester,
+			year: entry.year,
+		};
+
 		// Parse meeting times from JSON if available, otherwise use empty array
 		if (entry.meeting_times) {
 			try {
 				const parsed = JSON.parse(entry.meeting_times);
-				this.meetingTimes = Array.isArray(parsed) && parsed.length > 0 ? parsed : [""];
+				this.meetingTimes = Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
 			} catch {
-				this.meetingTimes = [""];
+				this.meetingTimes = [];
 			}
 		} else {
-			this.meetingTimes = [""];
+			this.meetingTimes = [];
 		}
 	}
 
-	private addMeetingTime() {
-		this.meetingTimes = [...this.meetingTimes, ""];
+	private handleMeetingTimesChange(e: CustomEvent) {
+		this.meetingTimes = e.detail;
 	}
 
-	private removeMeetingTime(index: number) {
-		this.meetingTimes = this.meetingTimes.filter((_, i) => i !== index);
-	}
-
-	private updateMeetingTime(index: number, value: string) {
-		this.meetingTimes = this.meetingTimes.map((time, i) =>
-			i === index ? value : time,
-		);
+	private handleClassFieldInput(field: string, e: Event) {
+		const value = (e.target as HTMLInputElement | HTMLSelectElement).value;
+		this.editingClass = { ...this.editingClass, [field]: value };
 	}
 
 	private cancelApproval() {
 		this.approvingEntry = null;
-		this.meetingTimes = [""];
+		this.meetingTimes = [];
+		this.editingClass = {
+			courseCode: "",
+			courseName: "",
+			professor: "",
+			semester: "",
+			year: new Date().getFullYear(),
+		};
 	}
 
 	private async submitApproval() {
 		if (!this.approvingEntry) return;
 
-		const entry = this.approvingEntry;
-		const times = this.meetingTimes.filter((t) => t.trim() !== "");
-
-		if (times.length === 0) {
+		if (this.meetingTimes.length === 0) {
 			this.error = "Please add at least one meeting time";
 			return;
 		}
+
+		// Convert MeetingTime objects to label strings
+		const labels = this.meetingTimes.map((t) => t.label);
 
 		try {
 			const response = await fetch("/api/classes", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					course_code: entry.course_code,
-					name: entry.course_name,
-					professor: entry.professor,
-					semester: entry.semester,
-					year: entry.year,
-					meeting_times: times,
+					course_code: this.editingClass.courseCode,
+					name: this.editingClass.courseName,
+					professor: this.editingClass.professor,
+					semester: this.editingClass.semester,
+					year: this.editingClass.year,
+					meeting_times: labels,
 				}),
 			});
 
 			if (!response.ok) {
-				throw new Error("Failed to create class");
+				const data = await response.json();
+				console.error("Failed to create class:", data);
+				throw new Error(data.error || "Failed to create class");
 			}
 
-			await fetch(`/api/admin/waitlist/${entry.id}`, {
+			await fetch(`/api/admin/waitlist/${this.approvingEntry.id}`, {
 				method: "DELETE",
 			});
 
@@ -760,60 +806,93 @@ export class AdminClasses extends LitElement {
 
 			this.activeTab = "classes";
 			this.approvingEntry = null;
-			this.meetingTimes = [""];
-		} catch {
-			this.error = "Failed to approve waitlist entry. Please try again.";
+			this.meetingTimes = [];
+			this.editingClass = {
+				courseCode: "",
+				courseName: "",
+				professor: "",
+				semester: "",
+				year: new Date().getFullYear(),
+			};
+		} catch (error) {
+			console.error("Error in submitApproval:", error);
+			this.error = error instanceof Error ? error.message : "Failed to approve waitlist entry. Please try again.";
 		}
 	}
 
 	private renderApprovalModal() {
 		if (!this.approvingEntry) return "";
 
-		const entry = this.approvingEntry;
-
 		return html`
       <div class="modal-overlay" @click=${this.cancelApproval}>
         <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
-          <h2 class="modal-title">Add Meeting Times</h2>
+          <h2 class="modal-title">Review & Create Class</h2>
 
           <p style="margin-bottom: 1.5rem; color: var(--paynes-gray);">
-            Creating class: <strong>${entry.course_code} - ${entry.course_name}</strong>
+            Review the class details and make any edits before creating
           </p>
 
-          <div class="form-group">
-            <label>Meeting Times</label>
-            <div class="meeting-times-list">
-              ${this.meetingTimes.map(
-								(time, index) => html`
-                <div class="meeting-time-row">
-                  <input
-                    type="text"
-                    placeholder="e.g., Monday Lecture, Wednesday Lab"
-                    .value=${time}
-                    @input=${(e: Event) =>
-											this.updateMeetingTime(
-												index,
-												(e.target as HTMLInputElement).value,
-											)}
-                  />
-                  ${
-										this.meetingTimes.length > 1
-											? html`
-                    <button
-                      class="btn-remove"
-                      @click=${() => this.removeMeetingTime(index)}
-                    >
-                      Remove
-                    </button>
-                  `
-											: ""
-									}
-                </div>
-              `,
-							)}
-              <button class="btn-add" @click=${this.addMeetingTime}>
-                + Add Meeting Time
-              </button>
+          ${this.error ? html`<div class="error-message">${this.error}</div>` : ""}
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Course Code *</label>
+              <input
+                type="text"
+                required
+                .value=${this.editingClass.courseCode}
+                @input=${(e: Event) => this.handleClassFieldInput("courseCode", e)}
+              />
+            </div>
+            <div class="form-group">
+              <label>Course Name *</label>
+              <input
+                type="text"
+                required
+                .value=${this.editingClass.courseName}
+                @input=${(e: Event) => this.handleClassFieldInput("courseName", e)}
+              />
+            </div>
+            <div class="form-group">
+              <label>Professor *</label>
+              <input
+                type="text"
+                required
+                .value=${this.editingClass.professor}
+                @input=${(e: Event) => this.handleClassFieldInput("professor", e)}
+              />
+            </div>
+            <div class="form-group">
+              <label>Semester *</label>
+              <select
+                required
+                .value=${this.editingClass.semester}
+                @change=${(e: Event) => this.handleClassFieldInput("semester", e)}
+              >
+                <option value="">Select semester</option>
+                <option value="Spring">Spring</option>
+                <option value="Summer">Summer</option>
+                <option value="Fall">Fall</option>
+                <option value="Winter">Winter</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Year *</label>
+              <input
+                type="number"
+                required
+                min="2020"
+                max="2030"
+                .value=${this.editingClass.year.toString()}
+                @input=${(e: Event) => this.handleClassFieldInput("year", e)}
+              />
+            </div>
+            <div class="form-group form-group-full">
+              <label>Meeting Times *</label>
+              <meeting-time-picker
+                .value=${this.meetingTimes}
+                @change=${this.handleMeetingTimesChange}
+              ></meeting-time-picker>
             </div>
           </div>
 
@@ -824,7 +903,7 @@ export class AdminClasses extends LitElement {
             <button
               class="btn-submit"
               @click=${this.submitApproval}
-              ?disabled=${this.meetingTimes.every((t) => t.trim() === "")}
+              ?disabled=${this.meetingTimes.length === 0}
             >
               Create Class
             </button>

@@ -72,87 +72,6 @@
       display: block;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: var(--background);
-      border: 2px solid var(--secondary);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    thead {
-      background: var(--primary);
-      color: white;
-    }
-
-    th {
-      padding: 1rem;
-      text-align: left;
-      font-weight: 600;
-    }
-
-    td {
-      padding: 1rem;
-      border-top: 1px solid var(--secondary);
-      color: var(--text);
-    }
-
-    tr:hover {
-      background: rgba(0, 0, 0, 0.02);
-    }
-
-    .status-badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
-      font-size: 0.875rem;
-      font-weight: 500;
-    }
-
-    .status-completed {
-      background: #dcfce7;
-      color: #166534;
-    }
-
-    .status-processing,
-    .status-uploading {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
-    .status-failed {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-
-    .status-pending {
-      background: #e0e7ff;
-      color: #3730a3;
-    }
-
-    .admin-badge {
-      background: var(--accent);
-      color: white;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      margin-left: 0.5rem;
-    }
-
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .user-avatar {
-      width: 2rem;
-      height: 2rem;
-      border-radius: 50%;
-    }
-
     .empty-state {
       text-align: center;
       padding: 3rem;
@@ -205,133 +124,6 @@
       color: var(--text);
       opacity: 0.6;
       font-size: 0.875rem;
-    }
-
-    .delete-btn {
-      background: transparent;
-      border: 2px solid #dc2626;
-      color: #dc2626;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-weight: 500;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-
-    .delete-btn:hover {
-      background: #dc2626;
-      color: white;
-    }
-
-    .delete-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .actions {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .role-select {
-      padding: 0.25rem 0.5rem;
-      border: 2px solid var(--secondary);
-      border-radius: 4px;
-      font-size: 0.875rem;
-      font-family: inherit;
-      background: var(--background);
-      color: var(--text);
-      cursor: pointer;
-    }
-
-    .role-select:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-
-    .delete-user-btn {
-      background: transparent;
-      border: 2px solid #dc2626;
-      color: #dc2626;
-      padding: 0.25rem 0.75rem;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.875rem;
-      font-weight: 500;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-
-    .delete-user-btn:hover {
-      background: #dc2626;
-      color: white;
-    }
-
-    .delete-user-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .users-table tbody tr {
-      cursor: pointer;
-    }
-
-    .users-table tbody tr:hover {
-      background: rgba(0, 0, 0, 0.04);
-    }
-
-    .transcriptions-table tbody tr {
-      cursor: pointer;
-    }
-
-    .transcriptions-table tbody tr:hover {
-      background: rgba(0, 0, 0, 0.04);
-    }
-
-    .search {
-      width: 100%;
-      max-width: 30rem;
-      margin-bottom: 1rem;
-      padding: 0.5rem 0.75rem;
-      border: 2px solid var(--secondary);
-      border-radius: 4px;
-      font-size: 1rem;
-      font-family: inherit;
-      background: var(--background);
-      color: var(--text);
-    }
-
-    .search:focus {
-      outline: none;
-      border-color: var(--primary);
-    }
-
-    th.sortable {
-      cursor: pointer;
-      user-select: none;
-      position: relative;
-    }
-
-    th.sortable:hover {
-      background: var(--gunmetal);
-    }
-
-    th.sortable::after {
-      content: '';
-      margin-left: 0.5rem;
-      opacity: 0.3;
-    }
-
-    th.sortable.asc::after {
-      content: '▲';
-      opacity: 1;
-    }
-
-    th.sortable.desc::after {
-      content: '▼';
-      opacity: 1;
     }
   </style>
 </head>
@@ -386,16 +178,14 @@
       <div id="transcriptions-tab" class="tab-content">
         <div class="section">
           <h2 class="section-title">All Transcriptions</h2>
-          <input type="text" id="transcript-search" class="search" placeholder="Search by filename or user..." />
-          <div id="transcriptions-table" class="transcriptions-table"></div>
+          <admin-transcriptions id="transcriptions-component"></admin-transcriptions>
         </div>
       </div>
 
       <div id="users-tab" class="tab-content">
         <div class="section">
           <h2 class="section-title">All Users</h2>
-          <input type="text" id="user-search" class="search" placeholder="Search by name or email..." />
-          <div id="users-table" class="users-table"></div>
+          <admin-users id="users-component"></admin-users>
         </div>
       </div>
     </div>
@@ -406,50 +196,18 @@
 
   <script type="module" src="../components/auth.ts"></script>
   <script type="module" src="../components/admin-pending-recordings.ts"></script>
+  <script type="module" src="../components/admin-transcriptions.ts"></script>
+  <script type="module" src="../components/admin-users.ts"></script>
   <script type="module" src="../components/user-modal.ts"></script>
   <script type="module" src="../components/transcript-view-modal.ts"></script>
   <script type="module">
+    const transcriptionsComponent = document.getElementById('transcriptions-component');
+    const usersComponent = document.getElementById('users-component');
+    const userModal = document.getElementById('user-modal');
+    const transcriptModal = document.getElementById('transcript-modal');
     const errorMessage = document.getElementById('error-message');
     const loading = document.getElementById('loading');
     const content = document.getElementById('content');
-    const transcriptionsTable = document.getElementById('transcriptions-table');
-    const usersTable = document.getElementById('users-table');
-    const userModal = document.getElementById('user-modal');
-    const transcriptModal = document.getElementById('transcript-modal');
-
-    let currentUserEmail = null;
-    let allUsers = [];
-    let allTranscriptions = [];
-    let userSortKey = 'created_at';
-    let userSortDirection = 'desc';
-    let userSearchTerm = '';
-    let transcriptSortKey = 'created_at';
-    let transcriptSortDirection = 'desc';
-    let transcriptSearchTerm = '';
-
-    // Get current user info
-    async function getCurrentUser() {
-      try {
-        const res = await fetch('/api/auth/me');
-        if (res.ok) {
-          const user = await res.json();
-          currentUserEmail = user.email;
-        }
-      } catch {
-        // Ignore errors
-      }
-    }
-
-    function showError(message) {
-      errorMessage.textContent = message;
-      errorMessage.style.display = 'block';
-      loading.style.display = 'none';
-    }
-
-    function formatTimestamp(timestamp) {
-      const date = new Date(timestamp * 1000);
-      return date.toLocaleString();
-    }
 
     // Modal functions
     function openUserModal(userId) {
@@ -472,371 +230,33 @@
       transcriptModal.transcriptId = null;
     }
 
-    // Listen for modal close and user update events
+    // Listen for component events
+    transcriptionsComponent.addEventListener('open-transcription', (e) => {
+      openTranscriptModal(e.detail.id);
+    });
+
+    usersComponent.addEventListener('open-user', (e) => {
+      openUserModal(e.detail.id);
+    });
+
+    // Listen for modal close events
     userModal.addEventListener('close', closeUserModal);
-    userModal.addEventListener('user-updated', () => loadData());
+    userModal.addEventListener('user-updated', async () => {
+      await loadStats();
+    });
     userModal.addEventListener('click', (e) => {
-      if (e.target === userModal) {
-        closeUserModal();
-      }
+      if (e.target === userModal) closeUserModal();
     });
 
-    // Listen for transcript modal events
     transcriptModal.addEventListener('close', closeTranscriptModal);
-    transcriptModal.addEventListener('transcript-deleted', () => loadData());
+    transcriptModal.addEventListener('transcript-deleted', async () => {
+      await loadStats();
+    });
     transcriptModal.addEventListener('click', (e) => {
-      if (e.target === transcriptModal) {
-        closeTranscriptModal();
-      }
+      if (e.target === transcriptModal) closeTranscriptModal();
     });
 
-
-    function renderTranscriptions(transcriptions) {
-      allTranscriptions = transcriptions;
-
-      // Filter transcriptions based on search term
-      const filteredTranscriptions = transcriptions.filter(t => {
-        if (!transcriptSearchTerm) return true;
-        const term = transcriptSearchTerm.toLowerCase();
-        const filename = (t.original_filename || '').toLowerCase();
-        const userName = (t.user_name || '').toLowerCase();
-        const userEmail = (t.user_email || '').toLowerCase();
-        return filename.includes(term) || userName.includes(term) || userEmail.includes(term);
-      });
-
-      // Sort transcriptions
-      filteredTranscriptions.sort((a, b) => {
-        let aVal = a[transcriptSortKey];
-        let bVal = b[transcriptSortKey];
-
-        // Handle null values
-        if (aVal === null || aVal === undefined) aVal = '';
-        if (bVal === null || bVal === undefined) bVal = '';
-
-        let comparison = 0;
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          comparison = aVal.localeCompare(bVal);
-        } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-          comparison = aVal - bVal;
-        } else {
-          comparison = String(aVal).localeCompare(String(bVal));
-        }
-
-        return transcriptSortDirection === 'asc' ? comparison : -comparison;
-      });
-
-      if (filteredTranscriptions.length === 0) {
-        transcriptionsTable.innerHTML = '<div class="empty-state">No transcriptions found</div>';
-        return;
-      }
-
-      const failed = transcriptions.filter(t => t.status === 'failed');
-      document.getElementById('failed-transcriptions').textContent = failed.length;
-
-      const table = document.createElement('table');
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th class="sortable ${transcriptSortKey === 'original_filename' ? transcriptSortDirection : ''}" data-sort="original_filename">File Name</th>
-            <th>User</th>
-            <th class="sortable ${transcriptSortKey === 'status' ? transcriptSortDirection : ''}" data-sort="status">Status</th>
-            <th class="sortable ${transcriptSortKey === 'created_at' ? transcriptSortDirection : ''}" data-sort="created_at">Created At</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filteredTranscriptions.map(t => `
-            <tr data-id="${t.id}">
-              <td>${t.original_filename}</td>
-              <td>
-                <div class="user-info">
-                  <img 
-                    src="https://hostedboringavatars.vercel.app/api/marble?size=32&name=${t.user_id}&colors=2d3142ff,4f5d75ff,bfc0c0ff,ef8354ff"
-                    alt="Avatar"
-                    class="user-avatar"
-                  />
-                  <span>${t.user_name || t.user_email}</span>
-                </div>
-              </td>
-              <td><span class="status-badge status-${t.status}">${t.status}</span></td>
-              <td class="timestamp">${formatTimestamp(t.created_at)}</td>
-              <td>
-                <button class="delete-btn" data-id="${t.id}">Delete</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      `;
-      transcriptionsTable.innerHTML = '';
-      transcriptionsTable.appendChild(table);
-
-      // Add sort event listeners
-      table.querySelectorAll('th.sortable').forEach(th => {
-        th.addEventListener('click', () => {
-          const sortKey = th.dataset.sort;
-          if (transcriptSortKey === sortKey) {
-            transcriptSortDirection = transcriptSortDirection === 'asc' ? 'desc' : 'asc';
-          } else {
-            transcriptSortKey = sortKey;
-            transcriptSortDirection = 'asc';
-          }
-          renderTranscriptions(allTranscriptions);
-        });
-      });
-
-      // Add delete event listeners
-      table.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation(); // Prevent row click
-          const button = e.target;
-          const id = button.dataset.id;
-
-          if (!confirm('Are you sure you want to delete this transcription? This cannot be undone.')) {
-            return;
-          }
-
-          button.disabled = true;
-          button.textContent = 'Deleting...';
-
-          try {
-            const res = await fetch(`/api/admin/transcriptions/${id}`, {
-              method: 'DELETE'
-            });
-
-            if (!res.ok) {
-              throw new Error('Failed to delete');
-            }
-
-            // Reload data
-            await loadData();
-          } catch {
-            alert('Failed to delete transcription');
-            button.disabled = false;
-            button.textContent = 'Delete';
-          }
-        });
-      });
-
-      // Add click event to table rows to open modal
-      table.querySelectorAll('tbody tr').forEach(row => {
-        row.addEventListener('click', (e) => {
-          // Don't open modal if clicking on delete button
-          if (e.target.closest('.delete-btn')) {
-            return;
-          }
-          
-          const transcriptId = row.dataset.id;
-          openTranscriptModal(transcriptId);
-        });
-      });
-    }
-
-    function renderUsers(users) {
-      allUsers = users;
-
-      // Filter users based on search term
-      const filteredUsers = users.filter(u => {
-        if (!userSearchTerm) return true;
-        const term = userSearchTerm.toLowerCase();
-        const name = (u.name || '').toLowerCase();
-        const email = u.email.toLowerCase();
-        return name.includes(term) || email.includes(term);
-      });
-
-      // Sort users
-      filteredUsers.sort((a, b) => {
-        let aVal = a[userSortKey];
-        let bVal = b[userSortKey];
-
-        // Handle null values
-        if (aVal === null || aVal === undefined) aVal = '';
-        if (bVal === null || bVal === undefined) bVal = '';
-
-        let comparison = 0;
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          comparison = aVal.localeCompare(bVal);
-        } else if (typeof aVal === 'number' && typeof bVal === 'number') {
-          comparison = aVal - bVal;
-        } else {
-          comparison = String(aVal).localeCompare(String(bVal));
-        }
-
-        return userSortDirection === 'asc' ? comparison : -comparison;
-      });
-
-      if (filteredUsers.length === 0) {
-        usersTable.innerHTML = '<div class="empty-state">No users found</div>';
-        return;
-      }
-
-      const table = document.createElement('table');
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th class="sortable ${userSortKey === 'name' ? userSortDirection : ''}" data-sort="name">User</th>
-            <th class="sortable ${userSortKey === 'email' ? userSortDirection : ''}" data-sort="email">Email</th>
-            <th class="sortable ${userSortKey === 'role' ? userSortDirection : ''}" data-sort="role">Role</th>
-            <th class="sortable ${userSortKey === 'transcription_count' ? userSortDirection : ''}" data-sort="transcription_count">Transcriptions</th>
-            <th class="sortable ${userSortKey === 'last_login' ? userSortDirection : ''}" data-sort="last_login">Last Login</th>
-            <th class="sortable ${userSortKey === 'created_at' ? userSortDirection : ''}" data-sort="created_at">Joined</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${filteredUsers.map(u => `
-            <tr>
-              <td>
-                <div class="user-info">
-                  <img 
-                    src="https://hostedboringavatars.vercel.app/api/marble?size=32&name=${u.avatar}&colors=2d3142ff,4f5d75ff,bfc0c0ff,ef8354ff"
-                    alt="Avatar"
-                    class="user-avatar"
-                  />
-                  <span>${u.name || 'Anonymous'}</span>
-                  ${u.role === 'admin' ? '<span class="admin-badge">ADMIN</span>' : ''}
-                </div>
-              </td>
-              <td>${u.email}</td>
-              <td>
-                <select class="role-select" data-user-id="${u.id}" data-current-role="${u.role}">
-                  <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
-                  <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
-                </select>
-              </td>
-              <td>${u.transcription_count}</td>
-              <td class="timestamp">${u.last_login ? formatTimestamp(u.last_login) : 'Never'}</td>
-              <td class="timestamp">${formatTimestamp(u.created_at)}</td>
-              <td>
-                <div class="actions">
-                  <button class="delete-user-btn" data-user-id="${u.id}" data-user-email="${u.email}">Delete</button>
-                </div>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      `;
-      usersTable.innerHTML = '';
-      usersTable.appendChild(table);
-
-      // Add sort event listeners
-      table.querySelectorAll('th.sortable').forEach(th => {
-        th.addEventListener('click', () => {
-          const sortKey = th.dataset.sort;
-          if (userSortKey === sortKey) {
-            userSortDirection = userSortDirection === 'asc' ? 'desc' : 'asc';
-          } else {
-            userSortKey = sortKey;
-            userSortDirection = 'asc';
-          }
-          renderUsers(allUsers);
-        });
-      });
-
-      // Add role change event listeners
-      table.querySelectorAll('.role-select').forEach(select => {
-        select.addEventListener('change', async (e) => {
-          const selectEl = e.target;
-          const userId = selectEl.dataset.userId;
-          const newRole = selectEl.value;
-          const oldRole = selectEl.dataset.currentRole;
-
-          // Get user email from the row
-          const row = selectEl.closest('tr');
-          const userEmail = row.querySelector('td:nth-child(2)').textContent;
-
-          // Check if user is demoting themselves
-          const isDemotingSelf = userEmail === currentUserEmail && oldRole === 'admin' && newRole === 'user';
-
-          if (isDemotingSelf) {
-            if (!confirm('⚠️ WARNING: You are about to demote yourself from admin to user. You will lose access to this admin panel immediately. Are you sure?')) {
-              selectEl.value = oldRole;
-              return;
-            }
-
-            if (!confirm('⚠️ FINAL WARNING: This action cannot be undone by you. Another admin will need to restore your admin access. Continue?')) {
-              selectEl.value = oldRole;
-              return;
-            }
-          } else {
-            if (!confirm(`Change user role to ${newRole}?`)) {
-              selectEl.value = oldRole;
-              return;
-            }
-          }
-
-          try {
-            const res = await fetch(`/api/admin/users/${userId}/role`, {
-              method: 'PUT',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({role: newRole})
-            });
-
-            if (!res.ok) {
-              throw new Error('Failed to update role');
-            }
-
-            selectEl.dataset.currentRole = newRole;
-
-            // If demoting self, redirect to home
-            if (isDemotingSelf) {
-              window.location.href = '/';
-            } else {
-              await loadData();
-            }
-          } catch {
-            alert('Failed to update user role');
-            selectEl.value = oldRole;
-          }
-        });
-      });
-
-      // Add delete user event listeners
-      table.querySelectorAll('.delete-user-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          const button = e.target;
-          const userId = button.dataset.userId;
-          const userEmail = button.dataset.userEmail;
-
-          if (!confirm(`Are you sure you want to delete user ${userEmail}? This will delete all their transcriptions and cannot be undone.`)) {
-            return;
-          }
-
-          button.disabled = true;
-          button.textContent = 'Deleting...';
-
-          try {
-            const res = await fetch(`/api/admin/users/${userId}`, {
-              method: 'DELETE'
-            });
-
-            if (!res.ok) {
-              throw new Error('Failed to delete user');
-            }
-
-            await loadData();
-          } catch {
-            alert('Failed to delete user');
-            button.disabled = false;
-            button.textContent = 'Delete';
-          }
-        });
-      });
-
-      // Add click event to table rows to open modal
-      table.querySelectorAll('tbody tr').forEach(row => {
-        row.addEventListener('click', (e) => {
-          // Don't open modal if clicking on delete button or role select
-          if (e.target.closest('.delete-user-btn') || e.target.closest('.role-select')) {
-            return;
-          }
-          
-          const userId = row.querySelector('.delete-user-btn').dataset.userId;
-          openUserModal(userId);
-        });
-      });
-    }
-
-    async function loadData() {
+    async function loadStats() {
       try {
         const [transcriptionsRes, usersRes] = await Promise.all([
           fetch('/api/admin/transcriptions'),
@@ -856,14 +276,16 @@
 
         document.getElementById('total-users').textContent = users.length;
         document.getElementById('total-transcriptions').textContent = transcriptions.length;
-
-        renderTranscriptions(transcriptions);
-        renderUsers(users);
+        
+        const failed = transcriptions.filter(t => t.status === 'failed');
+        document.getElementById('failed-transcriptions').textContent = failed.length;
 
         loading.style.display = 'none';
         content.style.display = 'block';
       } catch (error) {
-        showError(error.message);
+        errorMessage.textContent = error.message;
+        errorMessage.style.display = 'block';
+        loading.style.display = 'none';
       }
     }
 
@@ -884,20 +306,8 @@
       });
     });
 
-    // User search
-    document.getElementById('user-search').addEventListener('input', (e) => {
-      userSearchTerm = e.target.value.trim();
-      renderUsers(allUsers);
-    });
-
-    // Transcript search
-    document.getElementById('transcript-search').addEventListener('input', (e) => {
-      transcriptSearchTerm = e.target.value.trim();
-      renderTranscriptions(allTranscriptions);
-    });
-
     // Initialize
-    getCurrentUser().then(() => loadData());
+    loadStats();
   </script>
 </body>
 

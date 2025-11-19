@@ -1,6 +1,7 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import "../components/vtt-viewer.ts";
+import "./upload-recording-modal.ts";
+import "./vtt-viewer.ts";
 
 interface Class {
 	id: string;
@@ -41,6 +42,7 @@ export class ClassView extends LitElement {
 	@state() isLoading = true;
 	@state() error: string | null = null;
 	@state() searchQuery = "";
+	@state() uploadModalOpen = false;
 	private eventSources: Map<string, EventSource> = new Map();
 
 	static override styles = css`
@@ -435,8 +437,17 @@ export class ClassView extends LitElement {
 	}
 
 	private handleUploadClick() {
-		// TODO: Open upload modal
-		alert("Upload modal coming soon!");
+		this.uploadModalOpen = true;
+	}
+
+	private handleModalClose() {
+		this.uploadModalOpen = false;
+	}
+
+	private async handleUploadSuccess() {
+		this.uploadModalOpen = false;
+		// Reload class data to show new recording
+		await this.loadClass();
 	}
 
 	override render() {
@@ -562,6 +573,14 @@ export class ClassView extends LitElement {
 				)}
       `
 			}
+
+      <upload-recording-modal
+        ?open=${this.uploadModalOpen}
+        .classId=${this.classId}
+        .meetingTimes=${this.meetingTimes.map((m) => ({ id: m.id, label: m.label }))}
+        @close=${this.handleModalClose}
+        @upload-success=${this.handleUploadSuccess}
+      ></upload-recording-modal>
     `;
 	}
 }

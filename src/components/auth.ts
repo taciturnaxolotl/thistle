@@ -508,7 +508,7 @@ export class AuthComponent extends LitElement {
 								this.showModal
 									? html`
 										<div class="user-menu">
-											<a href="/transcribe" @click=${this.closeModal}>Transcribe</a>
+											<a href="/classes" @click=${this.closeModal}>Classes</a>
 											<a href="/settings" @click=${this.closeModal}>Settings</a>
 											${
 												this.user.role === "admin"

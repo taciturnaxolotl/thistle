@@ -14,6 +14,7 @@ import {
 	getSession,
 	getSessionFromRequest,
 	getSessionsForUser,
+	getUserByEmail,
 	getUserBySession,
 	getUserSessionsForUser,
 	type UserRole,
@@ -24,6 +25,22 @@ import {
 	updateUserPassword,
 	updateUserRole,
 } from "./lib/auth";
+import {
+	createClass,
+	createMeetingTime,
+	deleteClass,
+	deleteMeetingTime,
+	enrollUserInClass,
+	getClassById,
+	getClassesForUser,
+	getClassMembers,
+	getMeetingTimesForClass,
+	getTranscriptionsForClass,
+	isUserEnrolledInClass,
+	removeUserFromClass,
+	toggleClassArchive,
+	updateMeetingTime,
+} from "./lib/classes";
 import { handleError, ValidationErrors } from "./lib/errors";
 import { requireAdmin, requireAuth } from "./lib/middleware";
 import {
@@ -917,14 +934,14 @@ const server = Bun.serve({
 								id: string;
 								filename: string;
 								original_filename: string;
-								class_name: string | null;
+								class_id: string | null;
 								status: string;
 								progress: number;
 								created_at: number;
 							},
 							[number]
 						>(
-							"SELECT id, filename, original_filename, class_name, status, progress, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
+							"SELECT id, filename, original_filename, class_id, status, progress, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
 						)
 						.all(user.id);
 
@@ -934,7 +951,7 @@ const server = Bun.serve({
 							return {
 								id: t.id,
 								filename: t.original_filename,
-								class_name: t.class_name,
+								class_id: t.class_id,
 								status: t.status,
 								progress: t.progress,
 								created_at: t.created_at,
@@ -953,9 +970,38 @@ const server = Bun.serve({
 
 					const formData = await req.formData();
 					const file = formData.get("audio") as File;
-					const className = formData.get("class_name") as string | null;
+					const classId = formData.get("class_id") as string | null;
+					const meetingTimeId = formData.get("meeting_time_id") as string | null;
 
 					if (!file) throw ValidationErrors.missingField("audio");
+
+					// If class_id provided, verify user is enrolled (or admin)
+					if (classId) {
+						const enrolled = isUserEnrolledInClass(user.id, classId);
+						if (!enrolled && user.role !== "admin") {
+							return Response.json(
+								{ error: "Not enrolled in this class" },
+								{ status: 403 },
+							);
+						}
+
+						// Verify class exists
+						const classInfo = getClassById(classId);
+						if (!classInfo) {
+							return Response.json(
+								{ error: "Class not found" },
+								{ status: 404 },
+							);
+						}
+
+						// Check if class is archived
+						if (classInfo.archived) {
+							return Response.json(
+								{ error: "Cannot upload to archived class" },
+								{ status: 400 },
+							);
+						}
+					}
 
 					// Validate file type
 					const fileExtension = file.name.split(".").pop()?.toLowerCase();
@@ -992,32 +1038,26 @@ const server = Bun.serve({
 					const uploadDir = "./uploads";
 					await Bun.write(`${uploadDir}/${filename}`, file);
 
-					// Create database record with optional class_name
-					if (className?.trim()) {
-						db.run(
-							"INSERT INTO transcriptions (id, user_id, filename, original_filename, class_name, status) VALUES (?, ?, ?, ?, ?, ?)",
-							[
-								transcriptionId,
-								user.id,
-								filename,
-								file.name,
-								className.trim(),
-								"uploading",
-							],
-						);
-					} else {
-						db.run(
-							"INSERT INTO transcriptions (id, user_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?)",
-							[transcriptionId, user.id, filename, file.name, "uploading"],
-						);
-					}
+					// Create database record
+					db.run(
+						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+						[
+							transcriptionId,
+							user.id,
+							classId,
+							meetingTimeId,
+							filename,
+							file.name,
+							"pending",
+						],
+					);
 
-					// Start transcription in background
-					whisperService.startTranscription(transcriptionId, filename);
+					// Don't auto-start transcription - admin will select recordings
+					// whisperService.startTranscription(transcriptionId, filename);
 
 					return Response.json({
 						id: transcriptionId,
-						message: "Upload successful, transcription started",
+						message: "Upload successful",
 					});
 				} catch (error) {
 					return handleError(error);
@@ -1381,6 +1421,291 @@ const server = Bun.serve({
 						user_email: user?.email || "Unknown",
 						user_name: user?.name || null,
 					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const classes = getClassesForUser(user.id, user.role === "admin");
+
+					// Group by semester/year
+					const grouped: Record<
+						string,
+						Array<{
+							id: string;
+							course_code: string;
+							name: string;
+							professor: string;
+							semester: string;
+							year: number;
+							archived: boolean;
+						}>
+					> = {};
+
+					for (const cls of classes) {
+						const key = `${cls.semester} ${cls.year}`;
+						if (!grouped[key]) {
+							grouped[key] = [];
+						}
+						grouped[key]?.push({
+							id: cls.id,
+							course_code: cls.course_code,
+							name: cls.name,
+							professor: cls.professor,
+							semester: cls.semester,
+							year: cls.year,
+							archived: cls.archived,
+						});
+					}
+
+					return Response.json({ classes: grouped });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			POST: async (req) => {
+				try {
+					requireAdmin(req);
+					const body = await req.json();
+					const { course_code, name, professor, semester, year } = body;
+
+					if (!course_code || !name || !professor || !semester || !year) {
+						return Response.json(
+							{ error: "Missing required fields" },
+							{ status: 400 },
+						);
+					}
+
+					const newClass = createClass({
+						course_code,
+						name,
+						professor,
+						semester,
+						year,
+					});
+
+					return Response.json(newClass);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:id": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const classId = req.params.id;
+
+					const classInfo = getClassById(classId);
+					if (!classInfo) {
+						return Response.json({ error: "Class not found" }, { status: 404 });
+					}
+
+					// Check enrollment or admin
+					const isEnrolled = isUserEnrolledInClass(user.id, classId);
+					if (!isEnrolled && user.role !== "admin") {
+						return Response.json(
+							{ error: "Not enrolled in this class" },
+							{ status: 403 },
+						);
+					}
+
+					const meetingTimes = getMeetingTimesForClass(classId);
+					const transcriptions = getTranscriptionsForClass(classId);
+
+					return Response.json({
+						class: classInfo,
+						meetingTimes,
+						transcriptions,
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+
+					deleteClass(classId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:id/archive": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+					const body = await req.json();
+					const { archived } = body;
+
+					if (typeof archived !== "boolean") {
+						return Response.json(
+							{ error: "archived must be a boolean" },
+							{ status: 400 },
+						);
+					}
+
+					toggleClassArchive(classId, archived);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:id/members": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+
+					const members = getClassMembers(classId);
+					return Response.json({ members });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			POST: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+					const body = await req.json();
+					const { email } = body;
+
+					if (!email) {
+						return Response.json({ error: "Email required" }, { status: 400 });
+					}
+
+					const user = getUserByEmail(email);
+					if (!user) {
+						return Response.json({ error: "User not found" }, { status: 404 });
+					}
+
+					enrollUserInClass(user.id, classId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:id/members/:userId": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+					const userId = Number.parseInt(req.params.userId, 10);
+
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					removeUserFromClass(userId, classId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:id/meetings": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const classId = req.params.id;
+
+					// Check enrollment or admin
+					const isEnrolled = isUserEnrolledInClass(user.id, classId);
+					if (!isEnrolled && user.role !== "admin") {
+						return Response.json(
+							{ error: "Not enrolled in this class" },
+							{ status: 403 },
+						);
+					}
+
+					const meetingTimes = getMeetingTimesForClass(classId);
+					return Response.json({ meetings: meetingTimes });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			POST: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+					const body = await req.json();
+					const { label } = body;
+
+					if (!label) {
+						return Response.json({ error: "Label required" }, { status: 400 });
+					}
+
+					const meetingTime = createMeetingTime(classId, label);
+					return Response.json(meetingTime);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/meetings/:id": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const meetingId = req.params.id;
+					const body = await req.json();
+					const { label } = body;
+
+					if (!label) {
+						return Response.json({ error: "Label required" }, { status: 400 });
+					}
+
+					updateMeetingTime(meetingId, label);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const meetingId = req.params.id;
+
+					deleteMeetingTime(meetingId);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/transcripts/:id/select": {
+			PUT: async (req) => {
+				try {
+					requireAdmin(req);
+					const transcriptId = req.params.id;
+
+					// Update status to 'selected' and start transcription
+					db.run("UPDATE transcriptions SET status = ? WHERE id = ?", [
+						"selected",
+						transcriptId,
+					]);
+
+					// Get filename to start transcription
+					const transcription = db
+						.query<{ filename: string }, [string]>(
+							"SELECT filename FROM transcriptions WHERE id = ?",
+						)
+						.get(transcriptId);
+
+					if (transcription) {
+						whisperService.startTranscription(transcriptId, transcription.filename);
+					}
+
+					return Response.json({ success: true });
 				} catch (error) {
 					return handleError(error);
 				}

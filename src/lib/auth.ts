@@ -64,6 +64,16 @@ export function getUserBySession(sessionId: string): User | null {
 	return user ?? null;
 }
 
+export function getUserByEmail(email: string): User | null {
+	const user = db
+		.query<User, [string]>(
+			"SELECT id, email, name, avatar, created_at, role, last_login FROM users WHERE email = ?",
+		)
+		.get(email);
+
+	return user ?? null;
+}
+
 export function deleteSession(sessionId: string): void {
 	db.run("DELETE FROM sessions WHERE id = ?", [sessionId]);
 }

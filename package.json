@@ -22,6 +22,7 @@
     "@simplewebauthn/server": "^13.2.2",
     "eventsource-client": "^1.2.0",
     "lit": "^3.3.1",
+    "nanoid": "^5.1.6",
     "ua-parser-js": "^2.0.6"
   }
 }

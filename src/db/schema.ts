@@ -13,17 +13,24 @@ db.run(`
 const migrations = [
 	{
 		version: 1,
-		name: "Complete user schema",
+		name: "Complete schema with class system",
 		sql: `
+      -- Users table
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
+        password_hash TEXT,
         name TEXT,
         avatar TEXT DEFAULT 'd',
+        role TEXT NOT NULL DEFAULT 'user',
+        last_login INTEGER,
         created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
       );
 
+      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+      CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login);
+
+      -- Sessions table
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -36,74 +43,8 @@ const migrations = [
 
       CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
-    `,
-	},
-	{
-		version: 2,
-		name: "Add transcriptions table",
-		sql: `
-      CREATE TABLE IF NOT EXISTS transcriptions (
-        id TEXT PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        filename TEXT NOT NULL,
-        original_filename TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'uploading',
-        progress INTEGER NOT NULL DEFAULT 0,
-        transcript TEXT,
-        error_message TEXT,
-        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-        updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
 
-      CREATE INDEX IF NOT EXISTS idx_transcriptions_user_id ON transcriptions(user_id);
-      CREATE INDEX IF NOT EXISTS idx_transcriptions_status ON transcriptions(status);
-    `,
-	},
-	{
-		version: 3,
-		name: "Add whisper_job_id to transcriptions",
-		sql: `
-      ALTER TABLE transcriptions ADD COLUMN whisper_job_id TEXT;
-      CREATE INDEX IF NOT EXISTS idx_transcriptions_whisper_job_id ON transcriptions(whisper_job_id);
-    `,
-	},
-	{
-		version: 4,
-		name: "Remove transcript column from transcriptions",
-		sql: `
-      -- SQLite 3.35.0+ supports DROP COLUMN
-      ALTER TABLE transcriptions DROP COLUMN transcript;
-    `,
-	},
-	{
-		version: 5,
-		name: "Add rate limiting table",
-		sql: `
-      CREATE TABLE IF NOT EXISTS rate_limit_attempts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        key TEXT NOT NULL,
-        timestamp INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_rate_limit_key_timestamp ON rate_limit_attempts(key, timestamp);
-    `,
-	},
-	{
-		version: 6,
-		name: "Add role-based auth system",
-		sql: `
-      -- Add role column (default to 'user')
-      ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user';
-      
-      -- Create index on role
-      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-    `,
-	},
-	{
-		version: 7,
-		name: "Add WebAuthn passkey support",
-		sql: `
+      -- Passkeys table
       CREATE TABLE IF NOT EXISTS passkeys (
         id TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -120,38 +61,77 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_passkeys_user_id ON passkeys(user_id);
       CREATE INDEX IF NOT EXISTS idx_passkeys_credential_id ON passkeys(credential_id);
 
-      -- Make password optional for users who only use passkeys
-      CREATE TABLE users_new (
+      -- Rate limiting table
+      CREATE TABLE IF NOT EXISTS rate_limit_attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE NOT NULL,
-        password_hash TEXT,
-        name TEXT,
-        avatar TEXT DEFAULT 'd',
-        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-        role TEXT NOT NULL DEFAULT 'user'
+        key TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
       );
 
-      INSERT INTO users_new SELECT * FROM users;
-      DROP TABLE users;
-      ALTER TABLE users_new RENAME TO users;
+      CREATE INDEX IF NOT EXISTS idx_rate_limit_key_timestamp ON rate_limit_attempts(key, timestamp);
 
-      CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-    `,
-	},
-	{
-		version: 8,
-		name: "Add last_login to users",
-		sql: `
-      ALTER TABLE users ADD COLUMN last_login INTEGER;
-      CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login);
-    `,
-	},
-	{
-		version: 9,
-		name: "Add class_name to transcriptions",
-		sql: `
-      ALTER TABLE transcriptions ADD COLUMN class_name TEXT;
-      CREATE INDEX IF NOT EXISTS idx_transcriptions_class_name ON transcriptions(class_name);
+      -- Classes table
+      CREATE TABLE IF NOT EXISTS classes (
+        id TEXT PRIMARY KEY,
+        course_code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        professor TEXT NOT NULL,
+        semester TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        archived BOOLEAN DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_classes_semester_year ON classes(semester, year);
+      CREATE INDEX IF NOT EXISTS idx_classes_archived ON classes(archived);
+
+      -- Class members table
+      CREATE TABLE IF NOT EXISTS class_members (
+        class_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        enrolled_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        PRIMARY KEY (class_id, user_id),
+        FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_class_members_user_id ON class_members(user_id);
+      CREATE INDEX IF NOT EXISTS idx_class_members_class_id ON class_members(class_id);
+
+      -- Meeting times table
+      CREATE TABLE IF NOT EXISTS meeting_times (
+        id TEXT PRIMARY KEY,
+        class_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_meeting_times_class_id ON meeting_times(class_id);
+
+      -- Transcriptions table
+      CREATE TABLE IF NOT EXISTS transcriptions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        class_id TEXT,
+        meeting_time_id TEXT,
+        filename TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        progress INTEGER NOT NULL DEFAULT 0,
+        error_message TEXT,
+        whisper_job_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+        FOREIGN KEY (meeting_time_id) REFERENCES meeting_times(id) ON DELETE SET NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_user_id ON transcriptions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_class_id ON transcriptions(class_id);
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_status ON transcriptions(status);
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_whisper_job_id ON transcriptions(whisper_job_id);
     `,
 	},
 ];

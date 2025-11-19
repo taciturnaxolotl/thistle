@@ -1,16 +1,25 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
-interface ClassStats {
+interface Class {
+	id: string;
+	course_code: string;
 	name: string;
-	count: number;
-	lastUpdated: number;
+	professor: string;
+	semester: string;
+	year: number;
+	archived: boolean;
+}
+
+interface ClassesGrouped {
+	[semesterYear: string]: Class[];
 }
 
 @customElement("classes-overview")
 export class ClassesOverview extends LitElement {
-	@state() classes: ClassStats[] = [];
-	@state() uncategorizedCount = 0;
+	@state() classes: ClassesGrouped = {};
+	@state() isLoading = true;
+	@state() error: string | null = null;
 
 	static override styles = css`
     :host {
@@ -22,11 +31,23 @@ export class ClassesOverview extends LitElement {
       margin-bottom: 2rem;
     }
 
+    .semester-section {
+      margin-bottom: 3rem;
+    }
+
+    .semester-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--secondary);
+    }
+
     .classes-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
       gap: 1.5rem;
-      margin-top: 2rem;
     }
 
     .class-card {
@@ -39,6 +60,7 @@ export class ClassesOverview extends LitElement {
       text-decoration: none;
       color: var(--text);
       display: block;
+      position: relative;
     }
 
     .class-card:hover {
@@ -47,46 +69,73 @@ export class ClassesOverview extends LitElement {
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
 
+    .class-card.archived {
+      opacity: 0.6;
+      border-style: dashed;
+    }
+
+    .course-code {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
     .class-name {
-      font-size: 1.25rem;
+      font-size: 1.125rem;
       font-weight: 600;
       margin-bottom: 0.5rem;
       color: var(--text);
     }
 
-    .class-stats {
+    .professor {
       font-size: 0.875rem;
       color: var(--paynes-gray);
+      margin-bottom: 0.25rem;
     }
 
-    .class-count {
-      font-weight: 500;
-      color: var(--accent);
+    .archived-badge {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      background: var(--paynes-gray);
+      color: var(--white);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
     }
 
-    .upload-section {
+    .register-card {
       background: color-mix(in srgb, var(--accent) 10%, transparent);
       border: 2px dashed var(--accent);
       border-radius: 8px;
-      padding: 2rem;
-      margin-bottom: 2rem;
-      text-align: center;
-    }
-
-    .upload-button {
-      background: var(--accent);
-      color: var(--white);
-      border: none;
-      padding: 0.75rem 1.5rem;
-      border-radius: 4px;
-      font-size: 1rem;
-      font-weight: 600;
+      padding: 1.5rem;
       cursor: pointer;
-      transition: opacity 0.2s;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 10rem;
+      color: var(--accent);
     }
 
-    .upload-button:hover {
-      opacity: 0.9;
+    .register-card:hover {
+      background: color-mix(in srgb, var(--accent) 20%, transparent);
+      transform: translateY(-2px);
+    }
+
+    .register-icon {
+      font-size: 3rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .register-text {
+      font-weight: 600;
+      font-size: 1rem;
     }
 
     .empty-state {
@@ -99,12 +148,26 @@ export class ClassesOverview extends LitElement {
       color: var(--text);
       margin-bottom: 1rem;
     }
+
+    .loading {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--paynes-gray);
+    }
+
+    .error {
+      background: color-mix(in srgb, red 10%, transparent);
+      border: 1px solid red;
+      color: red;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 2rem;
+    }
   `;
 
 	override async connectedCallback() {
 		super.connectedCallback();
 		await this.loadClasses();
-
 		window.addEventListener("auth-changed", this.handleAuthChange);
 	}
 
@@ -118,133 +181,98 @@ export class ClassesOverview extends LitElement {
 	};
 
 	private async loadClasses() {
+		this.isLoading = true;
+		this.error = null;
+
 		try {
-			const response = await fetch("/api/transcriptions");
+			const response = await fetch("/api/classes");
 			if (!response.ok) {
 				if (response.status === 401) {
-					this.classes = [];
-					this.uncategorizedCount = 0;
+					this.classes = {};
 					return;
 				}
 				throw new Error("Failed to load classes");
 			}
 
 			const data = await response.json();
-			const jobs = data.jobs || [];
-
-			// Group by class and count
-			const classMap = new Map<
-				string,
-				{ count: number; lastUpdated: number }
-			>();
-			let uncategorized = 0;
-
-			for (const job of jobs) {
-				const className = job.class_name;
-				if (!className) {
-					uncategorized++;
-				} else {
-					const existing = classMap.get(className);
-					if (existing) {
-						existing.count++;
-						existing.lastUpdated = Math.max(
-							existing.lastUpdated,
-							job.created_at,
-						);
-					} else {
-						classMap.set(className, {
-							count: 1,
-							lastUpdated: job.created_at,
-						});
-					}
-				}
-			}
-
-			this.uncategorizedCount = uncategorized;
-			this.classes = Array.from(classMap.entries())
-				.map(([name, stats]) => ({
-					name,
-					count: stats.count,
-					lastUpdated: stats.lastUpdated,
-				}))
-				.sort((a, b) => b.lastUpdated - a.lastUpdated);
+			this.classes = data.classes || {};
 		} catch (error) {
 			console.error("Failed to load classes:", error);
+			this.error = "Failed to load classes. Please try again.";
+		} finally {
+			this.isLoading = false;
 		}
 	}
 
-	private navigateToUpload() {
-		window.location.href = "/transcribe";
-	}
-
-	private formatDate(timestamp: number): string {
-		const date = new Date(timestamp * 1000);
-		const now = new Date();
-		const diffMs = now.getTime() - date.getTime();
-		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-		if (diffDays === 0) {
-			return "Today";
-		}
-		if (diffDays === 1) {
-			return "Yesterday";
-		}
-		if (diffDays < 7) {
-			return `${diffDays} days ago`;
-		}
-		return date.toLocaleDateString();
+	private handleRegisterClick() {
+		// TODO: Open registration modal/form
+		alert("Class registration coming soon!");
 	}
 
 	override render() {
-		const hasClasses = this.classes.length > 0 || this.uncategorizedCount > 0;
+		if (this.isLoading) {
+			return html`<div class="loading">Loading classes...</div>`;
+		}
+
+		if (this.error) {
+			return html`
+        <div class="error">${this.error}</div>
+        <button @click=${this.loadClasses}>Retry</button>
+      `;
+		}
+
+		const semesterKeys = Object.keys(this.classes);
+		const hasClasses = semesterKeys.length > 0;
 
 		return html`
       <h1>Your Classes</h1>
 
-      <div class="upload-section">
-        <button class="upload-button" @click=${this.navigateToUpload}>
-          📤 Upload New Transcription
-        </button>
-      </div>
-
       ${
 				hasClasses
 					? html`
-        <div class="classes-grid">
-          ${this.classes.map(
-						(classInfo) => html`
-            <a class="class-card" href="/class/${encodeURIComponent(classInfo.name)}">
-              <div class="class-name">${classInfo.name}</div>
-              <div class="class-stats">
-                <span class="class-count">${classInfo.count}</span>
-                ${classInfo.count === 1 ? "transcription" : "transcriptions"}
-                • ${this.formatDate(classInfo.lastUpdated)}
+          ${semesterKeys.map(
+						(semesterYear) => html`
+            <div class="semester-section">
+              <h2 class="semester-title">${semesterYear}</h2>
+              <div class="classes-grid">
+                ${this.classes[semesterYear]?.map(
+									(cls) => html`
+                  <a class="class-card ${cls.archived ? "archived" : ""}" href="/classes/${cls.id}">
+                    ${cls.archived ? html`<div class="archived-badge">Archived</div>` : ""}
+                    <div class="course-code">${cls.course_code}</div>
+                    <div class="class-name">${cls.name}</div>
+                    <div class="professor">${cls.professor}</div>
+                  </a>
+                `,
+								)}
+                
+                ${
+									semesterKeys.indexOf(semesterYear) === 0
+										? html`
+                  <div class="register-card" @click=${this.handleRegisterClick}>
+                    <div class="register-icon">+</div>
+                    <div class="register-text">Register for Class</div>
+                  </div>
+                `
+										: ""
+								}
               </div>
-            </a>
+            </div>
           `,
 					)}
-          
-          ${
-						this.uncategorizedCount > 0
-							? html`
-            <a class="class-card" href="/class/uncategorized">
-              <div class="class-name">Uncategorized</div>
-              <div class="class-stats">
-                <span class="class-count">${this.uncategorizedCount}</span>
-                ${this.uncategorizedCount === 1 ? "transcription" : "transcriptions"}
-              </div>
-            </a>
-          `
-							: ""
-					}
-        </div>
-      `
+        `
 					: html`
-        <div class="empty-state">
-          <h2>No transcriptions yet</h2>
-          <p>Upload your first audio file to get started!</p>
-        </div>
-      `
+          <div class="empty-state">
+            <h2>No classes yet</h2>
+            <p>You haven't been enrolled in any classes.</p>
+          </div>
+          <div class="classes-grid">
+            <div class="register-card" @click=${this.handleRegisterClick}>
+              <div class="register-icon">+</div>
+              <div class="register-text">Register for Class</div>
+            </div>
+          </div>
+        `
 			}
     `;
 	}

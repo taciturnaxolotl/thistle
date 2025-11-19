@@ -127,7 +127,7 @@ const server = Bun.serve({
 		"/settings": settingsHTML,
 		"/transcribe": transcribeHTML,
 		"/classes": classesHTML,
-		"/class/:className": classHTML,
+		"/classes/*": classHTML,
 		"/api/auth/register": {
 			POST: async (req) => {
 				try {

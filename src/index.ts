@@ -874,9 +874,14 @@ const server = Bun.serve({
 						);
 					}
 
-					if (transcription.status !== "completed") {
+					// For pending recordings, audio file exists even though transcription isn't complete
+					// Allow audio access for pending and completed statuses
+					if (
+						transcription.status !== "completed" &&
+						transcription.status !== "pending"
+					) {
 						return Response.json(
-							{ error: "Transcription not completed yet" },
+							{ error: "Audio not available yet" },
 							{ status: 400 },
 						);
 					}

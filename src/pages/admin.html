@@ -166,6 +166,7 @@
         <button class="tab active" data-tab="pending">Pending Recordings</button>
         <button class="tab" data-tab="transcriptions">Transcriptions</button>
         <button class="tab" data-tab="users">Users</button>
+        <button class="tab" data-tab="classes">Classes</button>
       </div>
 
       <div id="pending-tab" class="tab-content active">
@@ -188,6 +189,13 @@
           <admin-users id="users-component"></admin-users>
         </div>
       </div>
+
+      <div id="classes-tab" class="tab-content">
+        <div class="section">
+          <h2 class="section-title">Manage Classes</h2>
+          <admin-classes></admin-classes>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -198,6 +206,7 @@
   <script type="module" src="../components/admin-pending-recordings.ts"></script>
   <script type="module" src="../components/admin-transcriptions.ts"></script>
   <script type="module" src="../components/admin-users.ts"></script>
+  <script type="module" src="../components/admin-classes.ts"></script>
   <script type="module" src="../components/user-modal.ts"></script>
   <script type="module" src="../components/transcript-view-modal.ts"></script>
   <script type="module">

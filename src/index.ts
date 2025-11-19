@@ -42,6 +42,9 @@ import {
 	searchClassesByCourseCode,
 	toggleClassArchive,
 	updateMeetingTime,
+	addToWaitlist,
+	getAllWaitlistEntries,
+	deleteWaitlistEntry,
 } from "./lib/classes";
 import { handleError, ValidationErrors } from "./lib/errors";
 import { requireAdmin, requireAuth } from "./lib/middleware";
@@ -1088,6 +1091,40 @@ const server = Bun.serve({
 				}
 			},
 		},
+		"/api/admin/classes": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const classes = getClassesForUser(0, true); // Admin sees all classes
+					return Response.json({ classes });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/waitlist": {
+			GET: async (req) => {
+				try {
+					requireAdmin(req);
+					const waitlist = getAllWaitlistEntries();
+					return Response.json({ waitlist });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/waitlist/:id": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const id = req.params.id;
+					deleteWaitlistEntry(id);
+					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
 		"/api/admin/transcriptions/:id": {
 			DELETE: async (req) => {
 				try {
@@ -1473,7 +1510,14 @@ const server = Bun.serve({
 				try {
 					requireAdmin(req);
 					const body = await req.json();
-					const { course_code, name, professor, semester, year } = body;
+					const {
+						course_code,
+						name,
+						professor,
+						semester,
+						year,
+						meeting_times,
+					} = body;
 
 					if (!course_code || !name || !professor || !semester || !year) {
 						return Response.json(
@@ -1488,6 +1532,7 @@ const server = Bun.serve({
 						professor,
 						semester,
 						year,
+						meeting_times,
 					});
 
 					return Response.json(newClass);
@@ -1535,6 +1580,46 @@ const server = Bun.serve({
 					}
 
 					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/waitlist": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const body = await req.json();
+
+					const {
+						courseCode,
+						courseName,
+						professor,
+						semester,
+						year,
+						additionalInfo,
+						meetingTimes,
+					} = body;
+
+					if (!courseCode || !courseName || !professor || !semester || !year) {
+						return Response.json(
+							{ error: "Missing required fields" },
+							{ status: 400 },
+						);
+					}
+
+					const id = addToWaitlist(
+						user.id,
+						courseCode,
+						courseName,
+						professor,
+						semester,
+						Number.parseInt(year, 10),
+						additionalInfo || null,
+						meetingTimes || null,
+					);
+
+					return Response.json({ success: true, id });
 				} catch (error) {
 					return handleError(error);
 				}

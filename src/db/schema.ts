@@ -142,6 +142,44 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_classes_course_code ON classes(course_code);
     `,
 	},
+	{
+		version: 3,
+		name: "Add class waitlist table",
+		sql: `
+      CREATE TABLE IF NOT EXISTS class_waitlist (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        course_code TEXT NOT NULL,
+        course_name TEXT NOT NULL,
+        professor TEXT NOT NULL,
+        section TEXT,
+        semester TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        additional_info TEXT,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_waitlist_user_id ON class_waitlist(user_id);
+      CREATE INDEX IF NOT EXISTS idx_waitlist_course_code ON class_waitlist(course_code);
+    `,
+	},
+	{
+		version: 4,
+		name: "Add meeting_times to class_waitlist",
+		sql: `
+      ALTER TABLE class_waitlist ADD COLUMN meeting_times TEXT;
+    `,
+	},
+	{
+		version: 5,
+		name: "Remove section columns",
+		sql: `
+      DROP INDEX IF EXISTS idx_classes_section;
+      ALTER TABLE classes DROP COLUMN section;
+      ALTER TABLE class_waitlist DROP COLUMN section;
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

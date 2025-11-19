@@ -6,7 +6,6 @@ interface ClassResult {
 	course_code: string;
 	name: string;
 	professor: string;
-	section: string | null;
 	semester: string;
 	year: number;
 }
@@ -20,6 +19,16 @@ export class ClassRegistrationModal extends LitElement {
 	@state() isJoining = false;
 	@state() error = "";
 	@state() hasSearched = false;
+	@state() showWaitlistForm = false;
+	@state() waitlistData = {
+		courseCode: "",
+		courseName: "",
+		professor: "",
+		semester: "",
+		year: new Date().getFullYear(),
+		additionalInfo: "",
+		meetingTimes: [""],
+	};
 
 	static override styles = css`
     :host {
@@ -257,10 +266,181 @@ export class ClassRegistrationModal extends LitElement {
       color: var(--paynes-gray);
     }
 
+    .empty-state button {
+      margin-top: 1rem;
+      padding: 0.75rem 1.5rem;
+      background: var(--accent);
+      color: white;
+      border: 2px solid var(--accent);
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .empty-state button:hover {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    .waitlist-form {
+      margin-top: 1.5rem;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .form-group-full {
+      grid-column: 1 / -1;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      margin-bottom: 0.5rem;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 0.75rem;
+      border: 2px solid var(--secondary);
+      border-radius: 6px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: var(--background);
+      color: var(--text);
+      transition: all 0.2s;
+      box-sizing: border-box;
+    }
+
+    .form-group textarea {
+      min-height: 6rem;
+      resize: vertical;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+
+    .btn-submit {
+      padding: 0.75rem 1.5rem;
+      background: var(--primary);
+      color: white;
+      border: 2px solid var(--primary);
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-submit:hover:not(:disabled) {
+      background: var(--gunmetal);
+      border-color: var(--gunmetal);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-cancel {
+      padding: 0.75rem 1.5rem;
+      background: transparent;
+      color: var(--text);
+      border: 2px solid var(--secondary);
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-cancel:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
     .loading {
       text-align: center;
       padding: 2rem;
       color: var(--paynes-gray);
+    }
+
+    .meeting-times-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .meeting-time-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .meeting-time-row input {
+      flex: 1;
+    }
+
+    .btn-remove {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      color: #dc2626;
+      border: 2px solid #dc2626;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-remove:hover {
+      background: #dc2626;
+      color: white;
+    }
+
+    .btn-add {
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: transparent;
+      color: var(--primary);
+      border: 2px solid var(--primary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-add:hover {
+      background: var(--primary);
+      color: white;
     }
   `;
 
@@ -269,6 +449,16 @@ export class ClassRegistrationModal extends LitElement {
 		this.results = [];
 		this.error = "";
 		this.hasSearched = false;
+		this.showWaitlistForm = false;
+		this.waitlistData = {
+			courseCode: "",
+			courseName: "",
+			professor: "",
+			semester: "",
+			year: new Date().getFullYear(),
+			additionalInfo: "",
+			meetingTimes: [""],
+		};
 		this.dispatchEvent(new CustomEvent("close"));
 	}
 
@@ -330,6 +520,74 @@ export class ClassRegistrationModal extends LitElement {
 		}
 	}
 
+	private handleRequestWaitlist() {
+		this.showWaitlistForm = true;
+		this.waitlistData.courseCode = this.searchQuery;
+	}
+
+	private handleWaitlistInput(field: string, e: Event) {
+		const value = (
+			e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+		).value;
+		this.waitlistData = { ...this.waitlistData, [field]: value };
+	}
+
+	private async handleSubmitWaitlist(e: Event) {
+		e.preventDefault();
+		this.isJoining = true;
+		this.error = "";
+
+		try {
+			const response = await fetch("/api/classes/waitlist", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(this.waitlistData),
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to submit waitlist request";
+				return;
+			}
+
+			// Success
+			alert(
+				"Your class request has been submitted! An admin will review it soon.",
+			);
+			this.handleClose();
+		} catch {
+			this.error = "Failed to submit request. Please try again.";
+		} finally {
+			this.isJoining = false;
+		}
+	}
+
+	private handleCancelWaitlist() {
+		this.showWaitlistForm = false;
+	}
+
+	private addMeetingTime() {
+		this.waitlistData = {
+			...this.waitlistData,
+			meetingTimes: [...this.waitlistData.meetingTimes, ""],
+		};
+	}
+
+	private removeMeetingTime(index: number) {
+		this.waitlistData = {
+			...this.waitlistData,
+			meetingTimes: this.waitlistData.meetingTimes.filter(
+				(_, i) => i !== index,
+			),
+		};
+	}
+
+	private updateMeetingTime(index: number, value: string) {
+		const newTimes = [...this.waitlistData.meetingTimes];
+		newTimes[index] = value;
+		this.waitlistData = { ...this.waitlistData, meetingTimes: newTimes };
+	}
+
 	override render() {
 		if (!this.open) return html``;
 
@@ -376,9 +634,149 @@ export class ClassRegistrationModal extends LitElement {
 									this.isSearching
 										? html`<div class="loading">Searching...</div>`
 										: this.results.length === 0
-											? html`
+											? this.showWaitlistForm
+												? html`
+                    <div class="waitlist-form">
+                      <p style="margin-bottom: 1.5rem; color: var(--text);">
+                        Request this class to be added to Thistle
+                      </p>
+                      <form @submit=${this.handleSubmitWaitlist}>
+                        <div class="form-grid">
+                          <div class="form-group">
+                            <label>Course Code *</label>
+                            <input
+                              type="text"
+                              required
+                              .value=${this.waitlistData.courseCode}
+                              @input=${(e: Event) => this.handleWaitlistInput("courseCode", e)}
+                            />
+                          </div>
+                          <div class="form-group">
+                            <label>Course Name *</label>
+                            <input
+                              type="text"
+                              required
+                              .value=${this.waitlistData.courseName}
+                              @input=${(e: Event) => this.handleWaitlistInput("courseName", e)}
+                            />
+                          </div>
+                          <div class="form-group">
+                            <label>Professor *</label>
+                            <input
+                              type="text"
+                              required
+                              .value=${this.waitlistData.professor}
+                              @input=${(e: Event) => this.handleWaitlistInput("professor", e)}
+                            />
+                          </div>
+                          <div class="form-group">
+                            <label>Semester *</label>
+                            <select
+                              required
+                              .value=${this.waitlistData.semester}
+                              @change=${(e: Event) => this.handleWaitlistInput("semester", e)}
+                            >
+                              <option value="">Select semester</option>
+                              <option value="Spring">Spring</option>
+                              <option value="Summer">Summer</option>
+                              <option value="Fall">Fall</option>
+                              <option value="Winter">Winter</option>
+                            </select>
+                          </div>
+                          <div class="form-group">
+                            <label>Year *</label>
+                            <input
+                              type="number"
+                              required
+                              min="2020"
+                              max="2030"
+                              .value=${this.waitlistData.year.toString()}
+                              @input=${(e: Event) => this.handleWaitlistInput("year", e)}
+                            />
+                          </div>
+                          <div class="form-group form-group-full">
+                            <label>Meeting Times *</label>
+                            <div class="meeting-times-list">
+                              ${this.waitlistData.meetingTimes.map(
+																(time, index) => html`
+                                <div class="meeting-time-row">
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g., Monday Lecture, Wednesday Lecture"
+                                    .value=${time}
+                                    @input=${(e: Event) =>
+																			this.updateMeetingTime(
+																				index,
+																				(e.target as HTMLInputElement).value,
+																			)}
+                                    @keydown=${(e: KeyboardEvent) => {
+																			if (e.key === "Enter") {
+																				e.preventDefault();
+																				this.addMeetingTime();
+																			}
+																		}}
+                                  />
+                                  ${
+																		this.waitlistData.meetingTimes.length > 1
+																			? html`
+                                    <button
+                                      type="button"
+                                      class="btn-remove"
+                                      @click=${() => this.removeMeetingTime(index)}
+                                    >
+                                      Remove
+                                    </button>
+                                  `
+																			: ""
+																	}
+                                </div>
+                              `,
+															)}
+                              <button type="button" class="btn-add" @click=${this.addMeetingTime}>
+                                + Add Meeting Time
+                              </button>
+                            </div>
+                          </div>
+                          <div class="form-group form-group-full">
+                            <label>Additional Info (optional)</label>
+                            <textarea
+                              placeholder="Any additional details about this class..."
+                              .value=${this.waitlistData.additionalInfo}
+                              @input=${(e: Event) => this.handleWaitlistInput("additionalInfo", e)}
+                            ></textarea>
+                          </div>
+                        </div>
+                        ${this.error ? html`<div class="error-message">${this.error}</div>` : ""}
+                        <div class="form-actions">
+                          <button
+                            type="button"
+                            class="btn-cancel"
+                            @click=${this.handleCancelWaitlist}
+                            ?disabled=${this.isJoining}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            class="btn-submit"
+                            ?disabled=${this.isJoining}
+                          >
+                            ${this.isJoining ? "Submitting..." : "Submit Request"}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  `
+												: html`
                     <div class="empty-state">
-                      No classes found matching "${this.searchQuery}"
+                      <p>No classes found matching "${this.searchQuery}"</p>
+                      <p style="margin-top: 0.5rem; font-size: 0.875rem;">
+                        Can't find your class? Request it to be added.
+                      </p>
+                      <button @click=${this.handleRequestWaitlist}>
+                        Request Class
+                      </button>
                     </div>
                   `
 											: html`
@@ -396,7 +794,6 @@ export class ClassRegistrationModal extends LitElement {
                               <div class="class-name">${cls.name}</div>
                               <div class="class-meta">
                                 <span>👤 ${cls.professor}</span>
-                                ${cls.section ? html`<span>📍 Section ${cls.section}</span>` : ""}
                                 <span>📅 ${cls.semester} ${cls.year}</span>
                               </div>
                             </div>

@@ -6,7 +6,6 @@ export interface Class {
 	course_code: string;
 	name: string;
 	professor: string;
-	section: string | null;
 	semester: string;
 	year: number;
 	archived: boolean;
@@ -85,6 +84,7 @@ export function createClass(data: {
 	professor: string;
 	semester: string;
 	year: number;
+	meeting_times?: string[];
 }): Class {
 	const id = nanoid();
 	const now = Math.floor(Date.now() / 1000);
@@ -101,6 +101,13 @@ export function createClass(data: {
 			now,
 		],
 	);
+
+	// Create meeting times if provided
+	if (data.meeting_times && data.meeting_times.length > 0) {
+		for (const label of data.meeting_times) {
+			createMeetingTime(id, label);
+		}
+	}
 
 	return {
 		id,
@@ -300,5 +307,74 @@ export function joinClass(
 	).run(cls.id, userId, Math.floor(Date.now() / 1000));
 
 	return { success: true };
+}
+
+/**
+ * Waitlist entry interface
+ */
+export interface WaitlistEntry {
+	id: string;
+	user_id: number;
+	course_code: string;
+	course_name: string;
+	professor: string;
+	semester: string;
+	year: number;
+	additional_info: string | null;
+	meeting_times: string | null;
+	created_at: number;
+}
+
+/**
+ * Add a class to the waitlist
+ */
+export function addToWaitlist(
+	userId: number,
+	courseCode: string,
+	courseName: string,
+	professor: string,
+	semester: string,
+	year: number,
+	additionalInfo: string | null,
+	meetingTimes: string[] | null,
+): string {
+	const id = nanoid();
+	const meetingTimesJson = meetingTimes ? JSON.stringify(meetingTimes) : null;
+
+	db.query(
+		`INSERT INTO class_waitlist 
+     (id, user_id, course_code, course_name, professor, semester, year, additional_info, meeting_times, created_at) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	).run(
+		id,
+		userId,
+		courseCode,
+		courseName,
+		professor,
+		semester,
+		year,
+		additionalInfo,
+		meetingTimesJson,
+		Math.floor(Date.now() / 1000),
+	);
+	return id;
+}
+
+/**
+ * Get all waitlist entries
+ */
+export function getAllWaitlistEntries(): WaitlistEntry[] {
+	return db
+		.query<WaitlistEntry, []>(
+			"SELECT * FROM class_waitlist ORDER BY created_at DESC",
+		)
+		.all();
+}
+
+/**
+ * Delete a waitlist entry
+ */
+export function deleteWaitlistEntry(id: string): void {
+	db.query("DELETE FROM class_waitlist WHERE id = ?").run(id);
 }
 

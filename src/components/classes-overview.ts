@@ -1,5 +1,6 @@
 import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import "./class-registration-modal";
 
 interface Class {
 	id: string;
@@ -20,6 +21,7 @@ export class ClassesOverview extends LitElement {
 	@state() classes: ClassesGrouped = {};
 	@state() isLoading = true;
 	@state() error: string | null = null;
+	@state() showRegistrationModal = false;
 
 	static override styles = css`
     :host {
@@ -205,8 +207,15 @@ export class ClassesOverview extends LitElement {
 	}
 
 	private handleRegisterClick() {
-		// TODO: Open registration modal/form
-		alert("Class registration coming soon!");
+		this.showRegistrationModal = true;
+	}
+
+	private handleModalClose() {
+		this.showRegistrationModal = false;
+	}
+
+	private async handleClassJoined() {
+		await this.loadClasses();
 	}
 
 	override render() {
@@ -274,6 +283,12 @@ export class ClassesOverview extends LitElement {
           </div>
         `
 			}
+
+      <class-registration-modal
+        ?open=${this.showRegistrationModal}
+        @close=${this.handleModalClose}
+        @class-joined=${this.handleClassJoined}
+      ></class-registration-modal>
     `;
 	}
 }

@@ -37,6 +37,7 @@ import {
 	getMeetingTimesForClass,
 	getTranscriptionsForClass,
 	isUserEnrolledInClass,
+	joinClassByCode,
 	removeUserFromClass,
 	toggleClassArchive,
 	updateMeetingTime,
@@ -1489,6 +1490,32 @@ const server = Bun.serve({
 					});
 
 					return Response.json(newClass);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/join": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const body = await req.json();
+					const classCode = body.class_code;
+
+					if (!classCode || typeof classCode !== "string") {
+						return Response.json(
+							{ error: "Class code required" },
+							{ status: 400 },
+						);
+					}
+
+					const result = joinClassByCode(classCode.trim(), user.id);
+
+					if (!result.success) {
+						return Response.json({ error: result.error }, { status: 400 });
+					}
+
+					return Response.json({ success: true, class_id: result.classId });
 				} catch (error) {
 					return handleError(error);
 				}

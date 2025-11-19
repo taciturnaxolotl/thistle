@@ -247,3 +247,41 @@ export function getTranscriptionsForClass(classId: string) {
 		)
 		.all(classId);
 }
+
+/**
+ * Join a class by class code
+ */
+export function joinClassByCode(
+	classCode: string,
+	userId: number,
+): { success: boolean; classId?: string; error?: string } {
+	// Find class by code (case-insensitive)
+	const cls = db
+		.query<Class, [string]>(
+			"SELECT * FROM classes WHERE UPPER(id) = UPPER(?) AND archived = 0",
+		)
+		.get(classCode);
+
+	if (!cls) {
+		return { success: false, error: "Class not found or is archived" };
+	}
+
+	// Check if already enrolled
+	const existing = db
+		.query<ClassMember, [string, number]>(
+			"SELECT * FROM class_members WHERE class_id = ? AND user_id = ?",
+		)
+		.get(cls.id, userId);
+
+	if (existing) {
+		return { success: false, error: "Already enrolled in this class" };
+	}
+
+	// Enroll user
+	db.query(
+		"INSERT INTO class_members (class_id, user_id, enrolled_at) VALUES (?, ?, ?)",
+	).run(cls.id, userId, Math.floor(Date.now() / 1000));
+
+	return { success: true, classId: cls.id };
+}
+

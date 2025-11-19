@@ -45,6 +45,12 @@ export class AdminClasses extends LitElement {
 		semester: "",
 		year: new Date().getFullYear(),
 	};
+	@state() deleteState: {
+		id: string;
+		type: "class" | "waitlist";
+		clicks: number;
+		timeout: number | null;
+	} | null = null;
 
 	static override styles = css`
     :host {
@@ -505,15 +511,67 @@ export class AdminClasses extends LitElement {
 		}
 	}
 
-	private async handleDelete(classId: string, courseName: string) {
-		if (
-			!confirm(
-				`Are you sure you want to delete ${courseName}? This will remove all associated data and cannot be undone.`,
-			)
-		) {
+	private handleDeleteClick(id: string, type: "class" | "waitlist") {
+		// If this is a different item or timeout expired, reset
+		if (!this.deleteState || this.deleteState.id !== id || this.deleteState.type !== type) {
+			// Clear any existing timeout
+			if (this.deleteState?.timeout) {
+				clearTimeout(this.deleteState.timeout);
+			}
+
+			// Set first click
+			const timeout = window.setTimeout(() => {
+				this.deleteState = null;
+			}, 1000);
+
+			this.deleteState = { id, type, clicks: 1, timeout };
 			return;
 		}
 
+		// Increment clicks
+		const newClicks = this.deleteState.clicks + 1;
+
+		// Clear existing timeout
+		if (this.deleteState.timeout) {
+			clearTimeout(this.deleteState.timeout);
+		}
+
+		// Third click - actually delete
+		if (newClicks === 3) {
+			this.deleteState = null;
+			if (type === "class") {
+				this.performDeleteClass(id);
+			} else {
+				this.performDeleteWaitlist(id);
+			}
+			return;
+		}
+
+		// Second click - reset timeout
+		const timeout = window.setTimeout(() => {
+			this.deleteState = null;
+		}, 1000);
+
+		this.deleteState = { id, type, clicks: newClicks, timeout };
+	}
+
+	private getDeleteButtonText(id: string, type: "class" | "waitlist"): string {
+		if (!this.deleteState || this.deleteState.id !== id || this.deleteState.type !== type) {
+			return "Delete";
+		}
+
+		if (this.deleteState.clicks === 1) {
+			return "Are you sure?";
+		}
+
+		if (this.deleteState.clicks === 2) {
+			return "Final warning!";
+		}
+
+		return "Delete";
+	}
+
+	private async performDeleteClass(classId: string) {
 		try {
 			const response = await fetch(`/api/classes/${classId}`, {
 				method: "DELETE",
@@ -529,19 +587,7 @@ export class AdminClasses extends LitElement {
 		}
 	}
 
-	private handleCreateClass() {
-		this.showCreateModal = true;
-	}
-
-	private async handleDeleteWaitlist(id: string, courseCode: string) {
-		if (
-			!confirm(
-				`Are you sure you want to delete this waitlist request for ${courseCode}?`,
-			)
-		) {
-			return;
-		}
-
+	private async performDeleteWaitlist(id: string) {
 		try {
 			const response = await fetch(`/api/admin/waitlist/${id}`, {
 				method: "DELETE",
@@ -555,6 +601,10 @@ export class AdminClasses extends LitElement {
 		} catch {
 			this.error = "Failed to delete waitlist entry. Please try again.";
 		}
+	}
+
+	private handleCreateClass() {
+		this.showCreateModal = true;
 	}
 
 	private getFilteredClasses() {
@@ -652,9 +702,9 @@ export class AdminClasses extends LitElement {
                     </button>
                     <button
                       class="btn-delete"
-                      @click=${() => this.handleDelete(cls.id, cls.course_code)}
+                      @click=${() => this.handleDeleteClick(cls.id, "class")}
                     >
-                      Delete
+                      ${this.getDeleteButtonText(cls.id, "class")}
                     </button>
                   </div>
                 </div>
@@ -706,9 +756,9 @@ export class AdminClasses extends LitElement {
                     </button>
                     <button
                       class="btn-delete"
-                      @click=${() => this.handleDeleteWaitlist(entry.id, entry.course_code)}
+                      @click=${() => this.handleDeleteClick(entry.id, "waitlist")}
                     >
-                      Delete
+                      ${this.getDeleteButtonText(entry.id, "waitlist")}
                     </button>
                   </div>
                 </div>

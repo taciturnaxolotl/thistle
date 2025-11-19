@@ -121,7 +121,6 @@ export class ClassesOverview extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 10rem;
       color: var(--accent);
     }
 

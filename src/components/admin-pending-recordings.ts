@@ -43,34 +43,65 @@ export class AdminPendingRecordings extends LitElement {
       margin-bottom: 1rem;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    .recordings-grid {
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .recording-card {
       background: var(--background);
       border: 2px solid var(--secondary);
       border-radius: 8px;
-      overflow: hidden;
+      padding: 1.5rem;
+      transition: border-color 0.2s;
     }
 
-    thead {
-      background: var(--primary);
-      color: var(--white);
+    .recording-card:hover {
+      border-color: var(--primary);
     }
 
-    th {
-      padding: 1rem;
-      text-align: left;
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .file-info {
+      flex: 1;
+    }
+
+    .filename {
+      font-size: 1.125rem;
       font-weight: 600;
-    }
-
-    td {
-      padding: 1rem;
-      border-top: 1px solid var(--secondary);
       color: var(--text);
+      margin-bottom: 0.5rem;
     }
 
-    tr:hover {
-      background: color-mix(in srgb, var(--primary) 5%, transparent);
+    .meta-row {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .meta-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--paynes-gray);
+      letter-spacing: 0.05em;
+    }
+
+    .meta-value {
+      font-size: 0.875rem;
+      color: var(--text);
     }
 
     .class-info {
@@ -96,7 +127,7 @@ export class AdminPendingRecordings extends LitElement {
       color: var(--primary);
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
-      font-size: 0.75rem;
+      font-size: 0.875rem;
       font-weight: 500;
     }
 
@@ -107,8 +138,8 @@ export class AdminPendingRecordings extends LitElement {
     }
 
     .user-avatar {
-      width: 2rem;
-      height: 2rem;
+      width: 1.5rem;
+      height: 1.5rem;
       border-radius: 50%;
     }
 
@@ -117,16 +148,32 @@ export class AdminPendingRecordings extends LitElement {
       font-size: 0.875rem;
     }
 
+    .audio-player {
+      margin: 1rem 0;
+    }
+
+    .audio-player audio {
+      width: 100%;
+      height: 2.5rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
     .approve-btn {
       background: var(--accent);
       color: var(--white);
       border: none;
-      padding: 0.5rem 1rem;
+      padding: 0.75rem 1.5rem;
       border-radius: 4px;
       cursor: pointer;
       font-size: 0.875rem;
       font-weight: 600;
       transition: opacity 0.2s;
+      flex: 1;
     }
 
     .approve-btn:hover:not(:disabled) {
@@ -138,16 +185,11 @@ export class AdminPendingRecordings extends LitElement {
       cursor: not-allowed;
     }
 
-    .actions {
-      display: flex;
-      gap: 0.5rem;
-    }
-
     .delete-btn {
       background: transparent;
       border: 2px solid #dc2626;
       color: #dc2626;
-      padding: 0.5rem 1rem;
+      padding: 0.75rem 1.5rem;
       border-radius: 4px;
       cursor: pointer;
       font-size: 0.875rem;
@@ -322,61 +364,76 @@ export class AdminPendingRecordings extends LitElement {
 		}
 
 		return html`
-      <table>
-        <thead>
-          <tr>
-            <th>File Name</th>
-            <th>Class</th>
-            <th>Meeting Time</th>
-            <th>Uploaded By</th>
-            <th>Uploaded At</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${this.recordings.map(
-						(recording) => html`
-            <tr>
-              <td>${recording.original_filename}</td>
-              <td>
-                <div class="class-info">
-                  <span class="course-code">${recording.course_code}</span>
-                  <span class="class-name">${recording.class_name}</span>
+      <div class="recordings-grid">
+        ${this.recordings.map(
+					(recording) => html`
+          <div class="recording-card">
+            <div class="card-header">
+              <div class="file-info">
+                <div class="filename">${recording.original_filename}</div>
+              </div>
+            </div>
+
+            <div class="meta-row">
+              <div class="meta-item">
+                <div class="meta-label">Class</div>
+                <div class="meta-value">
+                  <div class="class-info">
+                    <span class="course-code">${recording.course_code}</span>
+                    <span class="class-name">${recording.class_name}</span>
+                  </div>
                 </div>
-              </td>
-              <td>
-                ${
-									recording.meeting_label
-										? html`<span class="meeting-label">${recording.meeting_label}</span>`
-										: html`<span style="color: var(--paynes-gray); font-style: italic;">Not specified</span>`
-								}
-              </td>
-              <td>
-                <div class="user-info">
-                  <img
-                    src="https://hostedboringavatars.vercel.app/api/marble?size=32&name=${recording.user_id}&colors=2d3142ff,4f5d75ff,bfc0c0ff,ef8354ff"
-                    alt="Avatar"
-                    class="user-avatar"
-                  />
-                  <span>${recording.user_name || recording.user_email}</span>
+              </div>
+
+              <div class="meta-item">
+                <div class="meta-label">Meeting Time</div>
+                <div class="meta-value">
+                  ${
+										recording.meeting_label
+											? html`<span class="meeting-label">${recording.meeting_label}</span>`
+											: html`<span style="color: var(--paynes-gray); font-style: italic;">Not specified</span>`
+									}
                 </div>
-              </td>
-              <td class="timestamp">${this.formatTimestamp(recording.created_at)}</td>
-              <td>
-                <div class="actions">
-                  <button class="approve-btn" @click=${() => this.handleApprove(recording.id)}>
-                    ✓ Approve & Transcribe
-                  </button>
-                  <button class="delete-btn" @click=${() => this.handleDelete(recording.id)}>
-                    Delete
-                  </button>
+              </div>
+
+              <div class="meta-item">
+                <div class="meta-label">Uploaded By</div>
+                <div class="meta-value">
+                  <div class="user-info">
+                    <img
+                      src="https://hostedboringavatars.vercel.app/api/marble?size=24&name=${recording.user_id}&colors=2d3142ff,4f5d75ff,bfc0c0ff,ef8354ff"
+                      alt="Avatar"
+                      class="user-avatar"
+                    />
+                    <span>${recording.user_name || recording.user_email}</span>
+                  </div>
                 </div>
-              </td>
-            </tr>
-          `,
-					)}
-        </tbody>
-      </table>
+              </div>
+
+              <div class="meta-item">
+                <div class="meta-label">Uploaded At</div>
+                <div class="meta-value timestamp">
+                  ${this.formatTimestamp(recording.created_at)}
+                </div>
+              </div>
+            </div>
+
+            <div class="audio-player">
+              <audio controls preload="metadata" src="/api/transcriptions/${recording.id}/audio"></audio>
+            </div>
+
+            <div class="actions">
+              <button class="approve-btn" @click=${() => this.handleApprove(recording.id)}>
+                ✓ Approve & Transcribe
+              </button>
+              <button class="delete-btn" @click=${() => this.handleDelete(recording.id)}>
+                Delete
+              </button>
+            </div>
+          </div>
+        `,
+				)}
+      </div>
     `;
 	}
 }

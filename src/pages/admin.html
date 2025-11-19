@@ -371,11 +371,19 @@
       </div>
 
       <div class="tabs">
-        <button class="tab active" data-tab="transcriptions">Transcriptions</button>
+        <button class="tab active" data-tab="pending">Pending Recordings</button>
+        <button class="tab" data-tab="transcriptions">Transcriptions</button>
         <button class="tab" data-tab="users">Users</button>
       </div>
 
-      <div id="transcriptions-tab" class="tab-content active">
+      <div id="pending-tab" class="tab-content active">
+        <div class="section">
+          <h2 class="section-title">Pending Recordings</h2>
+          <admin-pending-recordings></admin-pending-recordings>
+        </div>
+      </div>
+
+      <div id="transcriptions-tab" class="tab-content">
         <div class="section">
           <h2 class="section-title">All Transcriptions</h2>
           <input type="text" id="transcript-search" class="search" placeholder="Search by filename or user..." />
@@ -397,6 +405,7 @@
   <transcript-modal id="transcript-modal"></transcript-modal>
 
   <script type="module" src="../components/auth.ts"></script>
+  <script type="module" src="../components/admin-pending-recordings.ts"></script>
   <script type="module" src="../components/user-modal.ts"></script>
   <script type="module" src="../components/transcript-view-modal.ts"></script>
   <script type="module">

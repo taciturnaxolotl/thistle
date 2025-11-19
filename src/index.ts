@@ -37,8 +37,9 @@ import {
 	getMeetingTimesForClass,
 	getTranscriptionsForClass,
 	isUserEnrolledInClass,
-	joinClassByCode,
+	joinClass,
 	removeUserFromClass,
+	searchClassesByCourseCode,
 	toggleClassArchive,
 	updateMeetingTime,
 } from "./lib/classes";
@@ -1495,27 +1496,45 @@ const server = Bun.serve({
 				}
 			},
 		},
+		"/api/classes/search": {
+			GET: async (req) => {
+				try {
+					requireAuth(req);
+					const url = new URL(req.url);
+					const query = url.searchParams.get("q");
+
+					if (!query) {
+						return Response.json({ classes: [] });
+					}
+
+					const classes = searchClassesByCourseCode(query);
+					return Response.json({ classes });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
 		"/api/classes/join": {
 			POST: async (req) => {
 				try {
 					const user = requireAuth(req);
 					const body = await req.json();
-					const classCode = body.class_code;
+					const classId = body.class_id;
 
-					if (!classCode || typeof classCode !== "string") {
+					if (!classId || typeof classId !== "string") {
 						return Response.json(
-							{ error: "Class code required" },
+							{ error: "Class ID required" },
 							{ status: 400 },
 						);
 					}
 
-					const result = joinClassByCode(classCode.trim(), user.id);
+					const result = joinClass(classId, user.id);
 
 					if (!result.success) {
 						return Response.json({ error: result.error }, { status: 400 });
 					}
 
-					return Response.json({ success: true, class_id: result.classId });
+					return Response.json({ success: true });
 				} catch (error) {
 					return handleError(error);
 				}

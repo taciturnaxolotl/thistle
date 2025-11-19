@@ -6,6 +6,7 @@ export interface Class {
 	course_code: string;
 	name: string;
 	professor: string;
+	section: string | null;
 	semester: string;
 	year: number;
 	archived: boolean;
@@ -249,21 +250,37 @@ export function getTranscriptionsForClass(classId: string) {
 }
 
 /**
- * Join a class by class code
+ * Search for classes by course code
  */
-export function joinClassByCode(
-	classCode: string,
-	userId: number,
-): { success: boolean; classId?: string; error?: string } {
-	// Find class by code (case-insensitive)
-	const cls = db
+export function searchClassesByCourseCode(courseCode: string): Class[] {
+	return db
 		.query<Class, [string]>(
-			"SELECT * FROM classes WHERE UPPER(id) = UPPER(?) AND archived = 0",
+			`SELECT * FROM classes 
+       WHERE UPPER(course_code) LIKE UPPER(?) 
+       AND archived = 0
+       ORDER BY year DESC, semester DESC, professor ASC, section ASC`,
 		)
-		.get(classCode);
+		.all(`%${courseCode}%`);
+}
+
+/**
+ * Join a class by class ID
+ */
+export function joinClass(
+	classId: string,
+	userId: number,
+): { success: boolean; error?: string } {
+	// Find class by ID
+	const cls = db
+		.query<Class, [string]>("SELECT * FROM classes WHERE id = ?")
+		.get(classId);
 
 	if (!cls) {
-		return { success: false, error: "Class not found or is archived" };
+		return { success: false, error: "Class not found" };
+	}
+
+	if (cls.archived) {
+		return { success: false, error: "This class is archived" };
 	}
 
 	// Check if already enrolled
@@ -282,6 +299,6 @@ export function joinClassByCode(
 		"INSERT INTO class_members (class_id, user_id, enrolled_at) VALUES (?, ?, ?)",
 	).run(cls.id, userId, Math.floor(Date.now() / 1000));
 
-	return { success: true, classId: cls.id };
+	return { success: true };
 }
 

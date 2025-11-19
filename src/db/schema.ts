@@ -134,6 +134,14 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_transcriptions_whisper_job_id ON transcriptions(whisper_job_id);
     `,
 	},
+	{
+		version: 2,
+		name: "Add section column to classes table",
+		sql: `
+      ALTER TABLE classes ADD COLUMN section TEXT;
+      CREATE INDEX IF NOT EXISTS idx_classes_course_code ON classes(course_code);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

@@ -2,6 +2,10 @@
 
 This is a Bun-based transcription service using the [Bun fullstack pattern](https://bun.com/docs/bundler/fullstack) for routing and bundled HTML.
 
+## Workflow
+
+**IMPORTANT**: Do NOT commit changes until the user explicitly asks you to commit. Always wait for user verification that changes are working correctly before making commits.
+
 ## Project Info
 
 - Name: Thistle

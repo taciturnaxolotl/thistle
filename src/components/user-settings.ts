@@ -27,6 +27,15 @@ interface Passkey {
 	last_used_at: number | null;
 }
 
+interface Subscription {
+	id: string;
+	status: string;
+	current_period_start: number | null;
+	current_period_end: number | null;
+	cancel_at_period_end: number;
+	canceled_at: number | null;
+}
+
 type SettingsPage = "account" | "sessions" | "passkeys" | "billing" | "danger";
 
 @customElement("user-settings")
@@ -34,9 +43,11 @@ export class UserSettings extends LitElement {
 	@state() user: User | null = null;
 	@state() sessions: Session[] = [];
 	@state() passkeys: Passkey[] = [];
+	@state() subscription: Subscription | null = null;
 	@state() loading = true;
 	@state() loadingSessions = true;
 	@state() loadingPasskeys = true;
+	@state() loadingSubscription = true;
 	@state() error = "";
 	@state() showDeleteConfirm = false;
 	@state() currentPage: SettingsPage = "account";
@@ -189,6 +200,28 @@ export class UserSettings extends LitElement {
 		.btn-rejection:hover {
 			background: var(--accent);
 			color: white;
+		}
+
+		.btn-affirmative {
+			background: var(--primary);
+			color: white;
+			border-color: var(--primary);
+		}
+
+		.btn-affirmative:hover:not(:disabled) {
+			background: transparent;
+			color: var(--primary);
+		}
+
+		.btn-success {
+			background: var(--success);
+			color: white;
+			border-color: var(--success);
+		}
+
+		.btn-success:hover:not(:disabled) {
+			background: transparent;
+			color: var(--success);
 		}
 
 		.btn-small {
@@ -415,6 +448,7 @@ export class UserSettings extends LitElement {
 		this.passkeySupported = isPasskeySupported();
 		await this.loadUser();
 		await this.loadSessions();
+		await this.loadSubscription();
 		if (this.passkeySupported) {
 			await this.loadPasskeys();
 		}
@@ -458,6 +492,19 @@ export class UserSettings extends LitElement {
 			}
 		} finally {
 			this.loadingPasskeys = false;
+		}
+	}
+
+	async loadSubscription() {
+		try {
+			const response = await fetch("/api/billing/subscription");
+
+			if (response.ok) {
+				const data = await response.json();
+				this.subscription = data.subscription;
+			}
+		} finally {
+			this.loadingSubscription = false;
 		}
 	}
 
@@ -673,9 +720,34 @@ export class UserSettings extends LitElement {
 			}
 
 			const { url } = await response.json();
-			window.location.href = url;
+			window.open(url, "_blank");
 		} catch {
 			this.error = "Failed to create checkout session";
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	async handleOpenPortal() {
+		this.loading = true;
+		this.error = "";
+
+		try {
+			const response = await fetch("/api/billing/portal", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to open customer portal";
+				return;
+			}
+
+			const { url } = await response.json();
+			window.open(url, "_blank");
+		} catch {
+			this.error = "Failed to open customer portal";
 		} finally {
 			this.loading = false;
 		}
@@ -1077,19 +1149,149 @@ export class UserSettings extends LitElement {
 	}
 
 	renderBillingPage() {
+		if (this.loadingSubscription) {
+			return html`
+				<div class="content-inner">
+					<div class="section">
+						<div class="loading">Loading subscription...</div>
+					</div>
+				</div>
+			`;
+		}
+
+		const hasActiveSubscription = this.subscription && (
+			this.subscription.status === "active" || 
+			this.subscription.status === "trialing"
+		);
+
+		if (this.subscription && !hasActiveSubscription) {
+			// Has a subscription but it's not active (canceled, expired, etc.)
+			const statusColor = 
+				this.subscription.status === "canceled" ? "var(--accent)" :
+				"var(--secondary)";
+
+			return html`
+				<div class="content-inner">
+					<div class="section">
+						<h2 class="section-title">Subscription</h2>
+						
+						<div class="field-group">
+							<label class="field-label">Status</label>
+							<div style="display: flex; align-items: center; gap: 0.75rem;">
+								<span style="
+									display: inline-block;
+									padding: 0.25rem 0.75rem;
+									border-radius: 4px;
+									background: ${statusColor};
+									color: var(--white);
+									font-size: 0.875rem;
+									font-weight: 600;
+									text-transform: uppercase;
+								">
+									${this.subscription.status}
+								</span>
+							</div>
+						</div>
+
+						${this.subscription.canceled_at ? html`
+							<div class="field-group">
+								<label class="field-label">Canceled At</label>
+								<div class="field-value" style="color: var(--accent);">
+									${this.formatDate(this.subscription.canceled_at)}
+								</div>
+							</div>
+						` : ""}
+
+						<div class="field-group" style="margin-top: 2rem;">
+							<button
+								class="btn btn-success"
+								@click=${this.handleCreateCheckout}
+								?disabled=${this.loading}
+							>
+								${this.loading ? "Loading..." : "Activate Your Subscription"}
+							</button>
+							<p class="field-description" style="margin-top: 0.75rem;">
+								Reactivate your subscription to unlock unlimited transcriptions.
+							</p>
+						</div>
+
+						${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
+					</div>
+				</div>
+			`;
+		}
+
+		if (hasActiveSubscription) {
+			return html`
+				<div class="content-inner">
+					<div class="section">
+						<h2 class="section-title">Subscription</h2>
+						
+						<div class="field-group">
+							<label class="field-label">Status</label>
+							<div style="display: flex; align-items: center; gap: 0.75rem;">
+								<span style="
+									display: inline-block;
+									padding: 0.25rem 0.75rem;
+									border-radius: 4px;
+									background: var(--success);
+									color: var(--white);
+									font-size: 0.875rem;
+									font-weight: 600;
+									text-transform: uppercase;
+								">
+									${this.subscription.status}
+								</span>
+								${this.subscription.cancel_at_period_end ? html`
+									<span style="color: var(--accent); font-size: 0.875rem;">
+										(Cancels at end of period)
+									</span>
+								` : ""}
+							</div>
+						</div>
+
+						${this.subscription.current_period_start && this.subscription.current_period_end ? html`
+							<div class="field-group">
+								<label class="field-label">Current Period</label>
+								<div class="field-value">
+									${this.formatDate(this.subscription.current_period_start)} - 
+									${this.formatDate(this.subscription.current_period_end)}
+								</div>
+							</div>
+						` : ""}
+
+						<div class="field-group" style="margin-top: 2rem;">
+							<button
+								class="btn btn-affirmative"
+								@click=${this.handleOpenPortal}
+								?disabled=${this.loading}
+							>
+								${this.loading ? "Loading..." : "Manage Subscription"}
+							</button>
+							<p class="field-description" style="margin-top: 0.75rem;">
+								Opens the customer portal where you can update payment methods, view invoices, and manage your subscription.
+							</p>
+						</div>
+
+						${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
+					</div>
+				</div>
+			`;
+		}
+
 		return html`
 			<div class="content-inner">
 				<div class="section">
 					<h2 class="section-title">Billing & Subscription</h2>
 					<p class="field-description" style="margin-bottom: 1.5rem;">
-						Manage your subscription and billing information.
+						Activate your subscription to unlock unlimited transcriptions. Note: We currently offer a single subscription tier.
 					</p>
 					<button
-						class="btn btn-affirmative"
+						class="btn btn-success"
 						@click=${this.handleCreateCheckout}
 						?disabled=${this.loading}
 					>
-						${this.loading ? "Loading..." : "Subscribe to Premium"}
+						${this.loading ? "Loading..." : "Activate Your Subscription"}
 					</button>
 					${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
 				</div>

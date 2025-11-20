@@ -683,6 +683,87 @@ const server = Bun.serve({
 				}
 			},
 		},
+		"/api/billing/subscription": {
+			GET: async (req) => {
+				const sessionId = getSessionFromRequest(req);
+				if (!sessionId) {
+					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				}
+				const user = getUserBySession(sessionId);
+				if (!user) {
+					return Response.json({ error: "Invalid session" }, { status: 401 });
+				}
+
+				try {
+					// Get subscription from database
+					const subscription = db.query<{
+						id: string;
+						status: string;
+						current_period_start: number | null;
+						current_period_end: number | null;
+						cancel_at_period_end: number;
+						canceled_at: number | null;
+					}>(
+						"SELECT id, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+					).get(user.id);
+
+					if (!subscription) {
+						return Response.json({ subscription: null });
+					}
+
+					return Response.json({ subscription });
+				} catch (error) {
+					console.error("Failed to fetch subscription:", error);
+					return Response.json(
+						{ error: "Failed to fetch subscription" },
+						{ status: 500 },
+					);
+				}
+			},
+		},
+		"/api/billing/portal": {
+			POST: async (req) => {
+				const sessionId = getSessionFromRequest(req);
+				if (!sessionId) {
+					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				}
+				const user = getUserBySession(sessionId);
+				if (!user) {
+					return Response.json({ error: "Invalid session" }, { status: 401 });
+				}
+
+				try {
+					const { polar } = await import("./lib/polar");
+
+					// Get subscription to find customer ID
+					const subscription = db.query<{
+						customer_id: string;
+					}>(
+						"SELECT customer_id FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+					).get(user.id);
+
+					if (!subscription || !subscription.customer_id) {
+						return Response.json(
+							{ error: "No subscription found" },
+							{ status: 404 },
+						);
+					}
+
+					// Create customer portal session
+					const session = await polar.customerSessions.create({
+						customerId: subscription.customer_id,
+					});
+
+					return Response.json({ url: session.customerPortalUrl });
+				} catch (error) {
+					console.error("Failed to create portal session:", error);
+					return Response.json(
+						{ error: "Failed to create portal session" },
+						{ status: 500 },
+					);
+				}
+			},
+		},
 		"/api/webhooks/polar": {
 			POST: async (req) => {
 				try {

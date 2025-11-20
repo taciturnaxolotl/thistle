@@ -28,6 +28,18 @@
 	color: var(--primary);
 }
 
+/* Success/positive actions (subscribe, activate) */
+.btn-success {
+	background: var(--success);
+	color: white;
+	border-color: var(--success);
+}
+
+.btn-success:hover:not(:disabled) {
+	background: transparent;
+	color: var(--success);
+}
+
 /* Neutral actions (cancel, close) */
 .btn-neutral {
 	background: transparent;

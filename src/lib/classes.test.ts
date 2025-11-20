@@ -1,88 +1,72 @@
-import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { unlinkSync } from "node:fs";
+import db from "../db/schema";
 import {
 	createClass,
 	createMeetingTime,
+	deleteClass,
 	enrollUserInClass,
 	getClassesForUser,
 	getMeetingTimesForClass,
 	isUserEnrolledInClass,
+	removeUserFromClass,
 } from "./classes";
 
-const TEST_DB = "test-classes.db";
-let db: Database;
+// Track created resources for cleanup
+let createdUserIds: number[] = [];
+let createdClassIds: string[] = [];
 
 beforeEach(() => {
-	db = new Database(TEST_DB);
-
-	// Create minimal schema for testing
-	db.run(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT,
-      role TEXT NOT NULL DEFAULT 'user',
-      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-    );
-
-    CREATE TABLE classes (
-      id TEXT PRIMARY KEY,
-      course_code TEXT NOT NULL,
-      name TEXT NOT NULL,
-      professor TEXT NOT NULL,
-      semester TEXT NOT NULL,
-      year INTEGER NOT NULL,
-      archived BOOLEAN DEFAULT 0,
-      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-    );
-
-    CREATE TABLE class_members (
-      class_id TEXT NOT NULL,
-      user_id INTEGER NOT NULL,
-      enrolled_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      PRIMARY KEY (class_id, user_id),
-      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE meeting_times (
-      id TEXT PRIMARY KEY,
-      class_id TEXT NOT NULL,
-      label TEXT NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE transcriptions (
-      id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      class_id TEXT,
-      meeting_time_id TEXT,
-      filename TEXT NOT NULL,
-      original_filename TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      progress INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
-      FOREIGN KEY (meeting_time_id) REFERENCES meeting_times(id) ON DELETE SET NULL
-    );
-  `);
+	createdUserIds = [];
+	createdClassIds = [];
 });
 
 afterEach(() => {
-	db.close();
-	try {
-		unlinkSync(TEST_DB);
-	} catch {
-		// File may not exist
+	// Clean up classes (cascades to members and meeting times)
+	for (const classId of createdClassIds) {
+		try {
+			deleteClass(classId);
+		} catch {
+			// May already be deleted
+		}
+	}
+
+	// Clean up users
+	for (const userId of createdUserIds) {
+		try {
+			db.run("DELETE FROM users WHERE id = ?", [userId]);
+		} catch {
+			// May already be deleted
+		}
 	}
 });
 
+function createTestUser(email: string): number {
+	db.run("INSERT INTO users (email, password_hash) VALUES (?, ?)", [
+		email,
+		"hash",
+	]);
+	const userId = db
+		.query<{ id: number }, []>("SELECT last_insert_rowid() as id")
+		.get()?.id;
+	if (!userId) throw new Error("Failed to create user");
+	createdUserIds.push(userId);
+	return userId;
+}
+
+function createTestClass(data: {
+	course_code: string;
+	name: string;
+	professor: string;
+	semester: string;
+	year: number;
+}) {
+	const cls = createClass(data);
+	createdClassIds.push(cls.id);
+	return cls;
+}
+
 test("creates a class with all required fields", () => {
-	const cls = createClass({
+	const cls = createTestClass({
 		course_code: "CS 101",
 		name: "Intro to CS",
 		professor: "Dr. Smith",
@@ -100,18 +84,9 @@ test("creates a class with all required fields", () => {
 });
 
 test("enrolls user in class", () => {
-	// Create user
-	db.run("INSERT INTO users (email, password_hash) VALUES (?, ?)", [
-		"test@example.com",
-		"hash",
-	]);
-	const userId = db
-		.query<{ id: number }, []>("SELECT last_insert_rowid() as id")
-		.get()?.id;
-	if (!userId) throw new Error("Failed to create user");
+	const userId = createTestUser("test@example.com");
 
-	// Create class
-	const cls = createClass({
+	const cls = createTestClass({
 		course_code: "CS 101",
 		name: "Intro to CS",
 		professor: "Dr. Smith",
@@ -125,21 +100,16 @@ test("enrolls user in class", () => {
 	// Verify enrollment
 	const isEnrolled = isUserEnrolledInClass(userId, cls.id);
 	expect(isEnrolled).toBe(true);
+
+	// Cleanup enrollment
+	removeUserFromClass(userId, cls.id);
 });
 
 test("gets classes for enrolled user", () => {
-	// Create user
-	db.run("INSERT INTO users (email, password_hash) VALUES (?, ?)", [
-		"test@example.com",
-		"hash",
-	]);
-	const userId = db
-		.query<{ id: number }, []>("SELECT last_insert_rowid() as id")
-		.get()?.id;
-	if (!userId) throw new Error("Failed to create user");
+	const userId = createTestUser("test@example.com");
 
 	// Create two classes
-	const cls1 = createClass({
+	const cls1 = createTestClass({
 		course_code: "CS 101",
 		name: "Intro to CS",
 		professor: "Dr. Smith",
@@ -147,7 +117,7 @@ test("gets classes for enrolled user", () => {
 		year: 2024,
 	});
 
-	const _cls2 = createClass({
+	const cls2 = createTestClass({
 		course_code: "CS 102",
 		name: "Data Structures",
 		professor: "Dr. Jones",
@@ -158,18 +128,23 @@ test("gets classes for enrolled user", () => {
 	// Enroll user in only one class
 	enrollUserInClass(userId, cls1.id);
 
-	// Get classes for user
+	// Get classes for user (non-admin)
 	const classes = getClassesForUser(userId, false);
 	expect(classes.length).toBe(1);
 	expect(classes[0]?.id).toBe(cls1.id);
 
-	// Admin should see all
+	// Admin should see all classes (not just the 2 test classes, but all in DB)
 	const allClasses = getClassesForUser(userId, true);
-	expect(allClasses.length).toBe(2);
+	expect(allClasses.length).toBeGreaterThanOrEqual(2);
+	expect(allClasses.some((c) => c.id === cls1.id)).toBe(true);
+	expect(allClasses.some((c) => c.id === cls2.id)).toBe(true);
+
+	// Cleanup enrollment
+	removeUserFromClass(userId, cls1.id);
 });
 
 test("creates and retrieves meeting times", () => {
-	const cls = createClass({
+	const cls = createTestClass({
 		course_code: "CS 101",
 		name: "Intro to CS",
 		professor: "Dr. Smith",
@@ -177,8 +152,8 @@ test("creates and retrieves meeting times", () => {
 		year: 2024,
 	});
 
-	const _meeting1 = createMeetingTime(cls.id, "Monday Lecture");
-	const _meeting2 = createMeetingTime(cls.id, "Wednesday Lab");
+	createMeetingTime(cls.id, "Monday Lecture");
+	createMeetingTime(cls.id, "Wednesday Lab");
 
 	const meetings = getMeetingTimesForClass(cls.id);
 	expect(meetings.length).toBe(2);

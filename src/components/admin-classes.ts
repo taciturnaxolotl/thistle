@@ -34,9 +34,10 @@ export class AdminClasses extends LitElement {
 	@state() isLoading = true;
 	@state() error = "";
 	@state() searchTerm = "";
-	@state() showCreateModal = false;
+
 	@state() activeTab: "classes" | "waitlist" = "classes";
 	@state() approvingEntry: WaitlistEntry | null = null;
+	@state() showModal = false;
 	@state() meetingTimes: MeetingTime[] = [];
 	@state() editingClass = {
 		courseCode: "",
@@ -621,7 +622,17 @@ export class AdminClasses extends LitElement {
 	}
 
 	private handleCreateClass() {
-		this.showCreateModal = true;
+		// Set empty form for creating new class
+		this.approvingEntry = null;
+		this.editingClass = {
+			courseCode: "",
+			courseName: "",
+			professor: "",
+			semester: "",
+			year: new Date().getFullYear(),
+		};
+		this.meetingTimes = [];
+		this.showModal = true;
 	}
 
 	private getFilteredClasses() {
@@ -673,7 +684,7 @@ export class AdminClasses extends LitElement {
 					: this.renderWaitlist()
 			}
 
-      ${this.approvingEntry ? this.renderApprovalModal() : ""}
+      ${this.showModal ? this.renderApprovalModal() : ""}
     `;
 	}
 
@@ -816,6 +827,7 @@ export class AdminClasses extends LitElement {
 		} else {
 			this.meetingTimes = [];
 		}
+		this.showModal = true;
 	}
 
 	private handleMeetingTimesChange(e: CustomEvent) {
@@ -828,6 +840,7 @@ export class AdminClasses extends LitElement {
 	}
 
 	private cancelApproval() {
+		this.showModal = false;
 		this.approvingEntry = null;
 		this.meetingTimes = [];
 		this.editingClass = {
@@ -840,8 +853,6 @@ export class AdminClasses extends LitElement {
 	}
 
 	private async submitApproval() {
-		if (!this.approvingEntry) return;
-
 		if (this.meetingTimes.length === 0) {
 			this.error = "Please add at least one meeting time";
 			return;
@@ -870,13 +881,17 @@ export class AdminClasses extends LitElement {
 				throw new Error(data.error || "Failed to create class");
 			}
 
-			await fetch(`/api/admin/waitlist/${this.approvingEntry.id}`, {
-				method: "DELETE",
-			});
+			// If approving from waitlist, delete the waitlist entry
+			if (this.approvingEntry) {
+				await fetch(`/api/admin/waitlist/${this.approvingEntry.id}`, {
+					method: "DELETE",
+				});
+			}
 
 			await this.loadData();
 
 			this.activeTab = "classes";
+			this.showModal = false;
 			this.approvingEntry = null;
 			this.meetingTimes = [];
 			this.editingClass = {
@@ -891,20 +906,24 @@ export class AdminClasses extends LitElement {
 			this.error =
 				error instanceof Error
 					? error.message
-					: "Failed to approve waitlist entry. Please try again.";
+					: "Failed to create class. Please try again.";
 		}
 	}
 
 	private renderApprovalModal() {
-		if (!this.approvingEntry) return "";
+		const isApproving = !!this.approvingEntry;
+		const title = isApproving ? "Review & Create Class" : "Create New Class";
+		const description = isApproving
+			? "Review the class details and make any edits before creating"
+			: "Enter the class details below";
 
 		return html`
       <div class="modal-overlay" @click=${this.cancelApproval}>
         <div class="modal" @click=${(e: Event) => e.stopPropagation()}>
-          <h2 class="modal-title">Review & Create Class</h2>
+          <h2 class="modal-title">${title}</h2>
 
           <p style="margin-bottom: 1.5rem; color: var(--paynes-gray);">
-            Review the class details and make any edits before creating
+            ${description}
           </p>
 
           ${this.error ? html`<div class="error-message">${this.error}</div>` : ""}

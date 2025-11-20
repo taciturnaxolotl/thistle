@@ -331,10 +331,18 @@ const server = Bun.serve({
 					const body = await req.json();
 					const { response: credentialResponse, challenge } = body;
 
-					const { user } = await verifyAndAuthenticatePasskey(
+					const result = await verifyAndAuthenticatePasskey(
 						credentialResponse,
 						challenge,
 					);
+
+					if ("error" in result) {
+						return new Response(JSON.stringify({ error: result.error }), {
+							status: 401,
+						});
+					}
+
+					const { user } = result;
 
 					// Create session
 					const ipAddress =

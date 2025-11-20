@@ -246,7 +246,7 @@ export async function createAuthenticationOptions(email?: string) {
 export async function verifyAndAuthenticatePasskey(
 	response: AuthenticationResponseJSON,
 	expectedChallenge: string,
-): Promise<{ passkey: Passkey; user: User }> {
+): Promise<{ passkey: Passkey; user: User } | { error: string }> {
 	// Validate challenge
 	const challengeData = authenticationChallenges.get(expectedChallenge);
 	if (!challengeData) {
@@ -268,7 +268,7 @@ export async function verifyAndAuthenticatePasskey(
 		.get(response.id);
 
 	if (!passkey) {
-		throw new Error("Passkey not found");
+		return { error: "Passkey not found" };
 	}
 
 	const { origin, rpID } = getRPConfig();

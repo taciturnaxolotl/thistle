@@ -10,6 +10,8 @@ interface User {
 	transcription_count: number;
 	last_login: number | null;
 	created_at: number;
+	subscription_status: string | null;
+	subscription_id: string | null;
 }
 
 @customElement("admin-users")
@@ -19,6 +21,7 @@ export class AdminUsers extends LitElement {
 	@state() isLoading = true;
 	@state() error: string | null = null;
 	@state() currentUserEmail: string | null = null;
+	@state() revokingSubscriptions = new Set<number>();
 
 	static override styles = css`
     :host {
@@ -196,6 +199,48 @@ export class AdminUsers extends LitElement {
       opacity: 0.5;
       cursor: not-allowed;
     }
+
+    .revoke-btn {
+      background: transparent;
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .revoke-btn:hover:not(:disabled) {
+      background: var(--accent);
+      color: var(--white);
+    }
+
+    .revoke-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .subscription-badge {
+      background: var(--primary);
+      color: var(--white);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .subscription-badge.active {
+      background: var(--primary);
+      color: var(--white);
+    }
+
+    .subscription-badge.none {
+      background: var(--secondary);
+      color: var(--paynes-gray);
+    }
   `;
 
 	override async connectedCallback() {
@@ -297,15 +342,60 @@ export class AdminUsers extends LitElement {
 		}
 	}
 
-	private async handleDelete(userId: number, email: string) {
+	@state() deleteState: {
+		id: number;
+		type: "user" | "revoke";
+		clicks: number;
+		timeout: number | null;
+	} | null = null;
+
+	private handleDeleteClick(userId: number, email: string, event: Event) {
+		event.stopPropagation();
+
+		// If this is a different item or timeout expired, reset
 		if (
-			!confirm(
-				`Are you sure you want to delete user ${email}? This will delete all their transcriptions and cannot be undone.`,
-			)
+			!this.deleteState ||
+			this.deleteState.id !== userId ||
+			this.deleteState.type !== "user"
 		) {
+			// Clear any existing timeout
+			if (this.deleteState?.timeout) {
+				clearTimeout(this.deleteState.timeout);
+			}
+
+			// Set first click
+			const timeout = window.setTimeout(() => {
+				this.deleteState = null;
+			}, 1000);
+
+			this.deleteState = { id: userId, type: "user", clicks: 1, timeout };
 			return;
 		}
 
+		// Increment clicks
+		const newClicks = this.deleteState.clicks + 1;
+
+		// Clear existing timeout
+		if (this.deleteState.timeout) {
+			clearTimeout(this.deleteState.timeout);
+		}
+
+		// Third click - actually delete
+		if (newClicks === 3) {
+			this.deleteState = null;
+			this.performDeleteUser(userId, email);
+			return;
+		}
+
+		// Second click - reset timeout
+		const timeout = window.setTimeout(() => {
+			this.deleteState = null;
+		}, 1000);
+
+		this.deleteState = { id: userId, type: "user", clicks: newClicks, timeout };
+	}
+
+	private async performDeleteUser(userId: number, email: string) {
 		try {
 			const response = await fetch(`/api/admin/users/${userId}`, {
 				method: "DELETE",
@@ -323,10 +413,102 @@ export class AdminUsers extends LitElement {
 		}
 	}
 
+	private handleRevokeClick(userId: number, email: string, subscriptionId: string, event: Event) {
+		event.stopPropagation();
+
+		// If this is a different item or timeout expired, reset
+		if (
+			!this.deleteState ||
+			this.deleteState.id !== userId ||
+			this.deleteState.type !== "revoke"
+		) {
+			// Clear any existing timeout
+			if (this.deleteState?.timeout) {
+				clearTimeout(this.deleteState.timeout);
+			}
+
+			// Set first click
+			const timeout = window.setTimeout(() => {
+				this.deleteState = null;
+			}, 1000);
+
+			this.deleteState = { id: userId, type: "revoke", clicks: 1, timeout };
+			return;
+		}
+
+		// Increment clicks
+		const newClicks = this.deleteState.clicks + 1;
+
+		// Clear existing timeout
+		if (this.deleteState.timeout) {
+			clearTimeout(this.deleteState.timeout);
+		}
+
+		// Third click - actually revoke
+		if (newClicks === 3) {
+			this.deleteState = null;
+			this.performRevokeSubscription(userId, email, subscriptionId);
+			return;
+		}
+
+		// Second click - reset timeout
+		const timeout = window.setTimeout(() => {
+			this.deleteState = null;
+		}, 1000);
+
+		this.deleteState = { id: userId, type: "revoke", clicks: newClicks, timeout };
+	}
+
+	private async performRevokeSubscription(userId: number, email: string, subscriptionId: string) {
+		this.revokingSubscriptions.add(userId);
+		this.requestUpdate();
+
+		try {
+			const response = await fetch(`/api/admin/users/${userId}/subscription`, {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ subscriptionId }),
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || "Failed to revoke subscription");
+			}
+
+			await this.loadUsers();
+			alert(`Subscription revoked for ${email}`);
+		} catch (error) {
+			console.error("Failed to revoke subscription:", error);
+			alert(`Failed to revoke subscription: ${error instanceof Error ? error.message : "Unknown error"}`);
+			this.revokingSubscriptions.delete(userId);
+		}
+	}
+
+	private getDeleteButtonText(userId: number, type: "user" | "revoke"): string {
+		if (
+			!this.deleteState ||
+			this.deleteState.id !== userId ||
+			this.deleteState.type !== type
+		) {
+			return type === "user" ? "Delete User" : "Revoke Subscription";
+		}
+
+		if (this.deleteState.clicks === 1) {
+			return "Are you sure?";
+		}
+
+		if (this.deleteState.clicks === 2) {
+			return "Final warning!";
+		}
+
+		return type === "user" ? "Delete User" : "Revoke Subscription";
+	}
+
 	private handleCardClick(userId: number, event: Event) {
-		// Don't open modal if clicking on delete button or role select
+		// Don't open modal if clicking on delete button, revoke button, or role select
 		if (
 			(event.target as HTMLElement).closest(".delete-btn") ||
+			(event.target as HTMLElement).closest(".revoke-btn") ||
 			(event.target as HTMLElement).closest(".role-select")
 		) {
 			return;
@@ -409,6 +591,15 @@ export class AdminUsers extends LitElement {
                     <div class="meta-value">${u.transcription_count}</div>
                   </div>
                   <div class="meta-item">
+                    <div class="meta-label">Subscription</div>
+                    <div class="meta-value">
+                      ${u.subscription_status 
+                        ? html`<span class="subscription-badge ${u.subscription_status.toLowerCase()}">${u.subscription_status}</span>` 
+                        : html`<span class="subscription-badge none">None</span>`
+                      }
+                    </div>
+                  </div>
+                  <div class="meta-item">
                     <div class="meta-label">Last Login</div>
                     <div class="meta-value timestamp">
                       ${this.formatTimestamp(u.last_login)}
@@ -431,8 +622,19 @@ export class AdminUsers extends LitElement {
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
                   </select>
-                  <button class="delete-btn" @click=${() => this.handleDelete(u.id, u.email)}>
-                    Delete User
+                  <button 
+                    class="revoke-btn" 
+                    ?disabled=${!u.subscription_status || !u.subscription_id || this.revokingSubscriptions.has(u.id)}
+                    @click=${(e: Event) => {
+											if (u.subscription_id) {
+												this.handleRevokeClick(u.id, u.email, u.subscription_id, e);
+											}
+										}}
+                  >
+                    ${this.revokingSubscriptions.has(u.id) ? "Revoking..." : this.getDeleteButtonText(u.id, "revoke")}
+                  </button>
+                  <button class="delete-btn" @click=${(e: Event) => this.handleDeleteClick(u.id, u.email, e)}>
+                    ${this.getDeleteButtonText(u.id, "user")}
                   </button>
                 </div>
               </div>

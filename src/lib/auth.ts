@@ -366,6 +366,8 @@ export interface UserWithStats {
 	role: UserRole;
 	last_login: number | null;
 	transcription_count: number;
+	subscription_status: string | null;
+	subscription_id: string | null;
 }
 
 export function getAllUsersWithStats(): UserWithStats[] {
@@ -379,9 +381,12 @@ export function getAllUsersWithStats(): UserWithStats[] {
         u.created_at, 
         u.role,
         u.last_login,
-        COUNT(t.id) as transcription_count
+        COUNT(DISTINCT t.id) as transcription_count,
+        s.status as subscription_status,
+        s.id as subscription_id
       FROM users u
       LEFT JOIN transcriptions t ON u.id = t.user_id
+      LEFT JOIN subscriptions s ON u.id = s.user_id AND s.status IN ('active', 'trialing', 'past_due')
       GROUP BY u.id
       ORDER BY u.created_at DESC`,
 		)

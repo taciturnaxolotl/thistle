@@ -180,6 +180,30 @@ const migrations = [
       ALTER TABLE class_waitlist DROP COLUMN section;
     `,
 	},
+	{
+		version: 6,
+		name: "Add subscriptions table for Polar integration",
+		sql: `
+      -- Subscriptions table
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        customer_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        current_period_start INTEGER,
+        current_period_end INTEGER,
+        cancel_at_period_end BOOLEAN DEFAULT 0,
+        canceled_at INTEGER,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
+      CREATE INDEX IF NOT EXISTS idx_subscriptions_customer_id ON subscriptions(customer_id);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

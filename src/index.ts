@@ -66,6 +66,7 @@ import {
 	WhisperServiceManager,
 } from "./lib/transcription";
 import adminHTML from "./pages/admin.html";
+import checkoutHTML from "./pages/checkout.html";
 import classHTML from "./pages/class.html";
 import classesHTML from "./pages/classes.html";
 import indexHTML from "./pages/index.html";
@@ -129,6 +130,7 @@ const server = Bun.serve({
 	routes: {
 		"/": indexHTML,
 		"/admin": adminHTML,
+		"/checkout": checkoutHTML,
 		"/settings": settingsHTML,
 		"/transcribe": transcribeHTML,
 		"/classes": classesHTML,
@@ -627,6 +629,136 @@ const server = Bun.serve({
 					return Response.json(
 						{ error: "Failed to update avatar" },
 						{ status: 500 },
+					);
+				}
+			},
+		},
+		"/api/billing/checkout": {
+			POST: async (req) => {
+				const sessionId = getSessionFromRequest(req);
+				if (!sessionId) {
+					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				}
+				const user = getUserBySession(sessionId);
+				if (!user) {
+					return Response.json({ error: "Invalid session" }, { status: 401 });
+				}
+
+				try {
+					const { polar } = await import("./lib/polar");
+
+					const productId = process.env.POLAR_PRODUCT_ID;
+					if (!productId) {
+						return Response.json(
+							{ error: "Product not configured" },
+							{ status: 500 },
+						);
+					}
+
+					const successUrl = process.env.POLAR_SUCCESS_URL;
+					if (!successUrl) {
+						return Response.json(
+							{ error: "Success URL not configured" },
+							{ status: 500 },
+						);
+					}
+
+					const checkout = await polar.checkouts.create({
+						products: [productId],
+						successUrl,
+						customerEmail: user.email,
+						customerName: user.name ?? undefined,
+						metadata: {
+							userId: user.id.toString(),
+						},
+					});
+
+					return Response.json({ url: checkout.url });
+				} catch (error) {
+					console.error("Failed to create checkout:", error);
+					return Response.json(
+						{ error: "Failed to create checkout session" },
+						{ status: 500 },
+					);
+				}
+			},
+		},
+		"/api/webhooks/polar": {
+			POST: async (req) => {
+				try {
+					const { validateEvent } = await import("@polar-sh/sdk/webhooks");
+
+					// Get raw body as string
+					const rawBody = await req.text();
+					const headers = Object.fromEntries(req.headers.entries());
+
+					// Validate webhook signature
+					const webhookSecret = process.env.POLAR_WEBHOOK_SECRET;
+					if (!webhookSecret) {
+						console.error("[Webhook] POLAR_WEBHOOK_SECRET not configured");
+						return Response.json({ error: "Webhook secret not configured" }, { status: 500 });
+					}
+
+					const event = validateEvent(rawBody, headers, webhookSecret);
+
+					console.log(`[Webhook] Received event: ${event.type}`);
+
+					// Handle different event types
+					switch (event.type) {
+						case "subscription.updated": {
+							const { id, status, customerId, metadata } = event.data;
+							const userId = metadata?.userId
+								? Number.parseInt(metadata.userId as string, 10)
+								: null;
+
+							if (!userId) {
+								console.warn("[Webhook] No userId in subscription metadata");
+								break;
+							}
+
+							// Upsert subscription
+							db.run(
+								`INSERT INTO subscriptions (id, user_id, customer_id, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, updated_at)
+								 VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+								 ON CONFLICT(id) DO UPDATE SET
+								   status = excluded.status,
+								   current_period_start = excluded.current_period_start,
+								   current_period_end = excluded.current_period_end,
+								   cancel_at_period_end = excluded.cancel_at_period_end,
+								   canceled_at = excluded.canceled_at,
+								   updated_at = strftime('%s', 'now')`,
+								[
+									id,
+									userId,
+									customerId,
+									status,
+									event.data.currentPeriodStart
+										? Math.floor(new Date(event.data.currentPeriodStart).getTime() / 1000)
+										: null,
+									event.data.currentPeriodEnd
+										? Math.floor(new Date(event.data.currentPeriodEnd).getTime() / 1000)
+										: null,
+									event.data.cancelAtPeriodEnd ? 1 : 0,
+									event.data.canceledAt
+										? Math.floor(new Date(event.data.canceledAt).getTime() / 1000)
+										: null,
+								],
+							);
+
+							console.log(`[Webhook] Updated subscription ${id} for user ${userId}`);
+							break;
+						}
+
+						default:
+							console.log(`[Webhook] Unhandled event type: ${event.type}`);
+					}
+
+					return Response.json({ received: true });
+				} catch (error) {
+					console.error("[Webhook] Error processing webhook:", error);
+					return Response.json(
+						{ error: "Webhook processing failed" },
+						{ status: 400 },
 					);
 				}
 			},
@@ -1193,6 +1325,55 @@ const server = Bun.serve({
 
 					updateUserRole(userId, role);
 					return Response.json({ success: true });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/admin/users/:id/subscription": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const userId = Number.parseInt(req.params.id, 10);
+					if (Number.isNaN(userId)) {
+						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					const body = await req.json();
+					const { subscriptionId } = body as { subscriptionId: string };
+
+					if (!subscriptionId) {
+						return Response.json(
+							{ error: "Subscription ID required" },
+							{ status: 400 },
+						);
+					}
+
+					try {
+						const { polar } = await import("./lib/polar");
+						await polar.subscriptions.revoke({ id: subscriptionId });
+						console.log(
+							`[Admin] Revoked subscription ${subscriptionId} for user ${userId}`,
+						);
+						return Response.json({
+							success: true,
+							message: "Subscription revoked successfully",
+						});
+					} catch (error) {
+						console.error(
+							`[Admin] Failed to revoke subscription ${subscriptionId}:`,
+							error,
+						);
+						return Response.json(
+							{
+								error:
+									error instanceof Error
+										? error.message
+										: "Failed to revoke subscription",
+							},
+							{ status: 500 },
+						);
+					}
 				} catch (error) {
 					return handleError(error);
 				}

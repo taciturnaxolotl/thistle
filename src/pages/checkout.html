@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Success! - Thistle</title>
+	<link rel="apple-touch-icon" sizes="180x180" href="../../public/favicon/apple-touch-icon.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="../../public/favicon/favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="../../public/favicon/favicon-16x16.png">
+	<link rel="manifest" href="../../public/favicon/site.webmanifest">
+	<link rel="stylesheet" href="../styles/main.css">
+	<script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js"></script>
+</head>
+
+<body>
+	<header>
+		<div class="header-content">
+			<a href="/" class="site-title">
+				<img src="../../public/favicon/favicon-32x32.png" alt="Thistle logo">
+				<span>Thistle</span>
+			</a>
+			<auth-component></auth-component>
+		</div>
+	</header>
+
+	<main>
+		<checkout-success></checkout-success>
+	</main>
+
+	<script type="module" src="../components/auth.ts"></script>
+	<script type="module" src="../components/checkout-success.ts"></script>
+</body>
+
+</html>

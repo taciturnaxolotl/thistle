@@ -27,7 +27,7 @@ interface Passkey {
 	last_used_at: number | null;
 }
 
-type SettingsPage = "account" | "sessions" | "passkeys" | "danger";
+type SettingsPage = "account" | "sessions" | "passkeys" | "billing" | "danger";
 
 @customElement("user-settings")
 export class UserSettings extends LitElement {
@@ -656,6 +656,31 @@ export class UserSettings extends LitElement {
 		}
 	}
 
+	async handleCreateCheckout() {
+		this.loading = true;
+		this.error = "";
+
+		try {
+			const response = await fetch("/api/billing/checkout", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to create checkout session";
+				return;
+			}
+
+			const { url } = await response.json();
+			window.location.href = url;
+		} catch {
+			this.error = "Failed to create checkout session";
+		} finally {
+			this.loading = false;
+		}
+	}
+
 	generateRandomAvatar() {
 		// Generate a random string for the avatar
 		const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -1051,6 +1076,27 @@ export class UserSettings extends LitElement {
 		`;
 	}
 
+	renderBillingPage() {
+		return html`
+			<div class="content-inner">
+				<div class="section">
+					<h2 class="section-title">Billing & Subscription</h2>
+					<p class="field-description" style="margin-bottom: 1.5rem;">
+						Manage your subscription and billing information.
+					</p>
+					<button
+						class="btn btn-affirmative"
+						@click=${this.handleCreateCheckout}
+						?disabled=${this.loading}
+					>
+						${this.loading ? "Loading..." : "Subscribe to Premium"}
+					</button>
+					${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
+				</div>
+			</div>
+		`;
+	}
+
 	renderDangerPage() {
 		return html`
 			<div class="content-inner">
@@ -1108,6 +1154,14 @@ export class UserSettings extends LitElement {
 						Sessions
 					</button>
 					<button
+						class="tab ${this.currentPage === "billing" ? "active" : ""}"
+						@click=${() => {
+							this.currentPage = "billing";
+						}}
+					>
+						Billing
+					</button>
+					<button
 						class="tab ${this.currentPage === "danger" ? "active" : ""}"
 						@click=${() => {
 							this.currentPage = "danger";
@@ -1119,6 +1173,7 @@ export class UserSettings extends LitElement {
 
 				${this.currentPage === "account" ? this.renderAccountPage() : ""}
 				${this.currentPage === "sessions" ? this.renderSessionsPage() : ""}
+				${this.currentPage === "billing" ? this.renderBillingPage() : ""}
 				${this.currentPage === "danger" ? this.renderDangerPage() : ""}
 			</div>
 

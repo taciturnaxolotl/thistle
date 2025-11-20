@@ -415,6 +415,9 @@ export class AuthComponent extends LitElement {
 				await this.checkAuth();
 				window.dispatchEvent(new CustomEvent("auth-changed"));
 			}
+		} catch (error) {
+			// Catch crypto.subtle errors and other exceptions
+			this.error = error instanceof Error ? error.message : "An error occurred";
 		} finally {
 			this.isSubmitting = false;
 		}

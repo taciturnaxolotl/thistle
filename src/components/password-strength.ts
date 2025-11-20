@@ -139,6 +139,12 @@ export class PasswordStrength extends LitElement {
 			return;
 		}
 
+		// Skip if crypto.subtle is not available (non-HTTPS)
+		if (!crypto.subtle) {
+			this.hasChecked = true;
+			return;
+		}
+
 		this.isChecking = true;
 		this.isPwned = false;
 

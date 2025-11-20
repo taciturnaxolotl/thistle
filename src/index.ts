@@ -133,6 +133,11 @@ const server = Bun.serve({
 		"/transcribe": transcribeHTML,
 		"/classes": classesHTML,
 		"/classes/*": classHTML,
+		"/apple-touch-icon.png": Bun.file("./public/favicon/apple-touch-icon.png"),
+		"/favicon-32x32.png": Bun.file("./public/favicon/favicon-32x32.png"),
+		"/favicon-16x16.png": Bun.file("./public/favicon/favicon-16x16.png"),
+		"/site.webmanifest": Bun.file("./public/favicon/site.webmanifest"),
+		"/favicon.ico": Bun.file("./public/favicon/favicon.ico"),
 		"/api/auth/register": {
 			POST: async (req) => {
 				try {

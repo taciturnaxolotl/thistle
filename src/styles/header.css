@@ -28,6 +28,11 @@ header {
 	gap: 0.5rem;
 }
 
+.site-title img {
+	width: 2rem;
+	height: 2rem;
+}
+
 .site-title:hover {
 	color: var(--primary);
 }

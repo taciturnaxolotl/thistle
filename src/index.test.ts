@@ -600,6 +600,38 @@ describe("API Endpoints - Session Management", () => {
 
 			expect(response.status).toBe(404);
 		});
+
+		serverTest("should not delete current session", async () => {
+			// Register user
+			const hashedPassword = await clientHashPassword(
+				TEST_USER.email,
+				TEST_USER.password,
+			);
+			const registerResponse = await fetch(`${BASE_URL}/api/auth/register`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					email: TEST_USER.email,
+					password: hashedPassword,
+				}),
+			});
+			const sessionCookie = extractSessionCookie(registerResponse);
+
+			// Try to delete own current session
+			const response = await authRequest(
+				`${BASE_URL}/api/sessions`,
+				sessionCookie,
+				{
+					method: "DELETE",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ sessionId: sessionCookie }),
+				},
+			);
+
+			expect(response.status).toBe(400);
+			const data = await response.json();
+			expect(data.error).toContain("Cannot kill current session");
+		});
 	});
 });
 

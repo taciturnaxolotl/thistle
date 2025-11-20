@@ -852,7 +852,8 @@ export class UserSettings extends LitElement {
 			});
 
 			if (!response.ok) {
-				this.error = "Failed to kill session";
+				const data = await response.json();
+				this.error = data.error || "Failed to kill session";
 				return;
 			}
 

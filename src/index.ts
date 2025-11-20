@@ -456,6 +456,7 @@ const server = Bun.serve({
 						user_agent: s.user_agent,
 						created_at: s.created_at,
 						expires_at: s.expires_at,
+						is_current: s.id === sessionId,
 					})),
 				});
 			},
@@ -473,6 +474,13 @@ const server = Bun.serve({
 				if (!targetSessionId) {
 					return Response.json(
 						{ error: "Session ID required" },
+						{ status: 400 },
+					);
+				}
+				// Prevent deleting current session
+				if (targetSessionId === currentSessionId) {
+					return Response.json(
+						{ error: "Cannot kill current session. Use logout instead." },
 						{ status: 400 },
 					);
 				}

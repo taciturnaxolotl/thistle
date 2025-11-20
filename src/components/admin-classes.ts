@@ -497,15 +497,24 @@ export class AdminClasses extends LitElement {
 
 	private async handleToggleArchive(classId: string) {
 		try {
+			// Find the class to toggle its archived state
+			const classToToggle = this.classes.find(c => c.id === classId);
+			if (!classToToggle) return;
+
 			const response = await fetch(`/api/classes/${classId}/archive`, {
 				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ archived: !classToToggle.archived }),
 			});
 
 			if (!response.ok) {
 				throw new Error("Failed to update class");
 			}
 
-			await this.loadData();
+			// Update local state instead of reloading
+			this.classes = this.classes.map(c => 
+				c.id === classId ? { ...c, archived: !c.archived } : c
+			);
 		} catch {
 			this.error = "Failed to update class. Please try again.";
 		}

@@ -349,7 +349,7 @@ export class AdminUsers extends LitElement {
 		timeout: number | null;
 	} | null = null;
 
-	private handleDeleteClick(userId: number, email: string, event: Event) {
+	private handleDeleteClick(userId: number, event: Event) {
 		event.stopPropagation();
 
 		// If this is a different item or timeout expired, reset
@@ -383,7 +383,7 @@ export class AdminUsers extends LitElement {
 		// Third click - actually delete
 		if (newClicks === 3) {
 			this.deleteState = null;
-			this.performDeleteUser(userId, email);
+			this.performDeleteUser(userId);
 			return;
 		}
 
@@ -395,7 +395,7 @@ export class AdminUsers extends LitElement {
 		this.deleteState = { id: userId, type: "user", clicks: newClicks, timeout };
 	}
 
-	private async performDeleteUser(userId: number, email: string) {
+	private async performDeleteUser(userId: number) {
 		try {
 			const response = await fetch(`/api/admin/users/${userId}`, {
 				method: "DELETE",
@@ -405,7 +405,8 @@ export class AdminUsers extends LitElement {
 				throw new Error("Failed to delete user");
 			}
 
-			await this.loadUsers();
+			// Remove user from local array instead of reloading
+			this.users = this.users.filter(u => u.id !== userId);
 			this.dispatchEvent(new CustomEvent("user-deleted"));
 		} catch (error) {
 			console.error("Failed to delete user:", error);
@@ -633,7 +634,7 @@ export class AdminUsers extends LitElement {
                   >
                     ${this.revokingSubscriptions.has(u.id) ? "Revoking..." : this.getDeleteButtonText(u.id, "revoke")}
                   </button>
-                  <button class="delete-btn" @click=${(e: Event) => this.handleDeleteClick(u.id, u.email, e)}>
+                  <button class="delete-btn" @click=${(e: Event) => this.handleDeleteClick(u.id, e)}>
                     ${this.getDeleteButtonText(u.id, "user")}
                   </button>
                 </div>

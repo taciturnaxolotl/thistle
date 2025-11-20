@@ -273,7 +273,9 @@ export class UploadRecordingModal extends LitElement {
 		} catch (error) {
 			console.error("Upload failed:", error);
 			this.error =
-				error instanceof Error ? error.message : "Upload failed. Please try again.";
+				error instanceof Error
+					? error.message
+					: "Upload failed. Please try again.";
 		} finally {
 			this.uploading = false;
 		}

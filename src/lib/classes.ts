@@ -28,10 +28,7 @@ export interface ClassMember {
 /**
  * Get all classes for a user (either enrolled or admin sees all)
  */
-export function getClassesForUser(
-	userId: number,
-	isAdmin: boolean,
-): Class[] {
+export function getClassesForUser(userId: number, isAdmin: boolean): Class[] {
 	if (isAdmin) {
 		return db
 			.query<Class, []>(
@@ -377,4 +374,3 @@ export function getAllWaitlistEntries(): WaitlistEntry[] {
 export function deleteWaitlistEntry(id: string): void {
 	db.query("DELETE FROM class_waitlist WHERE id = ?").run(id);
 }
-

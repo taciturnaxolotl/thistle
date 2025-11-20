@@ -202,9 +202,12 @@ export class AdminTranscriptions extends LitElement {
 		}
 
 		try {
-			const response = await fetch(`/api/admin/transcriptions/${transcriptionId}`, {
-				method: "DELETE",
-			});
+			const response = await fetch(
+				`/api/admin/transcriptions/${transcriptionId}`,
+				{
+					method: "DELETE",
+				},
+			);
 
 			if (!response.ok) {
 				throw new Error("Failed to delete transcription");
@@ -242,7 +245,7 @@ export class AdminTranscriptions extends LitElement {
 		return this.transcriptions.filter(
 			(t) =>
 				t.original_filename.toLowerCase().includes(query) ||
-				(t.user_name && t.user_name.toLowerCase().includes(query)) ||
+				t.user_name?.toLowerCase().includes(query) ||
 				t.user_email.toLowerCase().includes(query),
 		);
 	}

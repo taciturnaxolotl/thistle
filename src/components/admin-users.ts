@@ -235,7 +235,13 @@ export class AdminUsers extends LitElement {
 		}
 	}
 
-	private async handleRoleChange(userId: number, email: string, newRole: "user" | "admin", oldRole: "user" | "admin", event: Event) {
+	private async handleRoleChange(
+		userId: number,
+		email: string,
+		newRole: "user" | "admin",
+		oldRole: "user" | "admin",
+		event: Event,
+	) {
 		const select = event.target as HTMLSelectElement;
 
 		const isDemotingSelf =
@@ -345,7 +351,7 @@ export class AdminUsers extends LitElement {
 		return this.users.filter(
 			(u) =>
 				u.email.toLowerCase().includes(query) ||
-				(u.name && u.name.toLowerCase().includes(query)),
+				u.name?.toLowerCase().includes(query),
 		);
 	}
 

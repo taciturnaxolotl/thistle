@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { expect, test, afterEach } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { unlinkSync } from "node:fs";
 
 const TEST_DB = "test-schema.db";
@@ -160,10 +160,9 @@ test("class foreign key constraints work", () => {
 	]);
 
 	const enrollment = db
-		.query<
-			{ class_id: string; user_id: number },
-			[]
-		>("SELECT class_id, user_id FROM class_members")
+		.query<{ class_id: string; user_id: number }, []>(
+			"SELECT class_id, user_id FROM class_members",
+		)
 		.get();
 
 	expect(enrollment?.class_id).toBe("class-1");
@@ -219,10 +218,9 @@ test("transcription status defaults to pending", () => {
 	);
 
 	const transcription = db
-		.query<
-			{ status: string; progress: number },
-			[]
-		>("SELECT status, progress FROM transcriptions WHERE id = 'trans-1'")
+		.query<{ status: string; progress: number }, []>(
+			"SELECT status, progress FROM transcriptions WHERE id = 'trans-1'",
+		)
 		.get();
 
 	expect(transcription?.status).toBe("pending");

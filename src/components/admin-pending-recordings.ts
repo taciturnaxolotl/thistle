@@ -16,6 +16,25 @@ interface PendingRecording {
 	status: string;
 }
 
+interface Class {
+	id: string;
+	name: string;
+	course_code: string;
+}
+
+interface Transcription {
+	id: string;
+	original_filename: string;
+	status: string;
+	meeting_time_id: string | null;
+	created_at: number;
+}
+
+interface MeetingTime {
+	id: string;
+	label: string;
+}
+
 @customElement("admin-pending-recordings")
 export class AdminPendingRecordings extends LitElement {
 	@state() recordings: PendingRecording[] = [];
@@ -228,9 +247,9 @@ export class AdminPendingRecordings extends LitElement {
 			const classesGrouped = data.classes || {};
 
 			// Flatten all classes
-			const allClasses: any[] = [];
+			const allClasses: Class[] = [];
 			for (const classes of Object.values(classesGrouped)) {
-				allClasses.push(...(classes as any[]));
+				allClasses.push(...(classes as Class[]));
 			}
 
 			// Fetch transcriptions for each class
@@ -243,9 +262,9 @@ export class AdminPendingRecordings extends LitElement {
 						if (!classResponse.ok) return;
 
 						const classData = await classResponse.json();
-						const pendingTranscriptions = (classData.transcriptions || []).filter(
-							(t: any) => t.status === "pending",
-						);
+						const pendingTranscriptions = (
+							classData.transcriptions || []
+						).filter((t: Transcription) => t.status === "pending");
 
 						for (const transcription of pendingTranscriptions) {
 							// Get user info
@@ -258,7 +277,7 @@ export class AdminPendingRecordings extends LitElement {
 
 							// Find meeting label
 							const meetingTime = classData.meetingTimes.find(
-								(m: any) => m.id === transcription.meeting_time_id,
+								(m: MeetingTime) => m.id === transcription.meeting_time_id,
 							);
 
 							pendingRecordings.push({

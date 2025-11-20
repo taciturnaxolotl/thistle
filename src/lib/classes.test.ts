@@ -1,16 +1,14 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { unlinkSync } from "node:fs";
 import {
 	createClass,
 	createMeetingTime,
 	enrollUserInClass,
-	getClassById,
 	getClassesForUser,
 	getMeetingTimesForClass,
-	getTranscriptionsForClass,
 	isUserEnrolledInClass,
 } from "./classes";
-import { Database } from "bun:sqlite";
 
 const TEST_DB = "test-classes.db";
 let db: Database;
@@ -110,6 +108,7 @@ test("enrolls user in class", () => {
 	const userId = db
 		.query<{ id: number }, []>("SELECT last_insert_rowid() as id")
 		.get()?.id;
+	if (!userId) throw new Error("Failed to create user");
 
 	// Create class
 	const cls = createClass({
@@ -121,10 +120,10 @@ test("enrolls user in class", () => {
 	});
 
 	// Enroll user
-	enrollUserInClass(userId!, cls.id);
+	enrollUserInClass(userId, cls.id);
 
 	// Verify enrollment
-	const isEnrolled = isUserEnrolledInClass(userId!, cls.id);
+	const isEnrolled = isUserEnrolledInClass(userId, cls.id);
 	expect(isEnrolled).toBe(true);
 });
 
@@ -137,6 +136,7 @@ test("gets classes for enrolled user", () => {
 	const userId = db
 		.query<{ id: number }, []>("SELECT last_insert_rowid() as id")
 		.get()?.id;
+	if (!userId) throw new Error("Failed to create user");
 
 	// Create two classes
 	const cls1 = createClass({
@@ -147,7 +147,7 @@ test("gets classes for enrolled user", () => {
 		year: 2024,
 	});
 
-	const cls2 = createClass({
+	const _cls2 = createClass({
 		course_code: "CS 102",
 		name: "Data Structures",
 		professor: "Dr. Jones",
@@ -156,15 +156,15 @@ test("gets classes for enrolled user", () => {
 	});
 
 	// Enroll user in only one class
-	enrollUserInClass(userId!, cls1.id);
+	enrollUserInClass(userId, cls1.id);
 
 	// Get classes for user
-	const classes = getClassesForUser(userId!, false);
+	const classes = getClassesForUser(userId, false);
 	expect(classes.length).toBe(1);
 	expect(classes[0]?.id).toBe(cls1.id);
 
 	// Admin should see all
-	const allClasses = getClassesForUser(userId!, true);
+	const allClasses = getClassesForUser(userId, true);
 	expect(allClasses.length).toBe(2);
 });
 
@@ -177,8 +177,8 @@ test("creates and retrieves meeting times", () => {
 		year: 2024,
 	});
 
-	const meeting1 = createMeetingTime(cls.id, "Monday Lecture");
-	const meeting2 = createMeetingTime(cls.id, "Wednesday Lab");
+	const _meeting1 = createMeetingTime(cls.id, "Monday Lecture");
+	const _meeting2 = createMeetingTime(cls.id, "Wednesday Lab");
 
 	const meetings = getMeetingTimesForClass(cls.id);
 	expect(meetings.length).toBe(2);

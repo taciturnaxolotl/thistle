@@ -26,11 +26,14 @@ import {
 	updateUserRole,
 } from "./lib/auth";
 import {
+	addToWaitlist,
 	createClass,
 	createMeetingTime,
 	deleteClass,
 	deleteMeetingTime,
+	deleteWaitlistEntry,
 	enrollUserInClass,
+	getAllWaitlistEntries,
 	getClassById,
 	getClassesForUser,
 	getClassMembers,
@@ -42,9 +45,6 @@ import {
 	searchClassesByCourseCode,
 	toggleClassArchive,
 	updateMeetingTime,
-	addToWaitlist,
-	getAllWaitlistEntries,
-	deleteWaitlistEntry,
 } from "./lib/classes";
 import { handleError, ValidationErrors } from "./lib/errors";
 import { requireAdmin, requireAuth } from "./lib/middleware";
@@ -981,7 +981,9 @@ const server = Bun.serve({
 					const formData = await req.formData();
 					const file = formData.get("audio") as File;
 					const classId = formData.get("class_id") as string | null;
-					const meetingTimeId = formData.get("meeting_time_id") as string | null;
+					const meetingTimeId = formData.get("meeting_time_id") as
+						| string
+						| null;
 
 					if (!file) throw ValidationErrors.missingField("audio");
 
@@ -1853,7 +1855,10 @@ const server = Bun.serve({
 						.get(transcriptId);
 
 					if (transcription) {
-						whisperService.startTranscription(transcriptId, transcription.filename);
+						whisperService.startTranscription(
+							transcriptId,
+							transcription.filename,
+						);
 					}
 
 					return Response.json({ success: true });

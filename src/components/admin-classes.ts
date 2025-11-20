@@ -513,7 +513,11 @@ export class AdminClasses extends LitElement {
 
 	private handleDeleteClick(id: string, type: "class" | "waitlist") {
 		// If this is a different item or timeout expired, reset
-		if (!this.deleteState || this.deleteState.id !== id || this.deleteState.type !== type) {
+		if (
+			!this.deleteState ||
+			this.deleteState.id !== id ||
+			this.deleteState.type !== type
+		) {
 			// Clear any existing timeout
 			if (this.deleteState?.timeout) {
 				clearTimeout(this.deleteState.timeout);
@@ -556,7 +560,11 @@ export class AdminClasses extends LitElement {
 	}
 
 	private getDeleteButtonText(id: string, type: "class" | "waitlist"): string {
-		if (!this.deleteState || this.deleteState.id !== id || this.deleteState.type !== type) {
+		if (
+			!this.deleteState ||
+			this.deleteState.id !== id ||
+			this.deleteState.type !== type
+		) {
 			return "Delete";
 		}
 
@@ -633,13 +641,17 @@ export class AdminClasses extends LitElement {
       <div class="tabs">
         <button
           class="tab ${this.activeTab === "classes" ? "active" : ""}"
-          @click=${() => { this.activeTab = "classes"; }}
+          @click=${() => {
+						this.activeTab = "classes";
+					}}
         >
           Classes
         </button>
         <button
           class="tab ${this.activeTab === "waitlist" ? "active" : ""}"
-          @click=${() => { this.activeTab = "waitlist"; }}
+          @click=${() => {
+						this.activeTab = "waitlist";
+					}}
         >
           Waitlist
           ${this.waitlist.length > 0 ? html`<span class="tab-badge">${this.waitlist.length}</span>` : ""}
@@ -787,7 +799,8 @@ export class AdminClasses extends LitElement {
 		if (entry.meeting_times) {
 			try {
 				const parsed = JSON.parse(entry.meeting_times);
-				this.meetingTimes = Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
+				this.meetingTimes =
+					Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
 			} catch {
 				this.meetingTimes = [];
 			}
@@ -866,7 +879,10 @@ export class AdminClasses extends LitElement {
 			};
 		} catch (error) {
 			console.error("Error in submitApproval:", error);
-			this.error = error instanceof Error ? error.message : "Failed to approve waitlist entry. Please try again.";
+			this.error =
+				error instanceof Error
+					? error.message
+					: "Failed to approve waitlist entry. Please try again.";
 		}
 	}
 

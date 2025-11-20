@@ -26,11 +26,20 @@ interface Transcription {
 	meeting_time_id: string | null;
 	filename: string;
 	original_filename: string;
-	status: "pending" | "selected" | "uploading" | "processing" | "transcribing" | "completed" | "failed";
+	status:
+		| "pending"
+		| "selected"
+		| "uploading"
+		| "processing"
+		| "transcribing"
+		| "completed"
+		| "failed";
 	progress: number;
 	error_message: string | null;
 	created_at: number;
 	updated_at: number;
+	vttContent?: string;
+	audioUrl?: string;
 }
 
 @customElement("class-view")
@@ -312,7 +321,7 @@ export class ClassView extends LitElement {
 	private extractClassId() {
 		const path = window.location.pathname;
 		const match = path.match(/^\/classes\/(.+)$/);
-		if (match && match[1]) {
+		if (match?.[1]) {
 			this.classId = match[1];
 		}
 	}
@@ -351,16 +360,20 @@ export class ClassView extends LitElement {
 	}
 
 	private async loadVTTForCompleted() {
-		const completed = this.transcriptions.filter((t) => t.status === "completed");
+		const completed = this.transcriptions.filter(
+			(t) => t.status === "completed",
+		);
 
 		await Promise.all(
 			completed.map(async (transcription) => {
 				try {
-					const response = await fetch(`/api/transcriptions/${transcription.id}?format=vtt`);
+					const response = await fetch(
+						`/api/transcriptions/${transcription.id}?format=vtt`,
+					);
 					if (response.ok) {
 						const vttContent = await response.text();
-						(transcription as any).vttContent = vttContent;
-						(transcription as any).audioUrl = `/api/transcriptions/${transcription.id}/audio`;
+						transcription.vttContent = vttContent;
+						transcription.audioUrl = `/api/transcriptions/${transcription.id}/audio`;
 						this.requestUpdate();
 					}
 				} catch (error) {
@@ -371,7 +384,12 @@ export class ClassView extends LitElement {
 	}
 
 	private connectToTranscriptionStreams() {
-		const activeStatuses = ["selected", "uploading", "processing", "transcribing"];
+		const activeStatuses = [
+			"selected",
+			"uploading",
+			"processing",
+			"transcribing",
+		];
 		for (const transcription of this.transcriptions) {
 			if (activeStatuses.includes(transcription.status)) {
 				this.connectToStream(transcription.id);
@@ -382,15 +400,20 @@ export class ClassView extends LitElement {
 	private connectToStream(transcriptionId: string) {
 		if (this.eventSources.has(transcriptionId)) return;
 
-		const eventSource = new EventSource(`/api/transcriptions/${transcriptionId}/stream`);
+		const eventSource = new EventSource(
+			`/api/transcriptions/${transcriptionId}/stream`,
+		);
 
 		eventSource.addEventListener("update", async (event) => {
 			const update = JSON.parse(event.data);
-			const transcription = this.transcriptions.find((t) => t.id === transcriptionId);
+			const transcription = this.transcriptions.find(
+				(t) => t.id === transcriptionId,
+			);
 
 			if (transcription) {
 				if (update.status !== undefined) transcription.status = update.status;
-				if (update.progress !== undefined) transcription.progress = update.progress;
+				if (update.progress !== undefined)
+					transcription.progress = update.progress;
 
 				if (update.status === "completed") {
 					await this.loadVTTForCompleted();
@@ -557,12 +580,12 @@ export class ClassView extends LitElement {
 						}
 
             ${
-							t.status === "completed" && (t as any).audioUrl && (t as any).vttContent
+							t.status === "completed" && t.audioUrl && t.vttContent
 								? html`
               <div class="audio-player">
-                <audio id="audio-${t.id}" preload="metadata" controls src="${(t as any).audioUrl}"></audio>
+                <audio id="audio-${t.id}" preload="metadata" controls src="${t.audioUrl}"></audio>
               </div>
-              <vtt-viewer .vttContent=${(t as any).vttContent} .audioId=${`audio-${t.id}`}></vtt-viewer>
+              <vtt-viewer .vttContent=${t.vttContent} .audioId=${`audio-${t.id}`}></vtt-viewer>
             `
 								: ""
 						}

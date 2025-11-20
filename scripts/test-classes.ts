@@ -1,6 +1,11 @@
 #!/usr/bin/env bun
 import db from "../src/db/schema";
-import { createClass, enrollUserInClass, getMeetingTimesForClass, createMeetingTime } from "../src/lib/classes";
+import {
+	createClass,
+	createMeetingTime,
+	enrollUserInClass,
+	getMeetingTimesForClass,
+} from "../src/lib/classes";
 
 // Create a test user (admin)
 const email = "admin@thistle.test";
@@ -11,11 +16,14 @@ const existingUser = db
 let userId: number;
 
 if (!existingUser) {
-	db.run(
-		"INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)",
-		[email, "test-hash", "admin"],
-	);
-	userId = db.query<{ id: number }, []>("SELECT last_insert_rowid() as id").get()!.id;
+	db.run("INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)", [
+		email,
+		"test-hash",
+		"admin",
+	]);
+	userId = db
+		.query<{ id: number }, []>("SELECT last_insert_rowid() as id")
+		.get()?.id;
 	console.log(`✅ Created admin user: ${email} (ID: ${userId})`);
 } else {
 	userId = existingUser.id;
@@ -31,7 +39,9 @@ const cls = createClass({
 	year: 2024,
 });
 
-console.log(`✅ Created class: ${cls.course_code} - ${cls.name} (ID: ${cls.id})`);
+console.log(
+	`✅ Created class: ${cls.course_code} - ${cls.name} (ID: ${cls.id})`,
+);
 
 // Enroll the admin in the class
 enrollUserInClass(userId, cls.id);
@@ -51,4 +61,4 @@ console.log(`- Class ID: ${cls.id}`);
 console.log(`- Course: ${cls.course_code} - ${cls.name}`);
 console.log(`- Professor: ${cls.professor}`);
 console.log(`- Semester: ${cls.semester} ${cls.year}`);
-console.log(`- Meetings: ${meetings.map(m => m.label).join(", ")}`);
+console.log(`- Meetings: ${meetings.map((m) => m.label).join(", ")}`);

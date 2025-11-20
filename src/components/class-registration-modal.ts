@@ -10,6 +10,7 @@ interface ClassResult {
 	professor: string;
 	semester: string;
 	year: number;
+	is_enrolled?: boolean;
 }
 
 @customElement("class-registration-modal")
@@ -194,7 +195,13 @@ export class ClassRegistrationModal extends LitElement {
       transition: all 0.2s;
     }
 
-    .class-card:hover:not(:disabled) {
+    .class-card.enrolled {
+      opacity: 0.6;
+      background: var(--background);
+      cursor: default;
+    }
+
+    .class-card:hover:not(:disabled):not(.enrolled) {
       border-color: var(--accent);
       transform: translateX(4px);
     }
@@ -202,6 +209,17 @@ export class ClassRegistrationModal extends LitElement {
     .class-card:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+
+    .enrolled-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      background: var(--secondary);
+      color: var(--text);
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
     }
 
     .class-header {
@@ -422,11 +440,19 @@ export class ClassRegistrationModal extends LitElement {
 
 		this.isSearching = true;
 		this.error = "";
+		this.suggestedQuery = "";
 		this.hasSearched = true;
+
+		// Auto-remove section numbers (e.g., MATH-1720-01 -> MATH-1720)
+		let queryToSearch = this.searchQuery.trim();
+		if (queryToSearch.match(/.*-\d{2,}$/)) {
+			queryToSearch = queryToSearch.replace(/-\d{2,}$/, "");
+			this.searchQuery = queryToSearch;
+		}
 
 		try {
 			const response = await fetch(
-				`/api/classes/search?q=${encodeURIComponent(this.searchQuery.trim())}`,
+				`/api/classes/search?q=${encodeURIComponent(queryToSearch)}`,
 			);
 
 			if (!response.ok) {
@@ -681,29 +707,38 @@ export class ClassRegistrationModal extends LitElement {
                       ${this.results.map(
 												(cls) => html`
                         <button
-                          class="class-card"
-                          @click=${() => this.handleJoin(cls.id)}
-                          ?disabled=${this.isJoining}
+                          class="class-card ${cls.is_enrolled ? "enrolled" : ""}"
+                          @click=${() => !cls.is_enrolled && this.handleJoin(cls.id)}
+                          ?disabled=${this.isJoining || cls.is_enrolled}
                         >
                           <div class="class-header">
                             <div class="class-info">
-                              <div class="course-code">${cls.course_code}</div>
+                              <div class="course-code">
+                                ${cls.course_code}
+                                ${cls.is_enrolled ? html`<span class="enrolled-badge">Registered</span>` : ""}
+                              </div>
                               <div class="class-name">${cls.name}</div>
                               <div class="class-meta">
                                 <span>👤 ${cls.professor}</span>
                                 <span>📅 ${cls.semester} ${cls.year}</span>
                               </div>
                             </div>
-                            <button
-                              class="join-btn"
-                              ?disabled=${this.isJoining}
-                              @click=${(e: Event) => {
-																e.stopPropagation();
-																this.handleJoin(cls.id);
-															}}
-                            >
-                              ${this.isJoining ? "Joining..." : "Join"}
-                            </button>
+                            ${
+															!cls.is_enrolled
+																? html`
+                              <button
+                                class="join-btn"
+                                ?disabled=${this.isJoining}
+                                @click=${(e: Event) => {
+																	e.stopPropagation();
+																	this.handleJoin(cls.id);
+																}}
+                              >
+                                ${this.isJoining ? "Joining..." : "Join"}
+                              </button>
+                            `
+																: ""
+														}
                           </div>
                         </button>
                       `,

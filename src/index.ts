@@ -1549,7 +1549,7 @@ const server = Bun.serve({
 		"/api/classes/search": {
 			GET: async (req) => {
 				try {
-					requireAuth(req);
+					const user = requireAuth(req);
 					const url = new URL(req.url);
 					const query = url.searchParams.get("q");
 
@@ -1558,7 +1558,22 @@ const server = Bun.serve({
 					}
 
 					const classes = searchClassesByCourseCode(query);
-					return Response.json({ classes });
+
+					// Get user's enrolled classes to mark them
+					const enrolledClassIds = db
+						.query<{ class_id: string }, [number]>(
+							"SELECT class_id FROM class_members WHERE user_id = ?",
+						)
+						.all(user.id)
+						.map((row) => row.class_id);
+
+					// Add is_enrolled flag to each class
+					const classesWithEnrollment = classes.map((cls) => ({
+						...cls,
+						is_enrolled: enrolledClassIds.includes(cls.id),
+					}));
+
+					return Response.json({ classes: classesWithEnrollment });
 				} catch (error) {
 					return handleError(error);
 				}

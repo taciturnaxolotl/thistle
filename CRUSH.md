@@ -581,6 +581,57 @@ bun scripts/make-admin.ts user@example.com
 - Admin link shows in auth menu only for admin users
 - Redirects to home page if non-admin accesses admin page
 
+## Subscription System
+
+The application uses Polar for subscription management to gate access to transcription features.
+
+**Subscription requirement:**
+- Users must have an active subscription to upload and transcribe audio files
+- Users can join classes and request classes without a subscription
+- Admins bypass subscription requirements
+
+**Protected routes:**
+- `POST /api/transcriptions` - Upload audio file (requires subscription or admin)
+- `GET /api/transcriptions` - List user's transcriptions (requires subscription or admin)
+- `GET /api/transcriptions/:id` - Get transcription details (requires subscription or admin)
+- `GET /api/transcriptions/:id/audio` - Download audio file (requires subscription or admin)
+- `GET /api/transcriptions/:id/stream` - Real-time transcription updates (requires subscription or admin)
+
+**Open routes (no subscription required):**
+- All authentication endpoints (`/api/auth/*`)
+- Class search and joining (`/api/classes/search`, `/api/classes/join`)
+- Waitlist requests (`/api/classes/waitlist`)
+- Billing/subscription management (`/api/billing/*`)
+
+**Subscription statuses:**
+- `active` - Full access to transcription features
+- `trialing` - Trial period, full access
+- `past_due` - Payment failed but still has access (grace period)
+- `canceled` - No access to transcription features
+- `expired` - No access to transcription features
+
+**Implementation:**
+- `subscriptions` table tracks user subscriptions from Polar
+- `hasActiveSubscription(userId)` checks for active/trialing/past_due status
+- `requireSubscription()` middleware enforces subscription requirement
+- `/api/auth/me` returns `has_subscription` boolean
+- Webhook at `/api/webhooks/polar` receives subscription updates from Polar
+- Frontend components check `has_subscription` and show subscribe prompt
+
+**User settings with query parameters:**
+- Settings page supports `?tab=<tabname>` query parameter to open specific tabs
+- Valid tabs: `account`, `sessions`, `passkeys`, `billing`, `danger`
+- Example: `/settings?tab=billing` opens the billing tab directly
+- Subscribe prompts link to `/settings?tab=billing` for direct access
+- URL updates when switching tabs (browser history support)
+
+**Testing subscriptions:**
+Manually add a test subscription to the database:
+```sql
+INSERT INTO subscriptions (id, user_id, customer_id, status) 
+VALUES ('test-sub', <user_id>, 'test-customer', 'active');
+```
+
 ## Future Additions
 
 As the codebase grows, document:

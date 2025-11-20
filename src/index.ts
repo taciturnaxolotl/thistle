@@ -47,7 +47,11 @@ import {
 	updateMeetingTime,
 } from "./lib/classes";
 import { handleError, ValidationErrors } from "./lib/errors";
-import { requireAdmin, requireAuth } from "./lib/middleware";
+import {
+	requireAdmin,
+	requireAuth,
+	requireSubscription,
+} from "./lib/middleware";
 import {
 	createAuthenticationOptions,
 	createRegistrationOptions,
@@ -273,12 +277,21 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				// Check subscription status
+				const subscription = db
+					.query<{ status: string }, [number]>(
+						"SELECT status FROM subscriptions WHERE user_id = ? AND status IN ('active', 'trialing', 'past_due') ORDER BY created_at DESC LIMIT 1",
+					)
+					.get(user.id);
+
 				return Response.json({
 					email: user.email,
 					name: user.name,
 					avatar: user.avatar,
 					created_at: user.created_at,
 					role: user.role,
+					has_subscription: !!subscription,
 				});
 			},
 		},
@@ -696,14 +709,17 @@ const server = Bun.serve({
 
 				try {
 					// Get subscription from database
-					const subscription = db.query<{
-						id: string;
-						status: string;
-						current_period_start: number | null;
-						current_period_end: number | null;
-						cancel_at_period_end: number;
-						canceled_at: number | null;
-					}>(
+					const subscription = db.query<
+						{
+							id: string;
+							status: string;
+							current_period_start: number | null;
+							current_period_end: number | null;
+							cancel_at_period_end: number;
+							canceled_at: number | null;
+						},
+						[number]
+					>(
 						"SELECT id, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
 					).get(user.id);
 
@@ -736,9 +752,12 @@ const server = Bun.serve({
 					const { polar } = await import("./lib/polar");
 
 					// Get subscription to find customer ID
-					const subscription = db.query<{
-						customer_id: string;
-					}>(
+					const subscription = db.query<
+						{
+							customer_id: string;
+						},
+						[number]
+					>(
 						"SELECT customer_id FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
 					).get(user.id);
 
@@ -846,30 +865,24 @@ const server = Bun.serve({
 		},
 		"/api/transcriptions/:id/stream": {
 			GET: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-				const transcriptionId = req.params.id;
-				// Verify ownership
-				const transcription = db
-					.query<{ id: string; user_id: number; status: string }, [string]>(
-						"SELECT id, user_id, status FROM transcriptions WHERE id = ?",
-					)
-					.get(transcriptionId);
-				if (!transcription || transcription.user_id !== user.id) {
-					return Response.json(
-						{ error: "Transcription not found" },
-						{ status: 404 },
-					);
-				}
-				// Event-driven SSE stream with reconnection support
-				const stream = new ReadableStream({
-					async start(controller) {
+				try {
+					const user = requireSubscription(req);
+					const transcriptionId = req.params.id;
+					// Verify ownership
+					const transcription = db
+						.query<{ id: string; user_id: number; status: string }, [string]>(
+							"SELECT id, user_id, status FROM transcriptions WHERE id = ?",
+						)
+						.get(transcriptionId);
+					if (!transcription || transcription.user_id !== user.id) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+					// Event-driven SSE stream with reconnection support
+					const stream = new ReadableStream({
+						async start(controller) {
 						const encoder = new TextEncoder();
 						let isClosed = false;
 						let lastEventId = Math.floor(Date.now() / 1000);
@@ -963,12 +976,15 @@ const server = Bun.serve({
 					},
 				});
 				return new Response(stream, {
-					headers: {
-						"Content-Type": "text/event-stream",
-						"Cache-Control": "no-cache",
-						Connection: "keep-alive",
-					},
-				});
+						headers: {
+							"Content-Type": "text/event-stream",
+							"Cache-Control": "no-cache",
+							Connection: "keep-alive",
+						},
+					});
+				} catch (error) {
+					return handleError(error);
+				}
 			},
 		},
 		"/api/transcriptions/health": {
@@ -980,7 +996,7 @@ const server = Bun.serve({
 		"/api/transcriptions/:id": {
 			GET: async (req) => {
 				try {
-					const user = requireAuth(req);
+					const user = requireSubscription(req);
 					const transcriptionId = req.params.id;
 
 					// Verify ownership or admin
@@ -1067,7 +1083,7 @@ const server = Bun.serve({
 		"/api/transcriptions/:id/audio": {
 			GET: async (req) => {
 				try {
-					const user = requireAuth(req);
+					const user = requireSubscription(req);
 					const transcriptionId = req.params.id;
 
 					// Verify ownership or admin
@@ -1162,7 +1178,7 @@ const server = Bun.serve({
 		"/api/transcriptions": {
 			GET: async (req) => {
 				try {
-					const user = requireAuth(req);
+					const user = requireSubscription(req);
 
 					const transcriptions = db
 						.query<
@@ -1202,7 +1218,7 @@ const server = Bun.serve({
 			},
 			POST: async (req) => {
 				try {
-					const user = requireAuth(req);
+					const user = requireSubscription(req);
 
 					const formData = await req.formData();
 					const file = formData.get("audio") as File;

@@ -81,6 +81,8 @@ export class TranscriptionComponent extends LitElement {
 	@state() serviceAvailable = true;
 	@state() existingClasses: string[] = [];
 	@state() showNewClassInput = false;
+	@state() hasSubscription = false;
+	@state() isAdmin = false;
 	// Word streamers for each job
 	private wordStreamers = new Map<string, WordStreamer>();
 	// Displayed transcripts
@@ -387,6 +389,7 @@ export class TranscriptionComponent extends LitElement {
 
 	override async connectedCallback() {
 		super.connectedCallback();
+		await this.checkAuth();
 		await this.checkHealth();
 		await this.loadJobs();
 		await this.loadExistingClasses();
@@ -547,6 +550,19 @@ export class TranscriptionComponent extends LitElement {
 		this.eventSources.set(jobId, eventSource);
 	}
 
+	async checkAuth() {
+		try {
+			const response = await fetch("/api/auth/me");
+			if (response.ok) {
+				const data = await response.json();
+				this.hasSubscription = data.has_subscription || false;
+				this.isAdmin = data.role === "admin";
+			}
+		} catch (error) {
+			console.warn("Failed to check auth:", error);
+		}
+	}
+
 	async checkHealth() {
 		try {
 			const response = await fetch("/api/transcriptions/health");
@@ -583,6 +599,9 @@ export class TranscriptionComponent extends LitElement {
 					}
 				}
 				// Don't override serviceAvailable - it's set by checkHealth()
+			} else if (response.status === 403) {
+				// Subscription required - already handled by checkAuth
+				this.jobs = [];
 			} else if (response.status === 404) {
 				// Transcription service not available - show empty state
 				this.jobs = [];
@@ -719,10 +738,22 @@ export class TranscriptionComponent extends LitElement {
 
 			if (!response.ok) {
 				const data = await response.json();
-				alert(
-					data.error ||
-						"Upload failed - transcription service may be unavailable",
-				);
+				if (response.status === 403) {
+					// Subscription required
+					if (
+						confirm(
+							"Active subscription required to upload transcriptions. Would you like to subscribe now?",
+						)
+					) {
+						window.location.href = "/settings?tab=billing";
+						return;
+					}
+				} else {
+					alert(
+						data.error ||
+							"Upload failed - transcription service may be unavailable",
+					);
+				}
 			} else {
 				await response.json();
 				// Redirect to class page after successful upload
@@ -761,30 +792,42 @@ export class TranscriptionComponent extends LitElement {
 	}
 
 	override render() {
+		const canUpload = this.serviceAvailable && (this.hasSubscription || this.isAdmin);
+
 		return html`
-      <div class="upload-area ${this.dragOver ? "drag-over" : ""} ${!this.serviceAvailable ? "disabled" : ""}"
-           @dragover=${this.serviceAvailable ? this.handleDragOver : null}
-           @dragleave=${this.serviceAvailable ? this.handleDragLeave : null}
-           @drop=${this.serviceAvailable ? this.handleDrop : null}
-           @click=${this.serviceAvailable ? () => (this.shadowRoot?.querySelector(".file-input") as HTMLInputElement)?.click() : null}>
+      ${!this.hasSubscription && !this.isAdmin ? html`
+        <div style="background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; text-align: center;">
+          <h3 style="margin: 0 0 0.5rem 0; color: var(--text);">Subscribe to Upload Transcriptions</h3>
+          <p style="margin: 0 0 1rem 0; color: var(--text); opacity: 0.8;">You need an active subscription to upload and transcribe audio files.</p>
+          <a href="/settings?tab=billing" style="display: inline-block; padding: 0.75rem 1.5rem; background: var(--accent); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: opacity 0.2s;">Subscribe Now</a>
+        </div>
+      ` : ''}
+
+      <div class="upload-area ${this.dragOver ? "drag-over" : ""} ${!canUpload ? "disabled" : ""}"
+           @dragover=${canUpload ? this.handleDragOver : null}
+           @dragleave=${canUpload ? this.handleDragLeave : null}
+           @drop=${canUpload ? this.handleDrop : null}
+           @click=${canUpload ? () => (this.shadowRoot?.querySelector(".file-input") as HTMLInputElement)?.click() : null}>
         <div class="upload-icon">🎵</div>
         <div class="upload-text">
           ${
 						!this.serviceAvailable
 							? "Transcription service unavailable"
-							: this.isUploading
-								? "Uploading..."
-								: "Drop audio file here or click to browse"
+							: !this.hasSubscription && !this.isAdmin
+								? "Subscription required"
+								: this.isUploading
+									? "Uploading..."
+									: "Drop audio file here or click to browse"
 					}
         </div>
         <div class="upload-hint">
-          ${this.serviceAvailable ? "Supports MP3, WAV, M4A, AAC, OGG, WebM, FLAC up to 100MB" : "Transcription is currently unavailable"}
+          ${canUpload ? "Supports MP3, WAV, M4A, AAC, OGG, WebM, FLAC up to 100MB" : "Transcription is currently unavailable"}
         </div>
-        <input type="file" class="file-input" accept="audio/mpeg,audio/wav,audio/m4a,audio/mp4,audio/aac,audio/ogg,audio/webm,audio/flac,.m4a" @change=${this.handleFileSelect} ${!this.serviceAvailable ? "disabled" : ""} />
+        <input type="file" class="file-input" accept="audio/mpeg,audio/wav,audio/m4a,audio/mp4,audio/aac,audio/ogg,audio/webm,audio/flac,.m4a" @change=${this.handleFileSelect} ${!canUpload ? "disabled" : ""} />
       </div>
 
       ${
-				this.serviceAvailable
+				canUpload
 					? html`
         <div class="upload-form">
           <select

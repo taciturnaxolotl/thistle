@@ -446,12 +446,32 @@ export class UserSettings extends LitElement {
 	override async connectedCallback() {
 		super.connectedCallback();
 		this.passkeySupported = isPasskeySupported();
+		
+		// Check for tab query parameter
+		const params = new URLSearchParams(window.location.search);
+		const tab = params.get("tab");
+		if (tab && this.isValidTab(tab)) {
+			this.currentPage = tab as SettingsPage;
+		}
+		
 		await this.loadUser();
 		await this.loadSessions();
 		await this.loadSubscription();
 		if (this.passkeySupported) {
 			await this.loadPasskeys();
 		}
+	}
+
+	private isValidTab(tab: string): boolean {
+		return ["account", "sessions", "passkeys", "billing", "danger"].includes(tab);
+	}
+
+	private setTab(tab: SettingsPage) {
+		this.currentPage = tab;
+		// Update URL without reloading page
+		const url = new URL(window.location.href);
+		url.searchParams.set("tab", tab);
+		window.history.pushState({}, "", url);
 	}
 
 	async loadUser() {
@@ -1342,7 +1362,7 @@ export class UserSettings extends LitElement {
 					<button
 						class="tab ${this.currentPage === "account" ? "active" : ""}"
 						@click=${() => {
-							this.currentPage = "account";
+							this.setTab("account");
 						}}
 					>
 						Account
@@ -1350,7 +1370,7 @@ export class UserSettings extends LitElement {
 					<button
 						class="tab ${this.currentPage === "sessions" ? "active" : ""}"
 						@click=${() => {
-							this.currentPage = "sessions";
+							this.setTab("sessions");
 						}}
 					>
 						Sessions
@@ -1358,7 +1378,7 @@ export class UserSettings extends LitElement {
 					<button
 						class="tab ${this.currentPage === "billing" ? "active" : ""}"
 						@click=${() => {
-							this.currentPage = "billing";
+							this.setTab("billing");
 						}}
 					>
 						Billing
@@ -1366,7 +1386,7 @@ export class UserSettings extends LitElement {
 					<button
 						class="tab ${this.currentPage === "danger" ? "active" : ""}"
 						@click=${() => {
-							this.currentPage = "danger";
+							this.setTab("danger");
 						}}
 					>
 						Danger Zone

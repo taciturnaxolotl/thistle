@@ -52,6 +52,8 @@ export class ClassView extends LitElement {
 	@state() error: string | null = null;
 	@state() searchQuery = "";
 	@state() uploadModalOpen = false;
+	@state() hasSubscription = false;
+	@state() isAdmin = false;
 	private eventSources: Map<string, EventSource> = new Map();
 
 	static override styles = css`
@@ -298,6 +300,7 @@ export class ClassView extends LitElement {
 	override async connectedCallback() {
 		super.connectedCallback();
 		this.extractClassId();
+		await this.checkAuth();
 		await this.loadClass();
 		this.connectToTranscriptionStreams();
 
@@ -323,6 +326,19 @@ export class ClassView extends LitElement {
 		const match = path.match(/^\/classes\/(.+)$/);
 		if (match?.[1]) {
 			this.classId = match[1];
+		}
+	}
+
+	private async checkAuth() {
+		try {
+			const response = await fetch("/api/auth/me");
+			if (response.ok) {
+				const data = await response.json();
+				this.hasSubscription = data.has_subscription || false;
+				this.isAdmin = data.role === "admin";
+			}
+		} catch (error) {
+			console.warn("Failed to check auth:", error);
 		}
 	}
 
@@ -492,6 +508,8 @@ export class ClassView extends LitElement {
       `;
 		}
 
+		const canAccessTranscriptions = this.hasSubscription || this.isAdmin;
+
 		return html`
       <div class="header">
         <a href="/classes" class="back-link">← Back to all classes</a>
@@ -520,6 +538,13 @@ export class ClassView extends LitElement {
 						: ""
 				}
 
+        ${!canAccessTranscriptions ? html`
+          <div style="background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 8px; padding: 1.5rem; margin: 2rem 0; text-align: center;">
+            <h3 style="margin: 0 0 0.5rem 0; color: var(--text);">Subscribe to Access Recordings</h3>
+            <p style="margin: 0 0 1rem 0; color: var(--text); opacity: 0.8;">You need an active subscription to upload and view transcriptions.</p>
+            <a href="/settings?tab=billing" style="display: inline-block; padding: 0.75rem 1.5rem; background: var(--accent); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: opacity 0.2s;">Subscribe Now</a>
+          </div>
+        ` : html`
         <div class="search-upload">
           <input
             type="text"
@@ -538,11 +563,10 @@ export class ClassView extends LitElement {
             📤 Upload Recording
           </button>
         </div>
-      </div>
 
-      ${
-				this.filteredTranscriptions.length === 0
-					? html`
+        ${
+					this.filteredTranscriptions.length === 0
+						? html`
         <div class="empty-state">
           <h2>${this.searchQuery ? "No matching recordings" : "No recordings yet"}</h2>
           <p>${this.searchQuery ? "Try a different search term" : "Upload a recording to get started!"}</p>
@@ -550,7 +574,7 @@ export class ClassView extends LitElement {
       `
 					: html`
         ${this.filteredTranscriptions.map(
-					(t) => html`
+						(t) => html`
           <div class="transcription-card">
             <div class="transcription-header">
               <div>
@@ -593,9 +617,11 @@ export class ClassView extends LitElement {
             ${t.error_message ? html`<div class="error">${t.error_message}</div>` : ""}
           </div>
         `,
-				)}
+					)}
       `
 			}
+        `}
+      </div>
 
       <upload-recording-modal
         ?open=${this.uploadModalOpen}

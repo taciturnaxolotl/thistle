@@ -6,6 +6,7 @@ export enum ErrorCode {
 	INVALID_SESSION = "INVALID_SESSION",
 	INVALID_CREDENTIALS = "INVALID_CREDENTIALS",
 	EMAIL_ALREADY_EXISTS = "EMAIL_ALREADY_EXISTS",
+	SUBSCRIPTION_REQUIRED = "SUBSCRIPTION_REQUIRED",
 
 	// Validation errors
 	VALIDATION_FAILED = "VALIDATION_FAILED",
@@ -87,6 +88,12 @@ export const AuthErrors = {
 		),
 	adminRequired: () =>
 		new AppError(ErrorCode.AUTH_REQUIRED, "Admin access required", 403),
+	subscriptionRequired: () =>
+		new AppError(
+			ErrorCode.SUBSCRIPTION_REQUIRED,
+			"Active subscription required",
+			403,
+		),
 };
 
 export const ValidationErrors = {

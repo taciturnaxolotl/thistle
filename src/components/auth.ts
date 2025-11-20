@@ -14,6 +14,7 @@ interface User {
 	name: string | null;
 	avatar: string;
 	role?: "user" | "admin";
+	has_subscription?: boolean;
 }
 
 @customElement("auth-component")

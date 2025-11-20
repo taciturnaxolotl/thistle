@@ -267,7 +267,7 @@ export class UserSettings extends LitElement {
 
 		.field-description {
 			font-size: 0.875rem;
-			color: var(--secondary);
+			color: var(--paynes-gray);
 			margin: 0.5rem 0;
 		}
 
@@ -1018,7 +1018,7 @@ export class UserSettings extends LitElement {
 								this.loadingPasskeys
 									? html`<div class="field-value">Loading passkeys...</div>`
 									: this.passkeys.length === 0
-										? html`<div class="field-value" style="color: var(--secondary);">No passkeys registered yet</div>`
+										? html`<div class="field-value" style="color: var(--paynes-gray);">No passkeys registered yet</div>`
 										: html`
 											<div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
 												${this.passkeys.map(

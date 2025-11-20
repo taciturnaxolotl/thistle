@@ -266,7 +266,7 @@ Return ONLY the VTT content WITHOUT the "WEBVTT" header and nothing else. No exp
 			headers: {
 				"Content-Type": "application/json",
 				Authorization: `Bearer ${apiKey}`,
-				"HTTP-Referer": "https://thistle.app",
+				"HTTP-Referer": process.env.ORIGIN || "http://localhost:3000",
 				"X-Title": `Thistle Transcription Chunk ${chunkIndex}`,
 			},
 			body: JSON.stringify({

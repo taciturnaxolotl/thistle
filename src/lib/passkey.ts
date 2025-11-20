@@ -62,17 +62,10 @@ setInterval(() => {
  * Get RP ID and origin based on environment
  */
 function getRPConfig(): { rpID: string; rpName: string; origin: string } {
-	if (process.env.NODE_ENV === "production") {
-		return {
-			rpID: process.env.RP_ID || "thistle.app",
-			rpName: "Thistle",
-			origin: process.env.ORIGIN || "https://thistle.app",
-		};
-	}
 	return {
-		rpID: "localhost",
-		rpName: "Thistle (Dev)",
-		origin: "http://localhost:3000",
+		rpID: process.env.RP_ID || "localhost",
+		rpName: "Thistle",
+		origin: process.env.ORIGIN || "http://localhost:3000",
 	};
 }
 

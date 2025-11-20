@@ -387,6 +387,7 @@ export class AuthComponent extends LitElement {
 				this.closeModal();
 				await this.checkAuth();
 				window.dispatchEvent(new CustomEvent("auth-changed"));
+				window.location.href = "/classes";
 			} else {
 				const response = await fetch("/api/auth/login", {
 					method: "POST",
@@ -414,6 +415,7 @@ export class AuthComponent extends LitElement {
 				this.closeModal();
 				await this.checkAuth();
 				window.dispatchEvent(new CustomEvent("auth-changed"));
+				window.location.href = "/classes";
 			}
 		} catch (error) {
 			// Catch crypto.subtle errors and other exceptions
@@ -482,6 +484,7 @@ export class AuthComponent extends LitElement {
 			await this.checkAuth();
 			this.closeModal();
 			window.dispatchEvent(new CustomEvent("auth-changed"));
+			window.location.href = "/classes";
 		} finally {
 			this.isSubmitting = false;
 		}

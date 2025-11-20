@@ -565,7 +565,7 @@ bun scripts/make-admin.ts user@example.com
 
 **Admin UI features:**
 - Statistics cards (total users, total/failed transcriptions)
-- Tabbed interface (Transcriptions / Users)
+- Tabbed interface (Pending Recordings / Transcriptions / Users / Classes)
 - Status badges for transcription states
 - Delete buttons for transcriptions with confirmation
 - Role dropdown for changing user roles
@@ -573,6 +573,15 @@ bun scripts/make-admin.ts user@example.com
 - User avatars and info display
 - Timestamp formatting
 - Admin badge on user listings
+- Query parameter support for direct tab navigation (`?tab=<tabname>`)
+
+**Admin tab navigation:**
+- `/admin` - Opens to default "pending" tab
+- `/admin?tab=pending` - Pending recordings tab
+- `/admin?tab=transcriptions` - All transcriptions tab
+- `/admin?tab=users` - Users management tab
+- `/admin?tab=classes` - Classes management tab
+- URL updates when switching tabs (browser history support)
 
 **Implementation notes:**
 - `role` column in users table ('user' or 'admin', default 'user')

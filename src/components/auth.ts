@@ -424,6 +424,7 @@ export class AuthComponent extends LitElement {
 	}
 
 	private async handleLogout() {
+		this.showModal = false;
 		try {
 			await fetch("/api/auth/logout", { method: "POST" });
 			this.user = null;

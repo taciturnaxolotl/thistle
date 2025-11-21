@@ -500,6 +500,26 @@ export class WhisperServiceManager {
 		}
 	}
 
+	private async deleteWhisperJob(jobId: string) {
+		try {
+			const response = await fetch(
+				`${this.serviceUrl}/transcribe/${jobId}`,
+				{
+					method: "DELETE",
+				},
+			);
+			if (response.ok) {
+				console.log(`[Cleanup] Deleted job ${jobId} from Murmur`);
+			} else {
+				console.warn(
+					`[Cleanup] Failed to delete job ${jobId}: ${response.status}`,
+				);
+			}
+		} catch (error) {
+			console.error(`[Cleanup] Error deleting job ${jobId}:`, error);
+		}
+	}
+
 	private async handleOrphanedWhisperJob(jobId: string) {
 		// Check if this Murmur job_id exists in our DB (either as id or whisper_job_id)
 		const jobExists = this.db
@@ -509,10 +529,11 @@ export class WhisperServiceManager {
 			.get(jobId, jobId);
 
 		if (!jobExists) {
-			// Not our job - Murmur will keep it until explicitly deleted
+			// Not our job - delete it from Murmur
 			console.warn(
-				`[Sync] Found orphaned job ${jobId} in Murmur (not in our DB)`,
+				`[Sync] Found orphaned job ${jobId} in Murmur (not in our DB) - deleting...`,
 			);
+			await this.deleteWhisperJob(jobId);
 		}
 	}
 
@@ -564,6 +585,9 @@ export class WhisperServiceManager {
 					status: "completed",
 					progress: 100,
 				});
+
+				// Clean up job from Murmur after successful completion
+				await this.deleteWhisperJob(whisperJob.id);
 			} else if (details.status === "failed") {
 				const errorMessage = (
 					details.error_message ?? "Transcription failed"
@@ -579,9 +603,10 @@ export class WhisperServiceManager {
 					progress: 0,
 					error_message: errorMessage,
 				});
-			}
 
-			// Job persists in Murmur until explicitly deleted - we just sync state
+				// Clean up failed job from Murmur
+				await this.deleteWhisperJob(whisperJob.id);
+			}
 		} catch {
 			console.warn(
 				`[Sync] Failed to retrieve details for job ${whisperJob.id}`,

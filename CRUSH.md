@@ -641,13 +641,49 @@ INSERT INTO subscriptions (id, user_id, customer_id, status)
 VALUES ('test-sub', <user_id>, 'test-customer', 'active');
 ```
 
+## Transcription Service Integration (Murmur)
+
+The application uses [Murmur](https://github.com/taciturnaxolotl/murmur) as the transcription backend.
+
+**Murmur API endpoints:**
+- `POST /transcribe` - Upload audio file and create transcription job
+- `GET /transcribe/:job_id` - Get job status and transcript (supports `?format=json|vtt`)
+- `GET /transcribe/:job_id/stream` - Stream real-time progress via Server-Sent Events
+- `GET /jobs` - List all jobs (newest first)
+- `DELETE /transcribe/:job_id` - Delete a job from Murmur's database
+
+**Job synchronization:**
+The `TranscriptionService` runs periodic syncs to reconcile state between our database and Murmur:
+- Reconnects to active jobs on server restart
+- Syncs status updates for processing/transcribing jobs
+- Handles completed jobs (fetches VTT, cleans transcript, saves to storage)
+- **Cleans up finished jobs** - After successful completion or failure, jobs are deleted from Murmur
+- **Cleans up orphaned jobs** - Jobs found in Murmur but not in our database are automatically deleted
+
+**Job cleanup:**
+- **Completed jobs**: After fetching transcript and saving to storage, the job is deleted from Murmur
+- **Failed jobs**: After recording the error in our database, the job is deleted from Murmur
+- **Orphaned jobs**: Jobs in Murmur but not in our database are deleted on discovery
+- All deletions use `DELETE /transcribe/:job_id`
+- This prevents Murmur's database from accumulating stale jobs (Murmur doesn't have automatic cleanup)
+- Logs success/failure of deletion attempts for monitoring
+
+**Job lifecycle:**
+1. User uploads audio → creates transcription in our DB with `status='uploading'`
+2. Audio uploaded to Murmur → get `whisper_job_id`, update to `status='processing'`
+3. Murmur transcribes → stream progress updates, update to `status='transcribing'`
+4. Job completes → fetch VTT, clean with LLM, save transcript, update to `status='completed'`, **delete from Murmur**
+5. If job fails in Murmur → update to `status='failed'` with error message, **delete from Murmur**
+
+**Configuration:**
+Set `WHISPER_SERVICE_URL` in `.env` (default: `http://localhost:8000`)
+
 ## Future Additions
 
 As the codebase grows, document:
 - Database schema and migrations
 - API endpoint patterns
 - Authentication/authorization approach
-- Transcription service integration details
 - Deployment process
 - Environment variables needed
 

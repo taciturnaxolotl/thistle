@@ -587,7 +587,7 @@ export class UserSettings extends LitElement {
 
 	async handleDeleteAccount() {
 		try {
-			const response = await fetch("/api/auth/delete-account", {
+			const response = await fetch("/api/user", {
 				method: "DELETE",
 			});
 

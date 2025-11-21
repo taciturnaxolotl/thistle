@@ -190,20 +190,23 @@ export async function deleteUser(userId: number): Promise<void> {
 		)
 		.get(userId);
 
-	// Revoke subscription if it exists
+	// Cancel subscription if it exists (soft cancel - keeps access until period end)
 	if (subscription) {
 		try {
 			const { polar } = await import("./polar");
-			await polar.subscriptions.revoke({ id: subscription.id });
+			await polar.subscriptions.update({
+				id: subscription.id,
+				subscriptionUpdate: { cancelAtPeriodEnd: true },
+			});
 			console.log(
-				`[User Delete] Revoked subscription ${subscription.id} for user ${userId}`,
+				`[User Delete] Canceled subscription ${subscription.id} for user ${userId}`,
 			);
 		} catch (error) {
 			console.error(
-				`[User Delete] Failed to revoke subscription ${subscription.id}:`,
+				`[User Delete] Failed to cancel subscription ${subscription.id}:`,
 				error,
 			);
-			// Continue with user deletion even if subscription revocation fails
+			// Continue with user deletion even if subscription cancellation fails
 		}
 	}
 

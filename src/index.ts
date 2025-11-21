@@ -46,8 +46,9 @@ import {
 	toggleClassArchive,
 	updateMeetingTime,
 } from "./lib/classes";
-import { handleError, ValidationErrors } from "./lib/errors";
+import { AuthErrors, handleError, ValidationErrors } from "./lib/errors";
 import {
+	hasActiveSubscription,
 	requireAdmin,
 	requireAuth,
 	requireSubscription,
@@ -977,19 +978,43 @@ const server = Bun.serve({
 		"/api/transcriptions/:id/stream": {
 			GET: async (req) => {
 				try {
-					const user = requireSubscription(req);
+					const user = requireAuth(req);
 					const transcriptionId = req.params.id;
 					// Verify ownership
 					const transcription = db
-						.query<{ id: string; user_id: number; status: string }, [string]>(
-							"SELECT id, user_id, status FROM transcriptions WHERE id = ?",
+						.query<{ id: string; user_id: number; class_id: string | null; status: string }, [string]>(
+							"SELECT id, user_id, class_id, status FROM transcriptions WHERE id = ?",
 						)
 						.get(transcriptionId);
-					if (!transcription || transcription.user_id !== user.id) {
+					
+					if (!transcription) {
 						return Response.json(
 							{ error: "Transcription not found" },
 							{ status: 404 },
 						);
+					}
+
+					// Check access permissions
+					const isOwner = transcription.user_id === user.id;
+					const isAdmin = user.role === "admin";
+					let isClassMember = false;
+
+					// If transcription belongs to a class, check enrollment
+					if (transcription.class_id) {
+						isClassMember = isUserEnrolledInClass(user.id, transcription.class_id);
+					}
+
+					// Allow access if: owner, admin, or enrolled in the class
+					if (!isOwner && !isAdmin && !isClassMember) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					// Require subscription only if accessing own transcription (not class)
+					if (isOwner && !transcription.class_id && !isAdmin && !hasActiveSubscription(user.id)) {
+						throw AuthErrors.subscriptionRequired();
 					}
 					// Event-driven SSE stream with reconnection support
 					const stream = new ReadableStream({
@@ -1107,7 +1132,7 @@ const server = Bun.serve({
 		"/api/transcriptions/:id": {
 			GET: async (req) => {
 				try {
-					const user = requireSubscription(req);
+					const user = requireAuth(req);
 					const transcriptionId = req.params.id;
 
 					// Verify ownership or admin
@@ -1116,6 +1141,7 @@ const server = Bun.serve({
 							{
 								id: string;
 								user_id: number;
+								class_id: string | null;
 								filename: string;
 								original_filename: string;
 								status: string;
@@ -1124,7 +1150,7 @@ const server = Bun.serve({
 							},
 							[string]
 						>(
-							"SELECT id, user_id, filename, original_filename, status, progress, created_at FROM transcriptions WHERE id = ?",
+							"SELECT id, user_id, class_id, filename, original_filename, status, progress, created_at FROM transcriptions WHERE id = ?",
 						)
 						.get(transcriptionId);
 
@@ -1135,12 +1161,27 @@ const server = Bun.serve({
 						);
 					}
 
-					// Allow access if user owns it or is admin
-					if (transcription.user_id !== user.id && user.role !== "admin") {
+					// Check access permissions
+					const isOwner = transcription.user_id === user.id;
+					const isAdmin = user.role === "admin";
+					let isClassMember = false;
+
+					// If transcription belongs to a class, check enrollment
+					if (transcription.class_id) {
+						isClassMember = isUserEnrolledInClass(user.id, transcription.class_id);
+					}
+
+					// Allow access if: owner, admin, or enrolled in the class
+					if (!isOwner && !isAdmin && !isClassMember) {
 						return Response.json(
 							{ error: "Transcription not found" },
 							{ status: 404 },
 						);
+					}
+
+					// Require subscription only if accessing own transcription (not class)
+					if (isOwner && !transcription.class_id && !isAdmin && !hasActiveSubscription(user.id)) {
+						throw AuthErrors.subscriptionRequired();
 					}
 
 					if (transcription.status !== "completed") {
@@ -1194,7 +1235,7 @@ const server = Bun.serve({
 		"/api/transcriptions/:id/audio": {
 			GET: async (req) => {
 				try {
-					const user = requireSubscription(req);
+					const user = requireAuth(req);
 					const transcriptionId = req.params.id;
 
 					// Verify ownership or admin
@@ -1203,12 +1244,13 @@ const server = Bun.serve({
 							{
 								id: string;
 								user_id: number;
+								class_id: string | null;
 								filename: string;
 								status: string;
 							},
 							[string]
 						>(
-							"SELECT id, user_id, filename, status FROM transcriptions WHERE id = ?",
+							"SELECT id, user_id, class_id, filename, status FROM transcriptions WHERE id = ?",
 						)
 						.get(transcriptionId);
 
@@ -1219,12 +1261,27 @@ const server = Bun.serve({
 						);
 					}
 
-					// Allow access if user owns it or is admin
-					if (transcription.user_id !== user.id && user.role !== "admin") {
+					// Check access permissions
+					const isOwner = transcription.user_id === user.id;
+					const isAdmin = user.role === "admin";
+					let isClassMember = false;
+
+					// If transcription belongs to a class, check enrollment
+					if (transcription.class_id) {
+						isClassMember = isUserEnrolledInClass(user.id, transcription.class_id);
+					}
+
+					// Allow access if: owner, admin, or enrolled in the class
+					if (!isOwner && !isAdmin && !isClassMember) {
 						return Response.json(
 							{ error: "Transcription not found" },
 							{ status: 404 },
 						);
+					}
+
+					// Require subscription only if accessing own transcription (not class)
+					if (isOwner && !transcription.class_id && !isAdmin && !hasActiveSubscription(user.id)) {
+						throw AuthErrors.subscriptionRequired();
 					}
 
 					// For pending recordings, audio file exists even though transcription isn't complete

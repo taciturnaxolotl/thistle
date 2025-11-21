@@ -80,6 +80,15 @@ export class AdminUsers extends LitElement {
       border-color: var(--primary);
     }
 
+    .user-card.system {
+      cursor: default;
+      opacity: 0.8;
+    }
+
+    .user-card.system:hover {
+      border-color: var(--secondary);
+    }
+
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -117,6 +126,16 @@ export class AdminUsers extends LitElement {
 
     .admin-badge {
       background: var(--accent);
+      color: var(--white);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .system-badge {
+      background: var(--paynes-gray);
       color: var(--white);
       padding: 0.5rem 1rem;
       border-radius: 4px;
@@ -555,10 +574,16 @@ export class AdminUsers extends LitElement {
 	}
 
 	private handleCardClick(userId: number, event: Event) {
-		// Don't open modal if clicking on delete button, revoke button, or role select
+		// Don't open modal for ghost user
+		if (userId === 0) {
+			return;
+		}
+		
+		// Don't open modal if clicking on delete button, revoke button, sync button, or role select
 		if (
 			(event.target as HTMLElement).closest(".delete-btn") ||
 			(event.target as HTMLElement).closest(".revoke-btn") ||
+			(event.target as HTMLElement).closest(".sync-btn") ||
 			(event.target as HTMLElement).closest(".role-select")
 		) {
 			return;
@@ -577,14 +602,21 @@ export class AdminUsers extends LitElement {
 	}
 
 	private get filteredUsers() {
-		if (!this.searchQuery) return this.users;
-
 		const query = this.searchQuery.toLowerCase();
-		return this.users.filter(
+		
+		// Filter users based on search query
+		let filtered = this.users.filter(
 			(u) =>
 				u.email.toLowerCase().includes(query) ||
 				u.name?.toLowerCase().includes(query),
 		);
+		
+		// Hide ghost user unless specifically searched for
+		if (!query.includes("deleted") && !query.includes("ghost") && !query.includes("system")) {
+			filtered = filtered.filter(u => u.id !== 0);
+		}
+		
+		return filtered;
 	}
 
 	override render() {
@@ -619,7 +651,7 @@ export class AdminUsers extends LitElement {
           <div class="users-grid">
             ${filtered.map(
 							(u) => html`
-              <div class="user-card" @click=${(e: Event) => this.handleCardClick(u.id, e)}>
+              <div class="user-card ${u.id === 0 ? 'system' : ''}" @click=${(e: Event) => this.handleCardClick(u.id, e)}>
                 <div class="card-header">
                   <div class="user-info">
                     <img
@@ -632,7 +664,12 @@ export class AdminUsers extends LitElement {
                       <div class="user-email">${u.email}</div>
                     </div>
                   </div>
-                  ${u.role === "admin" ? html`<span class="admin-badge">Admin</span>` : ""}
+                  ${u.id === 0 
+                    ? html`<span class="system-badge">System</span>` 
+                    : u.role === "admin" 
+                      ? html`<span class="admin-badge">Admin</span>` 
+                      : ""
+                  }
                 </div>
 
                 <div class="meta-row">
@@ -664,36 +701,41 @@ export class AdminUsers extends LitElement {
                 </div>
 
                 <div class="actions">
-                  <select
-                    class="role-select"
-                    .value=${u.role}
-                    @change=${(e: Event) => this.handleRoleChange(u.id, u.email, (e.target as HTMLSelectElement).value as "user" | "admin", u.role, e)}
-                  >
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                  <button 
-                    class="sync-btn" 
-                    ?disabled=${this.syncingSubscriptions.has(u.id)}
-                    @click=${(e: Event) => this.handleSyncSubscription(u.id, e)}
-                    title="Sync subscription status from Polar"
-                  >
-                    ${this.syncingSubscriptions.has(u.id) ? "Syncing..." : "🔄 Sync"}
-                  </button>
-                  <button 
-                    class="revoke-btn" 
-                    ?disabled=${!u.subscription_status || !u.subscription_id || this.revokingSubscriptions.has(u.id)}
-                    @click=${(e: Event) => {
-											if (u.subscription_id) {
-												this.handleRevokeClick(u.id, u.email, u.subscription_id, e);
-											}
-										}}
-                  >
-                    ${this.revokingSubscriptions.has(u.id) ? "Revoking..." : this.getDeleteButtonText(u.id, "revoke")}
-                  </button>
-                  <button class="delete-btn" @click=${(e: Event) => this.handleDeleteClick(u.id, e)}>
-                    ${this.getDeleteButtonText(u.id, "user")}
-                  </button>
+                  ${u.id === 0 
+                    ? html`<div style="color: var(--paynes-gray); font-size: 0.875rem; padding: 0.5rem;">System account cannot be modified</div>`
+                    : html`
+                      <select
+                        class="role-select"
+                        .value=${u.role}
+                        @change=${(e: Event) => this.handleRoleChange(u.id, u.email, (e.target as HTMLSelectElement).value as "user" | "admin", u.role, e)}
+                      >
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <button 
+                        class="sync-btn" 
+                        ?disabled=${this.syncingSubscriptions.has(u.id)}
+                        @click=${(e: Event) => this.handleSyncSubscription(u.id, e)}
+                        title="Sync subscription status from Polar"
+                      >
+                        ${this.syncingSubscriptions.has(u.id) ? "Syncing..." : "🔄 Sync"}
+                      </button>
+                      <button 
+                        class="revoke-btn" 
+                        ?disabled=${!u.subscription_status || !u.subscription_id || this.revokingSubscriptions.has(u.id)}
+                        @click=${(e: Event) => {
+													if (u.subscription_id) {
+														this.handleRevokeClick(u.id, u.email, u.subscription_id, e);
+													}
+												}}
+                      >
+                        ${this.revokingSubscriptions.has(u.id) ? "Revoking..." : this.getDeleteButtonText(u.id, "revoke")}
+                      </button>
+                      <button class="delete-btn" @click=${(e: Event) => this.handleDeleteClick(u.id, e)}>
+                        ${this.getDeleteButtonText(u.id, "user")}
+                      </button>
+                    `
+                  }
                 </div>
               </div>
             `,

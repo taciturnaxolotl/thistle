@@ -183,6 +183,11 @@ export function getSessionFromRequest(req: Request): string | null {
 }
 
 export async function deleteUser(userId: number): Promise<void> {
+	// Prevent deleting the ghost user
+	if (userId === 0) {
+		throw new Error("Cannot delete ghost user account");
+	}
+
 	// Get user's subscription if they have one
 	const subscription = db
 		.query<{ id: string }, [number]>(
@@ -210,6 +215,18 @@ export async function deleteUser(userId: number): Promise<void> {
 		}
 	}
 
+	// Reassign class transcriptions to ghost user (id=0)
+	// Delete personal transcriptions (no class_id)
+	db.run(
+		"UPDATE transcriptions SET user_id = 0 WHERE user_id = ? AND class_id IS NOT NULL",
+		[userId],
+	);
+	db.run(
+		"DELETE FROM transcriptions WHERE user_id = ? AND class_id IS NULL",
+		[userId],
+	);
+
+	// Delete user (CASCADE will handle sessions, passkeys, subscriptions, class_members)
 	db.run("DELETE FROM users WHERE id = ?", [userId]);
 }
 

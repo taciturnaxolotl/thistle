@@ -204,6 +204,15 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_subscriptions_customer_id ON subscriptions(customer_id);
     `,
 	},
+	{
+		version: 7,
+		name: "Create ghost user for deleted accounts",
+		sql: `
+      -- Create a ghost user account for orphaned transcriptions
+      INSERT OR IGNORE INTO users (id, email, password_hash, name, avatar, role, created_at)
+      VALUES (0, 'ghosty@thistle.internal', NULL, 'Ghosty', '👻', 'user', strftime('%s', 'now'));
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

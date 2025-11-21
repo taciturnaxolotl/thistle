@@ -182,7 +182,31 @@ export function getSessionFromRequest(req: Request): string | null {
 	return match?.[1] ?? null;
 }
 
-export function deleteUser(userId: number): void {
+export async function deleteUser(userId: number): Promise<void> {
+	// Get user's subscription if they have one
+	const subscription = db
+		.query<{ id: string }, [number]>(
+			"SELECT id FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+		)
+		.get(userId);
+
+	// Revoke subscription if it exists
+	if (subscription) {
+		try {
+			const { polar } = await import("./polar");
+			await polar.subscriptions.revoke({ id: subscription.id });
+			console.log(
+				`[User Delete] Revoked subscription ${subscription.id} for user ${userId}`,
+			);
+		} catch (error) {
+			console.error(
+				`[User Delete] Failed to revoke subscription ${subscription.id}:`,
+				error,
+			);
+			// Continue with user deletion even if subscription revocation fails
+		}
+	}
+
 	db.run("DELETE FROM users WHERE id = ?", [userId]);
 }
 

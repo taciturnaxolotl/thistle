@@ -494,7 +494,7 @@ const server = Bun.serve({
 			},
 		},
 		"/api/user": {
-			DELETE: (req) => {
+			DELETE: async (req) => {
 				const sessionId = getSessionFromRequest(req);
 				if (!sessionId) {
 					return Response.json({ error: "Not authenticated" }, { status: 401 });
@@ -510,7 +510,7 @@ const server = Bun.serve({
 				});
 				if (rateLimitError) return rateLimitError;
 
-				deleteUser(user.id);
+				await deleteUser(user.id);
 				return Response.json(
 					{ success: true },
 					{
@@ -1402,7 +1402,7 @@ const server = Bun.serve({
 					if (Number.isNaN(userId)) {
 						return Response.json({ error: "Invalid user ID" }, { status: 400 });
 					}
-					deleteUser(userId);
+					await deleteUser(userId);
 					return Response.json({ success: true });
 				} catch (error) {
 					return handleError(error);

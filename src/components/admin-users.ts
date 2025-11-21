@@ -22,6 +22,7 @@ export class AdminUsers extends LitElement {
 	@state() error: string | null = null;
 	@state() currentUserEmail: string | null = null;
 	@state() revokingSubscriptions = new Set<number>();
+	@state() syncingSubscriptions = new Set<number>();
 
 	static override styles = css`
     :host {
@@ -222,6 +223,28 @@ export class AdminUsers extends LitElement {
       cursor: not-allowed;
     }
 
+    .sync-btn {
+      background: transparent;
+      border: 2px solid var(--primary);
+      color: var(--primary);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .sync-btn:hover:not(:disabled) {
+      background: var(--primary);
+      color: var(--white);
+    }
+
+    .sync-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .subscription-badge {
       background: var(--primary);
       color: var(--white);
@@ -256,8 +279,8 @@ export class AdminUsers extends LitElement {
 				const user = await response.json();
 				this.currentUserEmail = user.email;
 			}
-		} catch (error) {
-			console.error("Failed to get current user:", error);
+		} catch {
+			// Silent fail
 		}
 	}
 
@@ -408,8 +431,7 @@ export class AdminUsers extends LitElement {
 			// Remove user from local array instead of reloading
 			this.users = this.users.filter(u => u.id !== userId);
 			this.dispatchEvent(new CustomEvent("user-deleted"));
-		} catch (error) {
-			console.error("Failed to delete user:", error);
+		} catch {
 			alert("Failed to delete user. Please try again.");
 		}
 	}
@@ -479,9 +501,36 @@ export class AdminUsers extends LitElement {
 			await this.loadUsers();
 			alert(`Subscription revoked for ${email}`);
 		} catch (error) {
-			console.error("Failed to revoke subscription:", error);
 			alert(`Failed to revoke subscription: ${error instanceof Error ? error.message : "Unknown error"}`);
 			this.revokingSubscriptions.delete(userId);
+		}
+	}
+
+	private async handleSyncSubscription(userId: number, event: Event) {
+		event.stopPropagation();
+
+		this.syncingSubscriptions.add(userId);
+		this.requestUpdate();
+
+		try {
+			const response = await fetch(`/api/admin/users/${userId}/subscription`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				// Don't alert if there's just no subscription
+				if (response.status !== 404) {
+					alert(`Failed to sync subscription: ${data.error || "Unknown error"}`);
+				}
+				return;
+			}
+
+			await this.loadUsers();
+		} finally {
+			this.syncingSubscriptions.delete(userId);
+			this.requestUpdate();
 		}
 	}
 
@@ -623,6 +672,14 @@ export class AdminUsers extends LitElement {
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
                   </select>
+                  <button 
+                    class="sync-btn" 
+                    ?disabled=${this.syncingSubscriptions.has(u.id)}
+                    @click=${(e: Event) => this.handleSyncSubscription(u.id, e)}
+                    title="Sync subscription status from Polar"
+                  >
+                    ${this.syncingSubscriptions.has(u.id) ? "Syncing..." : "🔄 Sync"}
+                  </button>
                   <button 
                     class="revoke-btn" 
                     ?disabled=${!u.subscription_status || !u.subscription_id || this.revokingSubscriptions.has(u.id)}

@@ -99,6 +99,87 @@ const whisperService = new WhisperServiceManager(
 // Clean up expired sessions every hour
 setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
 
+// Helper function to sync user subscriptions from Polar
+async function syncUserSubscriptionsFromPolar(
+	userId: number,
+	email: string,
+): Promise<void> {
+	try {
+		const { polar } = await import("./lib/polar");
+
+		// Search for customer by email
+		const customers = await polar.customers.list({
+			organizationId: process.env.POLAR_ORGANIZATION_ID,
+			query: email,
+		});
+
+		if (!customers.result.items || customers.result.items.length === 0) {
+			console.log(`[Sync] No Polar customer found for ${email}`);
+			return;
+		}
+
+		const customer = customers.result.items[0];
+
+		// Get all subscriptions for this customer
+		const subscriptions = await polar.subscriptions.list({
+			customerId: customer.id,
+		});
+
+		if (!subscriptions.result.items || subscriptions.result.items.length === 0) {
+			console.log(`[Sync] No subscriptions found for customer ${customer.id}`);
+			return;
+		}
+
+		// Update each subscription in the database
+		for (const subscription of subscriptions.result.items) {
+			db.run(
+				`INSERT INTO subscriptions (id, user_id, customer_id, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(id) DO UPDATE SET
+				   user_id = excluded.user_id,
+				   status = excluded.status,
+				   current_period_start = excluded.current_period_start,
+				   current_period_end = excluded.current_period_end,
+				   cancel_at_period_end = excluded.cancel_at_period_end,
+				   canceled_at = excluded.canceled_at,
+				   updated_at = excluded.updated_at`,
+				[
+					subscription.id,
+					userId,
+					subscription.customerId,
+					subscription.status,
+					subscription.currentPeriodStart
+						? Math.floor(
+								new Date(subscription.currentPeriodStart).getTime() / 1000,
+							)
+						: null,
+					subscription.currentPeriodEnd
+						? Math.floor(
+								new Date(subscription.currentPeriodEnd).getTime() / 1000,
+							)
+						: null,
+					subscription.cancelAtPeriodEnd ? 1 : 0,
+					subscription.canceledAt
+						? Math.floor(new Date(subscription.canceledAt).getTime() / 1000)
+						: null,
+					Math.floor(Date.now() / 1000),
+				],
+			);
+		}
+
+		console.log(
+			`[Sync] Linked ${subscriptions.result.items.length} subscription(s) to user ${userId} (${email})`,
+		);
+	} catch (error) {
+		console.error(
+			`[Sync] Failed to sync subscriptions for ${email}:`,
+			error instanceof Error ? error.message : "Unknown error",
+		);
+		// Don't throw - registration should succeed even if sync fails
+	}
+}
+
+
 // Sync with Whisper DB on startup
 try {
 	await whisperService.syncWithWhisper();
@@ -169,6 +250,12 @@ const server = Bun.serve({
 						);
 					}
 					const user = await createUser(email, password, name);
+					
+					// Attempt to sync existing Polar subscriptions
+					syncUserSubscriptionsFromPolar(user.id, user.email).catch(() => {
+						// Silent fail - don't block registration
+					});
+					
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
 						req.headers.get("x-real-ip") ??
@@ -1504,105 +1591,22 @@ const server = Bun.serve({
 						return Response.json({ error: "Invalid user ID" }, { status: 400 });
 					}
 
+					// Get user email
+					const user = db
+						.query<{ email: string }, [number]>(
+							"SELECT email FROM users WHERE id = ?",
+						)
+						.get(userId);
+
+					if (!user) {
+						return Response.json(
+							{ error: "User not found" },
+							{ status: 404 },
+						);
+					}
+
 					try {
-						const { polar } = await import("./lib/polar");
-
-						// Get user email
-						const user = db
-							.query<{ email: string }, [number]>(
-								"SELECT email FROM users WHERE id = ?",
-							)
-							.get(userId);
-
-						if (!user) {
-							return Response.json(
-								{ error: "User not found" },
-								{ status: 404 },
-							);
-						}
-
-						console.log(`[Admin] Looking for Polar customer with email: ${user.email}`);
-
-						// Search for customer by email
-						const customers = await polar.customers.list({
-							organizationId: process.env.POLAR_ORGANIZATION_ID,
-							query: user.email,
-						});
-
-						console.log(
-							`[Admin] Found ${customers.result.items?.length || 0} customer(s) matching email`,
-						);
-
-						if (!customers.result.items || customers.result.items.length === 0) {
-							return Response.json(
-								{ error: "No Polar customer found with this email" },
-								{ status: 404 },
-							);
-						}
-
-						const customer = customers.result.items[0];
-						console.log(`[Admin] Customer ID: ${customer.id}`);
-
-						// Get all subscriptions for this customer
-						const subscriptions = await polar.subscriptions.list({
-							customerId: customer.id,
-						});
-
-						console.log(
-							`[Admin] Found ${subscriptions.result.items?.length || 0} subscription(s) for customer`,
-						);
-
-						if (!subscriptions.result.items || subscriptions.result.items.length === 0) {
-							return Response.json(
-								{ error: "No subscriptions found for this customer" },
-								{ status: 404 },
-							);
-						}
-
-						// Update each subscription in the database
-						for (const subscription of subscriptions.result.items) {
-							db.run(
-								`INSERT INTO subscriptions (id, user_id, customer_id, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, updated_at)
-								 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-								 ON CONFLICT(id) DO UPDATE SET
-								   user_id = excluded.user_id,
-								   status = excluded.status,
-								   current_period_start = excluded.current_period_start,
-								   current_period_end = excluded.current_period_end,
-								   cancel_at_period_end = excluded.cancel_at_period_end,
-								   canceled_at = excluded.canceled_at,
-								   updated_at = excluded.updated_at`,
-								[
-									subscription.id,
-									userId,
-									subscription.customerId,
-									subscription.status,
-									subscription.currentPeriodStart
-										? Math.floor(
-												new Date(subscription.currentPeriodStart).getTime() /
-													1000,
-											)
-										: null,
-									subscription.currentPeriodEnd
-										? Math.floor(
-												new Date(subscription.currentPeriodEnd).getTime() /
-													1000,
-											)
-										: null,
-									subscription.cancelAtPeriodEnd ? 1 : 0,
-									subscription.canceledAt
-										? Math.floor(
-												new Date(subscription.canceledAt).getTime() / 1000,
-											)
-										: null,
-									Math.floor(Date.now() / 1000),
-								],
-							);
-						}
-
-						console.log(
-							`[Admin] Synced ${subscriptions.result.items.length} subscription(s) for user ${userId} (${user.email})`,
-						);
+						await syncUserSubscriptionsFromPolar(userId, user.email);
 						return Response.json({
 							success: true,
 							message: "Subscription synced successfully",

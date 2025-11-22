@@ -24,6 +24,13 @@ import {
 	updateUserName,
 	updateUserPassword,
 	updateUserRole,
+	createEmailVerificationToken,
+	verifyEmailToken,
+	verifyEmailCode,
+	isEmailVerified,
+	createPasswordResetToken,
+	verifyPasswordResetToken,
+	consumePasswordResetToken,
 } from "./lib/auth";
 import {
 	addToWaitlist,
@@ -62,7 +69,7 @@ import {
 	verifyAndAuthenticatePasskey,
 	verifyAndCreatePasskey,
 } from "./lib/passkey";
-import { enforceRateLimit } from "./lib/rate-limit";
+import { enforceRateLimit, clearRateLimit } from "./lib/rate-limit";
 import { getTranscriptVTT } from "./lib/transcript-storage";
 import {
 	MAX_FILE_SIZE,
@@ -70,11 +77,17 @@ import {
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
+import { sendEmail } from "./lib/email";
+import {
+	verifyEmailTemplate,
+	passwordResetTemplate,
+} from "./lib/email-templates";
 import adminHTML from "./pages/admin.html";
 import checkoutHTML from "./pages/checkout.html";
 import classHTML from "./pages/class.html";
 import classesHTML from "./pages/classes.html";
 import indexHTML from "./pages/index.html";
+import resetPasswordHTML from "./pages/reset-password.html";
 import settingsHTML from "./pages/settings.html";
 import transcribeHTML from "./pages/transcribe.html";
 
@@ -218,6 +231,7 @@ const server = Bun.serve({
 		"/admin": adminHTML,
 		"/checkout": checkoutHTML,
 		"/settings": settingsHTML,
+		"/reset-password": resetPasswordHTML,
 		"/transcribe": transcribeHTML,
 		"/classes": classesHTML,
 		"/classes/*": classHTML,
@@ -231,7 +245,7 @@ const server = Bun.serve({
 				try {
 					// Rate limiting
 					const rateLimitError = enforceRateLimit(req, "register", {
-						ip: { max: 5, windowSeconds: 60 * 60 },
+						ip: { max: 5, windowSeconds: 30 * 60 },
 					});
 					if (rateLimitError) return rateLimitError;
 
@@ -252,24 +266,51 @@ const server = Bun.serve({
 					}
 					const user = await createUser(email, password, name);
 					
-					// Attempt to sync existing Polar subscriptions
+					// Send verification email - MUST succeed for registration to complete
+					const { code, token } = createEmailVerificationToken(user.id);
+					
+					try {
+						await sendEmail({
+							to: user.email,
+							subject: "Verify your email - Thistle",
+							html: verifyEmailTemplate({
+								name: user.name,
+								code,
+								token,
+							}),
+						});
+					} catch (err) {
+						console.error("[Email] Failed to send verification email:", err);
+						// Rollback user creation - direct DB delete since user was just created
+						db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [user.id]);
+						db.run("DELETE FROM sessions WHERE user_id = ?", [user.id]);
+						db.run("DELETE FROM users WHERE id = ?", [user.id]);
+						return Response.json(
+							{ error: "Failed to send verification email. Please try again later." },
+							{ status: 500 },
+						);
+					}
+					
+					// Attempt to sync existing Polar subscriptions (after email succeeds)
 					syncUserSubscriptionsFromPolar(user.id, user.email).catch(() => {
 						// Silent fail - don't block registration
 					});
 					
+					// Clear rate limits on successful registration
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
 						req.headers.get("x-real-ip") ??
 						"unknown";
-					const userAgent = req.headers.get("user-agent") ?? "unknown";
-					const sessionId = createSession(user.id, ipAddress, userAgent);
+					clearRateLimit("register", email, ipAddress);
+					
+					// Return success but indicate email verification is needed
+					// Don't create session yet - they need to verify first
 					return Response.json(
-						{ user: { id: user.id, email: user.email } },
-						{
-							headers: {
-								"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
-							},
+						{ 
+							user: { id: user.id, email: user.email },
+							email_verification_required: true,
 						},
+						{ status: 200 },
 					);
 				} catch (err: unknown) {
 					const error = err as { message?: string };
@@ -300,8 +341,8 @@ const server = Bun.serve({
 
 					// Rate limiting: Per IP and per account
 					const rateLimitError = enforceRateLimit(req, "login", {
-						ip: { max: 10, windowSeconds: 15 * 60 },
-						account: { max: 5, windowSeconds: 15 * 60, email },
+						ip: { max: 10, windowSeconds: 5 * 60 },
+						account: { max: 5, windowSeconds: 5 * 60, email },
 					});
 					if (rateLimitError) return rateLimitError;
 
@@ -319,10 +360,25 @@ const server = Bun.serve({
 							{ status: 401 },
 						);
 					}
+					
+					// Clear rate limits on successful authentication
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
 						req.headers.get("x-real-ip") ??
 						"unknown";
+					clearRateLimit("login", email, ipAddress);
+					
+					// Check if email is verified
+					if (!isEmailVerified(user.id)) {
+						return Response.json(
+							{ 
+								user: { id: user.id, email: user.email },
+								email_verification_required: true,
+							},
+							{ status: 200 },
+						);
+					}
+					
 					const userAgent = req.headers.get("user-agent") ?? "unknown";
 					const sessionId = createSession(user.id, ipAddress, userAgent);
 					return Response.json(
@@ -335,6 +391,236 @@ const server = Bun.serve({
 					);
 				} catch {
 					return Response.json({ error: "Login failed" }, { status: 500 });
+				}
+			},
+		},
+		"/api/auth/verify-email": {
+			GET: async (req) => {
+				try {
+					const url = new URL(req.url);
+					const token = url.searchParams.get("token");
+
+					if (!token) {
+						return Response.redirect("/", 302);
+					}
+
+					const result = verifyEmailToken(token);
+
+					if (!result) {
+						return Response.redirect("/", 302);
+					}
+
+					// Create session for the verified user
+					const ipAddress =
+						req.headers.get("x-forwarded-for") ??
+						req.headers.get("x-real-ip") ??
+						"unknown";
+					const userAgent = req.headers.get("user-agent") ?? "unknown";
+					const sessionId = createSession(result.userId, ipAddress, userAgent);
+
+					// Redirect to classes with session cookie
+					return new Response(null, {
+						status: 302,
+						headers: {
+							"Location": "/classes",
+							"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
+						},
+					});
+				} catch (error) {
+					console.error("[Email] Verification error:", error);
+					return Response.redirect("/", 302);
+				}
+			},
+			POST: async (req) => {
+				try {
+					const body = await req.json();
+					const { email, code } = body;
+
+					if (!email || !code) {
+						return Response.json(
+							{ error: "Email and verification code required" },
+							{ status: 400 },
+						);
+					}
+
+					// Get user by email
+					const user = getUserByEmail(email);
+					if (!user) {
+						return Response.json(
+							{ error: "User not found" },
+							{ status: 404 },
+						);
+					}
+
+					// Check if already verified
+					if (isEmailVerified(user.id)) {
+						return Response.json(
+							{ error: "Email already verified" },
+							{ status: 400 },
+						);
+					}
+
+					const success = verifyEmailCode(user.id, code);
+
+					if (!success) {
+						return Response.json(
+							{ error: "Invalid or expired verification code" },
+							{ status: 400 },
+						);
+					}
+
+					// Create session after successful verification
+					const ipAddress =
+						req.headers.get("x-forwarded-for") ??
+						req.headers.get("x-real-ip") ??
+						"unknown";
+					const userAgent = req.headers.get("user-agent") ?? "unknown";
+					const sessionId = createSession(user.id, ipAddress, userAgent);
+
+					return Response.json(
+						{ 
+							message: "Email verified successfully",
+							email_verified: true,
+							user: { id: user.id, email: user.email },
+						},
+						{
+							headers: {
+								"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
+							},
+						},
+					);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/auth/resend-verification": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+					
+					// Rate limiting
+					const rateLimitError = enforceRateLimit(req, "resend-verification", {
+						account: { max: 3, windowSeconds: 60 * 60, email: user.email },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					// Check if already verified
+					if (isEmailVerified(user.id)) {
+						return Response.json(
+							{ error: "Email already verified" },
+							{ status: 400 },
+						);
+					}
+
+					// Generate new code and send email
+					const { code, token } = createEmailVerificationToken(user.id);
+
+					await sendEmail({
+						to: user.email,
+						subject: "Verify your email - Thistle",
+						html: verifyEmailTemplate({
+							name: user.name,
+							code,
+							token,
+						}),
+					});
+
+					return Response.json({ message: "Verification email sent" });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/auth/forgot-password": {
+			POST: async (req) => {
+				try {
+					// Rate limiting
+					const rateLimitError = enforceRateLimit(req, "forgot-password", {
+						ip: { max: 5, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					const body = await req.json();
+					const { email } = body;
+
+					if (!email) {
+						return Response.json({ error: "Email required" }, { status: 400 });
+					}
+
+					// Always return success to prevent email enumeration
+					const user = getUserByEmail(email);
+					if (user) {
+						const origin =
+							req.headers.get("origin") || "http://localhost:3000";
+						const resetToken = createPasswordResetToken(user.id);
+						const resetLink = `${origin}/reset-password?token=${resetToken}`;
+
+						await sendEmail({
+							to: user.email,
+							subject: "Reset your password - Thistle",
+							html: passwordResetTemplate({
+								name: user.name,
+								resetLink,
+							}),
+						}).catch((err) => {
+							console.error("[Email] Failed to send password reset:", err);
+						});
+					}
+
+					return Response.json({
+						message:
+							"If an account exists with that email, a password reset link has been sent",
+					});
+				} catch (error) {
+					console.error("[Email] Forgot password error:", error);
+					return Response.json(
+						{ error: "Failed to process request" },
+						{ status: 500 },
+					);
+				}
+			},
+		},
+		"/api/auth/reset-password": {
+			POST: async (req) => {
+				try {
+					const body = await req.json();
+					const { token, password } = body;
+
+					if (!token || !password) {
+						return Response.json(
+							{ error: "Token and password required" },
+							{ status: 400 },
+						);
+					}
+
+					// Validate password format (client-side hashed PBKDF2)
+					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
+						return Response.json(
+							{ error: "Invalid password format" },
+							{ status: 400 },
+						);
+					}
+
+					const userId = verifyPasswordResetToken(token);
+					if (!userId) {
+						return Response.json(
+							{ error: "Invalid or expired reset token" },
+							{ status: 400 },
+						);
+					}
+
+					// Update password and consume token
+					await updateUserPassword(userId, password);
+					consumePasswordResetToken(token);
+
+					return Response.json({ message: "Password reset successfully" });
+				} catch (error) {
+					console.error("[Email] Reset password error:", error);
+					return Response.json(
+						{ error: "Failed to reset password" },
+						{ status: 500 },
+					);
 				}
 			},
 		},
@@ -380,6 +666,7 @@ const server = Bun.serve({
 					created_at: user.created_at,
 					role: user.role,
 					has_subscription: !!subscription,
+					email_verified: isEmailVerified(user.id),
 				});
 			},
 		},

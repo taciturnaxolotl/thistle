@@ -109,6 +109,24 @@ export function enforceRateLimit(
 	return null; // Allowed
 }
 
+export function clearRateLimit(endpoint: string, email?: string, ipAddress?: string): void {
+	// Clear account-based rate limits
+	if (email) {
+		db.run(
+			"DELETE FROM rate_limit_attempts WHERE key = ?",
+			[`${endpoint}:account:${email.toLowerCase()}`]
+		);
+	}
+	
+	// Clear IP-based rate limits
+	if (ipAddress) {
+		db.run(
+			"DELETE FROM rate_limit_attempts WHERE key = ?",
+			[`${endpoint}:ip:${ipAddress}`]
+		);
+	}
+}
+
 export function cleanupOldAttempts(olderThanSeconds = 86400) {
 	// Clean up attempts older than specified time (default: 24 hours)
 	const cutoff = Math.floor(Date.now() / 1000) - olderThanSeconds;

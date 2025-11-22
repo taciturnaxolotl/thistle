@@ -253,6 +253,137 @@ export async function updateUserPassword(
 	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
 }
 
+/**
+ * Email verification functions
+ */
+
+export function createEmailVerificationToken(userId: number): { code: string; token: string } {
+	// Generate a 6-digit code for user to enter
+	const code = Math.floor(100000 + Math.random() * 900000).toString();
+	const id = crypto.randomUUID();
+	const token = crypto.randomUUID(); // Separate token for URL
+	const expiresAt = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 hours
+
+	// Delete any existing tokens for this user
+	db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [userId]);
+
+	// Store the code as the token field (for manual entry)
+	db.run(
+		"INSERT INTO email_verification_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
+		[id, userId, code, expiresAt],
+	);
+	
+	// Store the URL token as a separate entry
+	db.run(
+		"INSERT INTO email_verification_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
+		[crypto.randomUUID(), userId, token, expiresAt],
+	);
+
+	return { code, token };
+}
+
+export function verifyEmailToken(
+	token: string,
+): { userId: number; email: string } | null {
+	const now = Math.floor(Date.now() / 1000);
+
+	const result = db
+		.query<
+			{ user_id: number; email: string },
+			[string, number]
+		>(
+			`SELECT evt.user_id, u.email 
+       FROM email_verification_tokens evt
+       JOIN users u ON evt.user_id = u.id
+       WHERE evt.token = ? AND evt.expires_at > ?`,
+		)
+		.get(token, now);
+
+	if (!result) return null;
+
+	// Mark email as verified
+	db.run("UPDATE users SET email_verified = 1 WHERE id = ?", [result.user_id]);
+
+	// Delete the token (one-time use)
+	db.run("DELETE FROM email_verification_tokens WHERE token = ?", [token]);
+
+	return { userId: result.user_id, email: result.email };
+}
+
+export function verifyEmailCode(
+	userId: number,
+	code: string,
+): boolean {
+	const now = Math.floor(Date.now() / 1000);
+
+	const result = db
+		.query<
+			{ user_id: number },
+			[number, string, number]
+		>(
+			`SELECT user_id 
+       FROM email_verification_tokens
+       WHERE user_id = ? AND token = ? AND expires_at > ?`,
+		)
+		.get(userId, code, now);
+
+	if (!result) return false;
+
+	// Mark email as verified
+	db.run("UPDATE users SET email_verified = 1 WHERE id = ?", [userId]);
+
+	// Delete the token (one-time use)
+	db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [userId]);
+
+	return true;
+}
+
+export function isEmailVerified(userId: number): boolean {
+	const result = db
+		.query<{ email_verified: number }, [number]>(
+			"SELECT email_verified FROM users WHERE id = ?",
+		)
+		.get(userId);
+
+	return result?.email_verified === 1;
+}
+
+/**
+ * Password reset functions
+ */
+
+export function createPasswordResetToken(userId: number): string {
+	const token = crypto.randomUUID();
+	const id = crypto.randomUUID();
+	const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60; // 1 hour
+
+	// Delete any existing tokens for this user
+	db.run("DELETE FROM password_reset_tokens WHERE user_id = ?", [userId]);
+
+	db.run(
+		"INSERT INTO password_reset_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
+		[id, userId, token, expiresAt],
+	);
+
+	return token;
+}
+
+export function verifyPasswordResetToken(token: string): number | null {
+	const now = Math.floor(Date.now() / 1000);
+
+	const result = db
+		.query<{ user_id: number }, [string, number]>(
+			"SELECT user_id FROM password_reset_tokens WHERE token = ? AND expires_at > ?",
+		)
+		.get(token, now);
+
+	return result?.user_id ?? null;
+}
+
+export function consumePasswordResetToken(token: string): void {
+	db.run("DELETE FROM password_reset_tokens WHERE token = ?", [token]);
+}
+
 export function isUserAdmin(userId: number): boolean {
 	const result = db
 		.query<{ role: UserRole }, [number]>("SELECT role FROM users WHERE id = ?")

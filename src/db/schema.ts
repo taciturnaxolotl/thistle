@@ -213,6 +213,40 @@ const migrations = [
       VALUES (0, 'ghosty@thistle.internal', NULL, 'Ghosty', '👻', 'user', strftime('%s', 'now'));
     `,
 	},
+	{
+		version: 8,
+		name: "Add email verification system",
+		sql: `
+      -- Add email verification flag to users
+      ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0;
+
+      -- Email verification tokens table
+      CREATE TABLE IF NOT EXISTS email_verification_tokens (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_verification_tokens_user_id ON email_verification_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_verification_tokens_token ON email_verification_tokens(token);
+
+      -- Password reset tokens table
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

@@ -30,6 +30,8 @@ export class AuthComponent extends LitElement {
 	@state() needsRegistration = false;
 	@state() passwordStrength: PasswordStrengthResult | null = null;
 	@state() passkeySupported = false;
+	@state() needsEmailVerification = false;
+	@state() verificationCode = "";
 
 	static override styles = css`
 		:host {
@@ -268,7 +270,29 @@ export class AuthComponent extends LitElement {
 		.info-text {
 			color: var(--text);
 			font-size: 0.875rem;
-			margin: 0;
+			margin: 0 0 1.5rem 0;
+			line-height: 1.5;
+		}
+
+		.verification-code-input {
+			text-align: center;
+			font-size: 1.5rem;
+			letter-spacing: 0.5rem;
+			font-weight: 600;
+			padding: 1rem;
+			font-family: 'Monaco', 'Courier New', monospace;
+		}
+
+		.btn-secondary {
+			background: transparent;
+			color: var(--text);
+			border-color: var(--secondary);
+			flex: 1;
+		}
+
+		.btn-secondary:hover:not(:disabled) {
+			border-color: var(--primary);
+			color: var(--primary);
 		}
 
 	.divider {
@@ -383,7 +407,16 @@ export class AuthComponent extends LitElement {
 					return;
 				}
 
-				this.user = await response.json();
+				const data = await response.json();
+				
+				if (data.email_verification_required) {
+					this.needsEmailVerification = true;
+					this.password = "";
+					this.error = "";
+					return;
+				}
+
+				this.user = data;
 				this.closeModal();
 				await this.checkAuth();
 				window.dispatchEvent(new CustomEvent("auth-changed"));
@@ -411,7 +444,16 @@ export class AuthComponent extends LitElement {
 					return;
 				}
 
-				this.user = await response.json();
+				const data = await response.json();
+				
+				if (data.email_verification_required) {
+					this.needsEmailVerification = true;
+					this.password = "";
+					this.error = "";
+					return;
+				}
+
+				this.user = data;
 				this.closeModal();
 				await this.checkAuth();
 				window.dispatchEvent(new CustomEvent("auth-changed"));
@@ -451,6 +493,45 @@ export class AuthComponent extends LitElement {
 
 	private handlePasswordInput(e: Event) {
 		this.password = (e.target as HTMLInputElement).value;
+	}
+
+	private handleVerificationCodeInput(e: Event) {
+		this.verificationCode = (e.target as HTMLInputElement).value;
+	}
+
+	private async handleVerifyEmail(e: Event) {
+		e.preventDefault();
+		this.error = "";
+		this.isSubmitting = true;
+
+		try {
+			const response = await fetch("/api/auth/verify-email", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					email: this.email,
+					code: this.verificationCode,
+				}),
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Verification failed";
+				return;
+			}
+
+			// Successfully verified - redirect to classes
+			this.closeModal();
+			await this.checkAuth();
+			window.dispatchEvent(new CustomEvent("auth-changed"));
+			window.location.href = "/classes";
+		} catch (error) {
+			this.error = error instanceof Error ? error.message : "An error occurred";
+		} finally {
+			this.isSubmitting = false;
+		}
 	}
 
 	private handlePasswordBlur() {
@@ -543,9 +624,66 @@ export class AuthComponent extends LitElement {
 						<div class="modal-overlay" @click=${this.closeModal}>
 							<div class="modal" @click=${(e: Event) => e.stopPropagation()}>
 								<h2 class="modal-title">
-									${this.needsRegistration ? "Create Account" : "Sign In"}
+									${this.needsEmailVerification ? "Verify Email" : this.needsRegistration ? "Create Account" : "Sign In"}
 								</h2>
 
+								${
+									this.needsEmailVerification
+										? html`
+											<p class="info-text">
+												We sent a 6-digit verification code to <strong>${this.email}</strong>.<br>
+												Check your email and enter the code below.
+											</p>
+											
+											<form @submit=${this.handleVerifyEmail}>
+												<div class="form-group">
+													<label for="verification-code">Verification Code</label>
+													<input
+														type="text"
+														id="verification-code"
+														class="verification-code-input"
+														placeholder="000000"
+														.value=${this.verificationCode}
+														@input=${this.handleVerificationCodeInput}
+														required
+														maxlength="6"
+														pattern="[0-9]{6}"
+														inputmode="numeric"
+														?disabled=${this.isSubmitting}
+														autocomplete="one-time-code"
+													/>
+												</div>
+
+												${
+													this.error
+														? html`<div class="error-message">${this.error}</div>`
+														: ""
+												}
+
+												<div class="modal-actions">
+													<button
+														type="submit"
+														class="btn-primary"
+														?disabled=${this.isSubmitting || this.verificationCode.length !== 6}
+													>
+														${this.isSubmitting ? "Verifying..." : "Verify Email"}
+													</button>
+													<button
+														type="button"
+														class="btn-secondary"
+														@click=${() => {
+															this.needsEmailVerification = false;
+															this.verificationCode = "";
+															this.error = "";
+														}}
+														?disabled=${this.isSubmitting}
+													>
+														Back
+													</button>
+												</div>
+											</form>
+										`
+										: html`
 								${
 									this.needsRegistration
 										? html`
@@ -660,6 +798,8 @@ export class AuthComponent extends LitElement {
 										</button>
 									</div>
 								</form>
+										`
+								}
 							</div>
 						</div>
 					`

@@ -24,6 +24,16 @@ export class AdminTranscriptions extends LitElement {
       display: block;
     }
 
+    .error-banner {
+      background: #fecaca;
+      border: 2px solid rgba(220, 38, 38, 0.8);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #dc2626;
+      font-weight: 500;
+    }
+
     .search-box {
       width: 100%;
       max-width: 30rem;
@@ -180,13 +190,13 @@ export class AdminTranscriptions extends LitElement {
 		try {
 			const response = await fetch("/api/admin/transcriptions");
 			if (!response.ok) {
-				throw new Error("Failed to load transcriptions");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to load transcriptions");
 			}
 
 			this.transcriptions = await response.json();
-		} catch (error) {
-			console.error("Failed to load transcriptions:", error);
-			this.error = "Failed to load transcriptions. Please try again.";
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to load transcriptions. Please try again.";
 		} finally {
 			this.isLoading = false;
 		}
@@ -201,6 +211,7 @@ export class AdminTranscriptions extends LitElement {
 			return;
 		}
 
+		this.error = null;
 		try {
 			const response = await fetch(
 				`/api/admin/transcriptions/${transcriptionId}`,
@@ -210,14 +221,14 @@ export class AdminTranscriptions extends LitElement {
 			);
 
 			if (!response.ok) {
-				throw new Error("Failed to delete transcription");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to delete transcription");
 			}
 
 			await this.loadTranscriptions();
 			this.dispatchEvent(new CustomEvent("transcription-deleted"));
-		} catch (error) {
-			console.error("Failed to delete transcription:", error);
-			alert("Failed to delete transcription. Please try again.");
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to delete transcription. Please try again.";
 		}
 	}
 
@@ -257,7 +268,7 @@ export class AdminTranscriptions extends LitElement {
 
 		if (this.error) {
 			return html`
-        <div class="error">${this.error}</div>
+        <div class="error-banner">${this.error}</div>
         <button @click=${this.loadTranscriptions}>Retry</button>
       `;
 		}
@@ -265,6 +276,8 @@ export class AdminTranscriptions extends LitElement {
 		const filtered = this.filteredTranscriptions;
 
 		return html`
+      ${this.error ? html`<div class="error-banner">${this.error}</div>` : ""}
+      
       <input
         type="text"
         class="search-box"

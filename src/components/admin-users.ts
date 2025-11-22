@@ -29,6 +29,16 @@ export class AdminUsers extends LitElement {
       display: block;
     }
 
+    .error-banner {
+      background: #fecaca;
+      border: 2px solid rgba(220, 38, 38, 0.8);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #dc2626;
+      font-weight: 500;
+    }
+
     .search-box {
       width: 100%;
       max-width: 30rem;
@@ -310,13 +320,13 @@ export class AdminUsers extends LitElement {
 		try {
 			const response = await fetch("/api/admin/users");
 			if (!response.ok) {
-				throw new Error("Failed to load users");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to load users");
 			}
 
 			this.users = await response.json();
-		} catch (error) {
-			console.error("Failed to load users:", error);
-			this.error = "Failed to load users. Please try again.";
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to load users. Please try again.";
 		} finally {
 			this.isLoading = false;
 		}
@@ -369,7 +379,8 @@ export class AdminUsers extends LitElement {
 			});
 
 			if (!response.ok) {
-				throw new Error("Failed to update role");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to update role");
 			}
 
 			if (isDemotingSelf) {
@@ -377,9 +388,8 @@ export class AdminUsers extends LitElement {
 			} else {
 				await this.loadUsers();
 			}
-		} catch (error) {
-			console.error("Failed to update role:", error);
-			alert("Failed to update user role");
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to update user role";
 			select.value = oldRole;
 		}
 	}
@@ -438,20 +448,22 @@ export class AdminUsers extends LitElement {
 	}
 
 	private async performDeleteUser(userId: number) {
+		this.error = null;
 		try {
 			const response = await fetch(`/api/admin/users/${userId}`, {
 				method: "DELETE",
 			});
 
 			if (!response.ok) {
-				throw new Error("Failed to delete user");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to delete user");
 			}
 
 			// Remove user from local array instead of reloading
 			this.users = this.users.filter(u => u.id !== userId);
 			this.dispatchEvent(new CustomEvent("user-deleted"));
-		} catch {
-			alert("Failed to delete user. Please try again.");
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to delete user. Please try again.";
 		}
 	}
 
@@ -501,9 +513,10 @@ export class AdminUsers extends LitElement {
 		this.deleteState = { id: userId, type: "revoke", clicks: newClicks, timeout };
 	}
 
-	private async performRevokeSubscription(userId: number, email: string, subscriptionId: string) {
+	private async performRevokeSubscription(userId: number, _email: string, subscriptionId: string) {
 		this.revokingSubscriptions.add(userId);
 		this.requestUpdate();
+		this.error = null;
 
 		try {
 			const response = await fetch(`/api/admin/users/${userId}/subscription`, {
@@ -518,9 +531,8 @@ export class AdminUsers extends LitElement {
 			}
 
 			await this.loadUsers();
-			alert(`Subscription revoked for ${email}`);
-		} catch (error) {
-			alert(`Failed to revoke subscription: ${error instanceof Error ? error.message : "Unknown error"}`);
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to revoke subscription";
 			this.revokingSubscriptions.delete(userId);
 		}
 	}
@@ -530,6 +542,7 @@ export class AdminUsers extends LitElement {
 
 		this.syncingSubscriptions.add(userId);
 		this.requestUpdate();
+		this.error = null;
 
 		try {
 			const response = await fetch(`/api/admin/users/${userId}/subscription`, {
@@ -539,9 +552,9 @@ export class AdminUsers extends LitElement {
 
 			if (!response.ok) {
 				const data = await response.json();
-				// Don't alert if there's just no subscription
+				// Don't show error if there's just no subscription
 				if (response.status !== 404) {
-					alert(`Failed to sync subscription: ${data.error || "Unknown error"}`);
+					this.error = data.error || "Failed to sync subscription";
 				}
 				return;
 			}
@@ -626,7 +639,7 @@ export class AdminUsers extends LitElement {
 
 		if (this.error) {
 			return html`
-        <div class="error">${this.error}</div>
+        <div class="error-banner">${this.error}</div>
         <button @click=${this.loadUsers}>Retry</button>
       `;
 		}
@@ -634,6 +647,8 @@ export class AdminUsers extends LitElement {
 		const filtered = this.filteredUsers;
 
 		return html`
+      ${this.error ? html`<div class="error-banner">${this.error}</div>` : ""}
+      
       <input
         type="text"
         class="search-box"

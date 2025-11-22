@@ -227,12 +227,14 @@ export class AdminClasses extends LitElement {
       color: var(--paynes-gray);
     }
 
-    .error-message {
-      background: #fee2e2;
-      color: #991b1b;
-      padding: 1rem;
+    .error-banner {
+      background: #fecaca;
+      border: 2px solid rgba(220, 38, 38, 0.8);
       border-radius: 6px;
-      margin-bottom: 1rem;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #dc2626;
+      font-weight: 500;
     }
 
     .tabs {
@@ -656,7 +658,7 @@ export class AdminClasses extends LitElement {
 		const filteredClasses = this.getFilteredClasses();
 
 		return html`
-      ${this.error ? html`<div class="error-message">${this.error}</div>` : ""}
+      ${this.error ? html`<div class="error-banner">${this.error}</div>` : ""}
 
       <div class="tabs">
         <button
@@ -926,7 +928,7 @@ export class AdminClasses extends LitElement {
             ${description}
           </p>
 
-          ${this.error ? html`<div class="error-message">${this.error}</div>` : ""}
+          ${this.error ? html`<div class="error-banner">${this.error}</div>` : ""}
 
           <div class="form-grid">
             <div class="form-group">

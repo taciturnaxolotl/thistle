@@ -46,6 +46,16 @@ export class AdminPendingRecordings extends LitElement {
       display: block;
     }
 
+    .error-banner {
+      background: #fecaca;
+      border: 2px solid rgba(220, 38, 38, 0.8);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      color: #dc2626;
+      font-weight: 500;
+    }
+
     .loading,
     .empty-state {
       text-align: center;
@@ -236,12 +246,13 @@ export class AdminPendingRecordings extends LitElement {
 		this.isLoading = true;
 		this.error = null;
 
-		try {
-			// Get all classes with their transcriptions
-			const response = await fetch("/api/classes");
-			if (!response.ok) {
-				throw new Error("Failed to load classes");
-			}
+			try {
+				// Get all classes with their transcriptions
+				const response = await fetch("/api/classes");
+				if (!response.ok) {
+					const data = await response.json();
+					throw new Error(data.error || "Failed to load classes");
+				}
 
 			const data = await response.json();
 			const classesGrouped = data.classes || {};
@@ -305,29 +316,29 @@ export class AdminPendingRecordings extends LitElement {
 			pendingRecordings.sort((a, b) => b.created_at - a.created_at);
 
 			this.recordings = pendingRecordings;
-		} catch (error) {
-			console.error("Failed to load pending recordings:", error);
-			this.error = "Failed to load pending recordings. Please try again.";
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to load pending recordings. Please try again.";
 		} finally {
 			this.isLoading = false;
 		}
 	}
 
 	private async handleApprove(recordingId: string) {
+		this.error = null;
 		try {
 			const response = await fetch(`/api/transcripts/${recordingId}/select`, {
 				method: "PUT",
 			});
 
 			if (!response.ok) {
-				throw new Error("Failed to approve recording");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to approve recording");
 			}
 
 			// Reload recordings
 			await this.loadRecordings();
-		} catch (error) {
-			console.error("Failed to approve recording:", error);
-			alert("Failed to approve recording. Please try again.");
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to approve recording. Please try again.";
 		}
 	}
 
@@ -340,20 +351,21 @@ export class AdminPendingRecordings extends LitElement {
 			return;
 		}
 
+		this.error = null;
 		try {
 			const response = await fetch(`/api/admin/transcriptions/${recordingId}`, {
 				method: "DELETE",
 			});
 
 			if (!response.ok) {
-				throw new Error("Failed to delete recording");
+				const data = await response.json();
+				throw new Error(data.error || "Failed to delete recording");
 			}
 
 			// Reload recordings
 			await this.loadRecordings();
-		} catch (error) {
-			console.error("Failed to delete recording:", error);
-			alert("Failed to delete recording. Please try again.");
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to delete recording. Please try again.";
 		}
 	}
 
@@ -369,7 +381,7 @@ export class AdminPendingRecordings extends LitElement {
 
 		if (this.error) {
 			return html`
-        <div class="error">${this.error}</div>
+        <div class="error-banner">${this.error}</div>
         <button @click=${this.loadRecordings}>Retry</button>
       `;
 		}
@@ -383,6 +395,8 @@ export class AdminPendingRecordings extends LitElement {
 		}
 
 		return html`
+      ${this.error ? html`<div class="error-banner">${this.error}</div>` : ""}
+      
       <div class="recordings-grid">
         ${this.recordings.map(
 					(recording) => html`

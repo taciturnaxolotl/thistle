@@ -247,6 +247,13 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
     `,
 	},
+	{
+		version: 4,
+		name: "Add email notification preferences",
+		sql: `
+      ALTER TABLE users ADD COLUMN email_notifications_enabled BOOLEAN DEFAULT 1;
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

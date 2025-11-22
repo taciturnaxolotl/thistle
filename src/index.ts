@@ -659,6 +659,13 @@ const server = Bun.serve({
 					)
 					.get(user.id);
 
+				// Get notification preferences
+				const prefs = db
+					.query<{ email_notifications_enabled: number }, [number]>(
+						"SELECT email_notifications_enabled FROM users WHERE id = ?",
+					)
+					.get(user.id);
+
 				return Response.json({
 					email: user.email,
 					name: user.name,
@@ -667,6 +674,7 @@ const server = Bun.serve({
 					role: user.role,
 					has_subscription: !!subscription,
 					email_verified: isEmailVerified(user.id),
+					email_notifications_enabled: prefs?.email_notifications_enabled === 1,
 				});
 			},
 		},
@@ -1024,6 +1032,32 @@ const server = Bun.serve({
 				} catch {
 					return Response.json(
 						{ error: "Failed to update avatar" },
+						{ status: 500 },
+					);
+				}
+			},
+		},
+		"/api/user/notifications": {
+			PUT: async (req) => {
+				const sessionId = getSessionFromRequest(req);
+				if (!sessionId) {
+					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				}
+				const user = getUserBySession(sessionId);
+				if (!user) {
+					return Response.json({ error: "Invalid session" }, { status: 401 });
+				}
+				const body = await req.json();
+				const { email_notifications_enabled } = body;
+				if (typeof email_notifications_enabled !== "boolean") {
+					return Response.json({ error: "email_notifications_enabled must be a boolean" }, { status: 400 });
+				}
+				try {
+					db.run("UPDATE users SET email_notifications_enabled = ? WHERE id = ?", [email_notifications_enabled ? 1 : 0, user.id]);
+					return Response.json({ success: true });
+				} catch {
+					return Response.json(
+						{ error: "Failed to update notification settings" },
 						{ status: 500 },
 					);
 				}

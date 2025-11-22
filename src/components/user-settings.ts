@@ -36,7 +36,7 @@ interface Subscription {
 	canceled_at: number | null;
 }
 
-type SettingsPage = "account" | "sessions" | "passkeys" | "billing" | "danger";
+type SettingsPage = "account" | "sessions" | "passkeys" | "billing" | "notifications" | "danger";
 
 @customElement("user-settings")
 export class UserSettings extends LitElement {
@@ -59,6 +59,8 @@ export class UserSettings extends LitElement {
 	@state() newAvatar = "";
 	@state() passkeySupported = false;
 	@state() addingPasskey = false;
+	@state() emailNotificationsEnabled = true;
+	@state() deletingAccount = false;
 
 	static override styles = css`
 		:host {
@@ -418,10 +420,79 @@ export class UserSettings extends LitElement {
 			color: var(--accent);
 		}
 
+		.error-banner {
+			background: #fecaca;
+			border: 2px solid rgba(220, 38, 38, 0.8);
+			border-radius: 6px;
+			padding: 1rem;
+			margin-bottom: 1.5rem;
+			color: #dc2626;
+			font-weight: 500;
+		}
+
 		.loading {
 			text-align: center;
 			color: var(--text);
 			padding: 2rem;
+		}
+
+		.setting-row {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 1rem;
+			border: 1px solid var(--secondary);
+			border-radius: 6px;
+			gap: 1rem;
+		}
+
+		.setting-info {
+			flex: 1;
+		}
+
+		.toggle {
+			position: relative;
+			display: inline-block;
+			width: 48px;
+			height: 24px;
+		}
+
+		.toggle input {
+			opacity: 0;
+			width: 0;
+			height: 0;
+		}
+
+		.toggle-slider {
+			position: absolute;
+			cursor: pointer;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background-color: var(--secondary);
+			transition: 0.2s;
+			border-radius: 24px;
+		}
+
+		.toggle-slider:before {
+			position: absolute;
+			content: "";
+			height: 18px;
+			width: 18px;
+			left: 3px;
+			bottom: 3px;
+			background-color: white;
+			transition: 0.2s;
+			border-radius: 50%;
+		}
+
+		.toggle input:checked + .toggle-slider {
+			background-color: var(--primary);
+		}
+
+		.toggle input:checked + .toggle-slider:before {
+			transform: translateX(24px);
 		}
 
 		@media (max-width: 768px) {
@@ -463,11 +534,12 @@ export class UserSettings extends LitElement {
 	}
 
 	private isValidTab(tab: string): boolean {
-		return ["account", "sessions", "passkeys", "billing", "danger"].includes(tab);
+		return ["account", "sessions", "passkeys", "billing", "notifications", "danger"].includes(tab);
 	}
 
 	private setTab(tab: SettingsPage) {
 		this.currentPage = tab;
+		this.error = ""; // Clear errors when switching tabs
 		// Update URL without reloading page
 		const url = new URL(window.location.href);
 		url.searchParams.set("tab", tab);
@@ -483,7 +555,9 @@ export class UserSettings extends LitElement {
 				return;
 			}
 
-			this.user = await response.json();
+			const data = await response.json();
+			this.user = data;
+			this.emailNotificationsEnabled = data.email_notifications_enabled ?? true;
 		} finally {
 			this.loading = false;
 		}
@@ -558,41 +632,55 @@ export class UserSettings extends LitElement {
 			return;
 		}
 
+		this.error = "";
 		try {
 			const response = await fetch(`/api/passkeys/${passkeyId}`, {
 				method: "DELETE",
 			});
 
 			if (!response.ok) {
-				const error = await response.json();
-				this.error = error.error || "Failed to delete passkey";
+				const data = await response.json();
+				this.error = data.error || "Failed to delete passkey";
 				return;
 			}
 
 			// Reload passkeys
 			await this.loadPasskeys();
-		} catch {
-			this.error = "Failed to delete passkey";
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to delete passkey";
 		}
 	}
 
 	async handleLogout() {
+		this.error = "";
 		try {
-			await fetch("/api/auth/logout", { method: "POST" });
+			const response = await fetch("/api/auth/logout", { method: "POST" });
+			
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to logout";
+				return;
+			}
+			
 			window.location.href = "/";
-		} catch {
-			this.error = "Failed to logout";
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to logout";
 		}
 	}
 
 	async handleDeleteAccount() {
+		this.deletingAccount = true;
+		this.error = "";
+		document.body.style.cursor = "wait";
+		
 		try {
 			const response = await fetch("/api/user", {
 				method: "DELETE",
 			});
 
 			if (!response.ok) {
-				this.error = "Failed to delete account";
+				const data = await response.json();
+				this.error = data.error || "Failed to delete account";
 				return;
 			}
 
@@ -600,11 +688,14 @@ export class UserSettings extends LitElement {
 		} catch {
 			this.error = "Failed to delete account";
 		} finally {
+			this.deletingAccount = false;
 			this.showDeleteConfirm = false;
+			document.body.style.cursor = "";
 		}
 	}
 
 	async handleUpdateEmail() {
+		this.error = "";
 		if (!this.newEmail) {
 			this.error = "Email required";
 			return;
@@ -633,6 +724,7 @@ export class UserSettings extends LitElement {
 	}
 
 	async handleUpdatePassword() {
+		this.error = "";
 		if (!this.newPassword) {
 			this.error = "Password required";
 			return;
@@ -670,6 +762,7 @@ export class UserSettings extends LitElement {
 	}
 
 	async handleUpdateName() {
+		this.error = "";
 		if (!this.newName) {
 			this.error = "Name required";
 			return;
@@ -697,6 +790,7 @@ export class UserSettings extends LitElement {
 	}
 
 	async handleUpdateAvatar() {
+		this.error = "";
 		if (!this.newAvatar) {
 			this.error = "Avatar required";
 			return;
@@ -844,6 +938,7 @@ export class UserSettings extends LitElement {
 	}
 
 	async handleKillSession(sessionId: string) {
+		this.error = "";
 		try {
 			const response = await fetch(`/api/sessions`, {
 				method: "DELETE",
@@ -895,6 +990,11 @@ export class UserSettings extends LitElement {
 
 		return html`
 			<div class="content-inner">
+			${this.error ? html`
+				<div class="error-banner">
+					${this.error}
+				</div>
+			` : ""}
 			<div class="section">
 				<h2 class="section-title">Profile Information</h2>
 
@@ -1103,6 +1203,11 @@ export class UserSettings extends LitElement {
 	renderSessionsPage() {
 		return html`
 			<div class="content-inner">
+			${this.error ? html`
+				<div class="error-banner">
+					${this.error}
+				</div>
+			` : ""}
 			<div class="section">
 				<h2 class="section-title">Active Sessions</h2>
 				${
@@ -1193,6 +1298,11 @@ export class UserSettings extends LitElement {
 
 			return html`
 				<div class="content-inner">
+					${this.error ? html`
+						<div class="error-banner">
+							${this.error}
+						</div>
+					` : ""}
 					<div class="section">
 						<h2 class="section-title">Subscription</h2>
 						
@@ -1235,8 +1345,6 @@ export class UserSettings extends LitElement {
 								Reactivate your subscription to unlock unlimited transcriptions.
 							</p>
 						</div>
-
-						${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
 					</div>
 				</div>
 			`;
@@ -1245,6 +1353,11 @@ export class UserSettings extends LitElement {
 		if (hasActiveSubscription) {
 			return html`
 				<div class="content-inner">
+					${this.error ? html`
+						<div class="error-banner">
+							${this.error}
+						</div>
+					` : ""}
 					<div class="section">
 						<h2 class="section-title">Subscription</h2>
 						
@@ -1293,8 +1406,6 @@ export class UserSettings extends LitElement {
 								Opens the customer portal where you can update payment methods, view invoices, and manage your subscription.
 							</p>
 						</div>
-
-						${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
 					</div>
 				</div>
 			`;
@@ -1302,6 +1413,11 @@ export class UserSettings extends LitElement {
 
 		return html`
 			<div class="content-inner">
+				${this.error ? html`
+					<div class="error-banner">
+						${this.error}
+					</div>
+				` : ""}
 				<div class="section">
 					<h2 class="section-title">Billing & Subscription</h2>
 					<p class="field-description" style="margin-bottom: 1.5rem;">
@@ -1314,7 +1430,6 @@ export class UserSettings extends LitElement {
 					>
 						${this.loading ? "Loading..." : "Activate Your Subscription"}
 					</button>
-					${this.error ? html`<p class="error" style="margin-top: 1rem;">${this.error}</p>` : ""}
 				</div>
 			</div>
 		`;
@@ -1323,6 +1438,11 @@ export class UserSettings extends LitElement {
 	renderDangerPage() {
 		return html`
 			<div class="content-inner">
+			${this.error ? html`
+				<div class="error-banner">
+					${this.error}
+				</div>
+			` : ""}
 			<div class="section danger-section">
 				<h2 class="section-title">Delete Account</h2>
 				<p class="danger-text">
@@ -1342,13 +1462,68 @@ export class UserSettings extends LitElement {
 		`;
 	}
 
+	renderNotificationsPage() {
+		return html`
+			<div class="content-inner">
+				${this.error ? html`
+					<div class="error-banner">
+						${this.error}
+					</div>
+				` : ""}
+				<div class="section">
+					<h2 class="section-title">Email Notifications</h2>
+					<p style="color: var(--text); margin-bottom: 1rem;">
+						Control which emails you receive from Thistle.
+					</p>
+					
+					<div class="setting-row">
+						<div class="setting-info">
+							<strong>Transcription Complete</strong>
+							<p style="color: var(--paynes-gray); font-size: 0.875rem; margin: 0.25rem 0 0 0;">
+								Get notified when your transcription is ready
+							</p>
+						</div>
+						<label class="toggle">
+							<input
+								type="checkbox"
+								.checked=${this.emailNotificationsEnabled}
+								@change=${async (e: Event) => {
+									const target = e.target as HTMLInputElement;
+									this.emailNotificationsEnabled = target.checked;
+									this.error = "";
+									
+									try {
+										const response = await fetch("/api/user/notifications", {
+											method: "PUT",
+											headers: { "Content-Type": "application/json" },
+											body: JSON.stringify({
+												email_notifications_enabled: this.emailNotificationsEnabled,
+											}),
+										});
+										
+										if (!response.ok) {
+											const data = await response.json();
+											throw new Error(data.error || "Failed to update notification settings");
+										}
+									} catch (err) {
+										// Revert on error
+										this.emailNotificationsEnabled = !target.checked;
+										target.checked = !target.checked;
+										this.error = err instanceof Error ? err.message : "Failed to update notification settings";
+									}
+								}}
+							/>
+							<span class="toggle-slider"></span>
+						</label>
+					</div>
+				</div>
+			</div>
+		`;
+	}
+
 	override render() {
 		if (this.loading) {
 			return html`<div class="loading">Loading...</div>`;
-		}
-
-		if (this.error) {
-			return html`<div class="error">${this.error}</div>`;
 		}
 
 		if (!this.user) {
@@ -1385,6 +1560,14 @@ export class UserSettings extends LitElement {
 						Billing
 					</button>
 					<button
+						class="tab ${this.currentPage === "notifications" ? "active" : ""}"
+						@click=${() => {
+							this.setTab("notifications");
+						}}
+					>
+						Notifications
+					</button>
+					<button
 						class="tab ${this.currentPage === "danger" ? "active" : ""}"
 						@click=${() => {
 							this.setTab("danger");
@@ -1397,6 +1580,7 @@ export class UserSettings extends LitElement {
 				${this.currentPage === "account" ? this.renderAccountPage() : ""}
 				${this.currentPage === "sessions" ? this.renderSessionsPage() : ""}
 				${this.currentPage === "billing" ? this.renderBillingPage() : ""}
+				${this.currentPage === "notifications" ? this.renderNotificationsPage() : ""}
 				${this.currentPage === "danger" ? this.renderDangerPage() : ""}
 			</div>
 
@@ -1416,14 +1600,19 @@ export class UserSettings extends LitElement {
 									permanently deleted.
 								</p>
 								<div class="modal-actions">
-									<button class="btn btn-rejection" @click=${this.handleDeleteAccount}>
-										Yes, Delete My Account
+									<button 
+										class="btn btn-rejection" 
+										@click=${this.handleDeleteAccount}
+										?disabled=${this.deletingAccount}
+									>
+										${this.deletingAccount ? "Deleting..." : "Yes, Delete My Account"}
 									</button>
 									<button
 										class="btn btn-neutral"
 										@click=${() => {
 											this.showDeleteConfirm = false;
 										}}
+										?disabled=${this.deletingAccount}
 									>
 										Cancel
 									</button>

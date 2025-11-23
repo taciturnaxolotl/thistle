@@ -11,5 +11,7 @@ const deletedCount = result.changes;
 if (deletedCount === 0) {
 	console.log("ℹ️  No rate limit attempts to clear");
 } else {
-	console.log(`✅ Successfully cleared ${deletedCount} rate limit attempt${deletedCount === 1 ? '' : 's'}`);
+	console.log(
+		`✅ Successfully cleared ${deletedCount} rate limit attempt${deletedCount === 1 ? "" : "s"}`,
+	);
 }

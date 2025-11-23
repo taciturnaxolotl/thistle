@@ -440,7 +440,7 @@ export class AuthComponent extends LitElement {
 				}
 
 				const data = await response.json();
-				
+
 				if (data.email_verification_required) {
 					this.needsEmailVerification = true;
 					this.password = "";
@@ -478,7 +478,7 @@ export class AuthComponent extends LitElement {
 				}
 
 				const data = await response.json();
-				
+
 				if (data.email_verification_required) {
 					this.needsEmailVerification = true;
 					this.password = "";
@@ -608,21 +608,21 @@ export class AuthComponent extends LitElement {
 	private startResendTimer(sentAtTimestamp: number) {
 		// Use provided timestamp
 		this.codeSentAt = sentAtTimestamp;
-		
+
 		// Clear existing interval if any
 		if (this.resendInterval !== null) {
 			clearInterval(this.resendInterval);
 		}
-		
+
 		// Update timer based on elapsed time
 		const updateTimer = () => {
 			if (this.codeSentAt === null) return;
-			
+
 			const now = Math.floor(Date.now() / 1000);
 			const elapsed = now - this.codeSentAt;
-			const remaining = Math.max(0, (5 * 60) - elapsed);
+			const remaining = Math.max(0, 5 * 60 - elapsed);
 			this.resendCodeTimer = remaining;
-			
+
 			if (remaining <= 0) {
 				if (this.resendInterval !== null) {
 					clearInterval(this.resendInterval);
@@ -630,10 +630,10 @@ export class AuthComponent extends LitElement {
 				}
 			}
 		};
-		
+
 		// Update immediately
 		updateTimer();
-		
+
 		// Then update every second
 		this.resendInterval = window.setInterval(updateTimer, 1000);
 	}
@@ -671,7 +671,7 @@ export class AuthComponent extends LitElement {
 	private formatTimer(seconds: number): string {
 		const mins = Math.floor(seconds / 60);
 		const secs = seconds % 60;
-		return `${mins}:${secs.toString().padStart(2, '0')}`;
+		return `${mins}:${secs.toString().padStart(2, "0")}`;
 	}
 
 	override disconnectedCallback() {

@@ -109,21 +109,23 @@ export function enforceRateLimit(
 	return null; // Allowed
 }
 
-export function clearRateLimit(endpoint: string, email?: string, ipAddress?: string): void {
+export function clearRateLimit(
+	endpoint: string,
+	email?: string,
+	ipAddress?: string,
+): void {
 	// Clear account-based rate limits
 	if (email) {
-		db.run(
-			"DELETE FROM rate_limit_attempts WHERE key = ?",
-			[`${endpoint}:account:${email.toLowerCase()}`]
-		);
+		db.run("DELETE FROM rate_limit_attempts WHERE key = ?", [
+			`${endpoint}:account:${email.toLowerCase()}`,
+		]);
 	}
-	
+
 	// Clear IP-based rate limits
 	if (ipAddress) {
-		db.run(
-			"DELETE FROM rate_limit_attempts WHERE key = ?",
-			[`${endpoint}:ip:${ipAddress}`]
-		);
+		db.run("DELETE FROM rate_limit_attempts WHERE key = ?", [
+			`${endpoint}:ip:${ipAddress}`,
+		]);
 	}
 }
 

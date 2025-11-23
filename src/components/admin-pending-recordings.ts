@@ -246,13 +246,13 @@ export class AdminPendingRecordings extends LitElement {
 		this.isLoading = true;
 		this.error = null;
 
-			try {
-				// Get all classes with their transcriptions
-				const response = await fetch("/api/classes");
-				if (!response.ok) {
-					const data = await response.json();
-					throw new Error(data.error || "Failed to load classes");
-				}
+		try {
+			// Get all classes with their transcriptions
+			const response = await fetch("/api/classes");
+			if (!response.ok) {
+				const data = await response.json();
+				throw new Error(data.error || "Failed to load classes");
+			}
 
 			const data = await response.json();
 			const classesGrouped = data.classes || {};
@@ -317,7 +317,10 @@ export class AdminPendingRecordings extends LitElement {
 
 			this.recordings = pendingRecordings;
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to load pending recordings. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to load pending recordings. Please try again.";
 		} finally {
 			this.isLoading = false;
 		}
@@ -338,7 +341,10 @@ export class AdminPendingRecordings extends LitElement {
 			// Reload recordings
 			await this.loadRecordings();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to approve recording. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to approve recording. Please try again.";
 		}
 	}
 
@@ -365,7 +371,10 @@ export class AdminPendingRecordings extends LitElement {
 			// Reload recordings
 			await this.loadRecordings();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to delete recording. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to delete recording. Please try again.";
 		}
 	}
 

@@ -1,30 +1,30 @@
 {
-  "name": "thistle",
-  "module": "src/index.ts",
-  "type": "module",
-  "private": true,
-  "scripts": {
-    "dev": "bun run src/index.ts --hot",
-    "clean": "rm -rf transcripts uploads thistle.db",
-    "test": "bun test",
-    "test:integration": "bun test src/index.test.ts",
-    "ngrok": "ngrok http 3000 --domain casual-renewing-reptile.ngrok-free.app"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.3.2",
-    "@simplewebauthn/types": "^12.0.0",
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "@polar-sh/sdk": "^0.41.5",
-    "@simplewebauthn/browser": "^13.2.2",
-    "@simplewebauthn/server": "^13.2.2",
-    "eventsource-client": "^1.2.0",
-    "lit": "^3.3.1",
-    "nanoid": "^5.1.6",
-    "ua-parser-js": "^2.0.6"
-  }
+	"name": "thistle",
+	"module": "src/index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun run src/index.ts --hot",
+		"clean": "rm -rf transcripts uploads thistle.db",
+		"test": "bun test",
+		"test:integration": "bun test src/index.test.ts",
+		"ngrok": "ngrok http 3000 --domain casual-renewing-reptile.ngrok-free.app"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.2",
+		"@simplewebauthn/types": "^12.0.0",
+		"@types/bun": "latest"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"@polar-sh/sdk": "^0.41.5",
+		"@simplewebauthn/browser": "^13.2.2",
+		"@simplewebauthn/server": "^13.2.2",
+		"eventsource-client": "^1.2.0",
+		"lit": "^3.3.1",
+		"nanoid": "^5.1.6",
+		"ua-parser-js": "^2.0.6"
+	}
 }

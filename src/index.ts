@@ -2,6 +2,11 @@ import db from "./db/schema";
 import {
 	authenticateUser,
 	cleanupExpiredSessions,
+	consumeEmailChangeToken,
+	consumePasswordResetToken,
+	createEmailChangeToken,
+	createEmailVerificationToken,
+	createPasswordResetToken,
 	createSession,
 	createUser,
 	deleteAllUserSessions,
@@ -17,6 +22,8 @@ import {
 	getUserByEmail,
 	getUserBySession,
 	getUserSessionsForUser,
+	getVerificationCodeSentAt,
+	isEmailVerified,
 	type UserRole,
 	updateUserAvatar,
 	updateUserEmail,
@@ -24,17 +31,10 @@ import {
 	updateUserName,
 	updateUserPassword,
 	updateUserRole,
-	createEmailVerificationToken,
-	verifyEmailToken,
-	verifyEmailCode,
-	isEmailVerified,
-	getVerificationCodeSentAt,
-	createPasswordResetToken,
-	verifyPasswordResetToken,
-	consumePasswordResetToken,
-	createEmailChangeToken,
 	verifyEmailChangeToken,
-	consumeEmailChangeToken,
+	verifyEmailCode,
+	verifyEmailToken,
+	verifyPasswordResetToken,
 } from "./lib/auth";
 import {
 	addToWaitlist,
@@ -57,6 +57,12 @@ import {
 	toggleClassArchive,
 	updateMeetingTime,
 } from "./lib/classes";
+import { sendEmail } from "./lib/email";
+import {
+	emailChangeTemplate,
+	passwordResetTemplate,
+	verifyEmailTemplate,
+} from "./lib/email-templates";
 import { AuthErrors, handleError, ValidationErrors } from "./lib/errors";
 import {
 	hasActiveSubscription,
@@ -73,7 +79,7 @@ import {
 	verifyAndAuthenticatePasskey,
 	verifyAndCreatePasskey,
 } from "./lib/passkey";
-import { enforceRateLimit, clearRateLimit } from "./lib/rate-limit";
+import { clearRateLimit, enforceRateLimit } from "./lib/rate-limit";
 import { getTranscriptVTT } from "./lib/transcript-storage";
 import {
 	MAX_FILE_SIZE,
@@ -81,12 +87,6 @@ import {
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
-import { sendEmail } from "./lib/email";
-import {
-	verifyEmailTemplate,
-	passwordResetTemplate,
-	emailChangeTemplate,
-} from "./lib/email-templates";
 import adminHTML from "./pages/admin.html";
 import checkoutHTML from "./pages/checkout.html";
 import classHTML from "./pages/class.html";
@@ -144,18 +144,26 @@ async function syncUserSubscriptionsFromPolar(
 			customerId: customer.id,
 		});
 
-		if (!subscriptions.result.items || subscriptions.result.items.length === 0) {
+		if (
+			!subscriptions.result.items ||
+			subscriptions.result.items.length === 0
+		) {
 			console.log(`[Sync] No subscriptions found for customer ${customer.id}`);
 			return;
 		}
 
 		// Filter to only active/trialing/past_due subscriptions (not canceled/expired)
 		const currentSubscriptions = subscriptions.result.items.filter(
-			(sub) => sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due'
+			(sub) =>
+				sub.status === "active" ||
+				sub.status === "trialing" ||
+				sub.status === "past_due",
 		);
 
 		if (currentSubscriptions.length === 0) {
-			console.log(`[Sync] No current subscriptions found for customer ${customer.id}`);
+			console.log(
+				`[Sync] No current subscriptions found for customer ${customer.id}`,
+			);
 			return;
 		}
 
@@ -207,7 +215,6 @@ async function syncUserSubscriptionsFromPolar(
 		// Don't throw - registration should succeed even if sync fails
 	}
 }
-
 
 // Sync with Whisper DB on startup
 try {
@@ -280,10 +287,10 @@ const server = Bun.serve({
 						);
 					}
 					const user = await createUser(email, password, name);
-					
+
 					// Send verification email - MUST succeed for registration to complete
 					const { code, token, sentAt } = createEmailVerificationToken(user.id);
-					
+
 					try {
 						await sendEmail({
 							to: user.email,
@@ -297,31 +304,36 @@ const server = Bun.serve({
 					} catch (err) {
 						console.error("[Email] Failed to send verification email:", err);
 						// Rollback user creation - direct DB delete since user was just created
-						db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [user.id]);
+						db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [
+							user.id,
+						]);
 						db.run("DELETE FROM sessions WHERE user_id = ?", [user.id]);
 						db.run("DELETE FROM users WHERE id = ?", [user.id]);
 						return Response.json(
-							{ error: "Failed to send verification email. Please try again later." },
+							{
+								error:
+									"Failed to send verification email. Please try again later.",
+							},
 							{ status: 500 },
 						);
 					}
-					
+
 					// Attempt to sync existing Polar subscriptions (after email succeeds)
 					syncUserSubscriptionsFromPolar(user.id, user.email).catch(() => {
 						// Silent fail - don't block registration
 					});
-					
+
 					// Clear rate limits on successful registration
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
 						req.headers.get("x-real-ip") ??
 						"unknown";
 					clearRateLimit("register", email, ipAddress);
-					
+
 					// Return success but indicate email verification is needed
 					// Don't create session yet - they need to verify first
 					return Response.json(
-						{ 
+						{
 							user: { id: user.id, email: user.email },
 							email_verification_required: true,
 							verification_code_sent_at: sentAt,
@@ -377,23 +389,25 @@ const server = Bun.serve({
 							{ status: 401 },
 						);
 					}
-					
+
 					// Clear rate limits on successful authentication
 					const ipAddress =
 						req.headers.get("x-forwarded-for") ??
 						req.headers.get("x-real-ip") ??
 						"unknown";
 					clearRateLimit("login", email, ipAddress);
-					
+
 					// Check if email is verified
 					if (!isEmailVerified(user.id)) {
 						let codeSentAt = getVerificationCodeSentAt(user.id);
-						
+
 						// If no verification code exists, auto-send one
 						if (!codeSentAt) {
-							const { code, token, sentAt } = createEmailVerificationToken(user.id);
+							const { code, token, sentAt } = createEmailVerificationToken(
+								user.id,
+							);
 							codeSentAt = sentAt;
-							
+
 							try {
 								await sendEmail({
 									to: user.email,
@@ -405,14 +419,17 @@ const server = Bun.serve({
 									}),
 								});
 							} catch (err) {
-								console.error("[Email] Failed to send verification email on login:", err);
+								console.error(
+									"[Email] Failed to send verification email on login:",
+									err,
+								);
 								// Don't fail login - just return null timestamp so client can try resend
 								codeSentAt = null;
 							}
 						}
-						
+
 						return Response.json(
-							{ 
+							{
 								user: { id: user.id, email: user.email },
 								email_verification_required: true,
 								verification_code_sent_at: codeSentAt,
@@ -420,7 +437,7 @@ const server = Bun.serve({
 							{ status: 200 },
 						);
 					}
-					
+
 					const userAgent = req.headers.get("user-agent") ?? "unknown";
 					const sessionId = createSession(user.id, ipAddress, userAgent);
 					return Response.json(
@@ -465,7 +482,7 @@ const server = Bun.serve({
 					return new Response(null, {
 						status: 302,
 						headers: {
-							"Location": "/classes",
+							Location: "/classes",
 							"Set-Cookie": `session=${sessionId}; HttpOnly; Secure; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`,
 						},
 					});
@@ -489,10 +506,7 @@ const server = Bun.serve({
 					// Get user by email
 					const user = getUserByEmail(email);
 					if (!user) {
-						return Response.json(
-							{ error: "User not found" },
-							{ status: 404 },
-						);
+						return Response.json({ error: "User not found" }, { status: 404 });
 					}
 
 					// Check if already verified
@@ -521,7 +535,7 @@ const server = Bun.serve({
 					const sessionId = createSession(user.id, ipAddress, userAgent);
 
 					return Response.json(
-						{ 
+						{
 							message: "Email verified successfully",
 							email_verified: true,
 							user: { id: user.id, email: user.email },
@@ -541,7 +555,7 @@ const server = Bun.serve({
 			POST: async (req) => {
 				try {
 					const user = requireAuth(req);
-					
+
 					// Rate limiting
 					const rateLimitError = enforceRateLimit(req, "resend-verification", {
 						account: { max: 3, windowSeconds: 60 * 60, email: user.email },
@@ -586,16 +600,23 @@ const server = Bun.serve({
 					}
 
 					// Rate limiting by email
-					const rateLimitError = enforceRateLimit(req, "resend-verification-code", {
-						account: { max: 3, windowSeconds: 5 * 60, email },
-					});
+					const rateLimitError = enforceRateLimit(
+						req,
+						"resend-verification-code",
+						{
+							account: { max: 3, windowSeconds: 5 * 60, email },
+						},
+					);
 					if (rateLimitError) return rateLimitError;
 
 					// Get user by email
 					const user = getUserByEmail(email);
 					if (!user) {
 						// Don't reveal if user exists
-						return Response.json({ message: "If an account exists with that email, a verification code has been sent" });
+						return Response.json({
+							message:
+								"If an account exists with that email, a verification code has been sent",
+						});
 					}
 
 					// Check if already verified
@@ -619,7 +640,7 @@ const server = Bun.serve({
 						}),
 					});
 
-					return Response.json({ 
+					return Response.json({
 						message: "Verification code sent",
 						verification_code_sent_at: sentAt,
 					});
@@ -683,10 +704,7 @@ const server = Bun.serve({
 					const token = url.searchParams.get("token");
 
 					if (!token) {
-						return Response.json(
-							{ error: "Token required" },
-							{ status: 400 },
-						);
+						return Response.json({ error: "Token required" }, { status: 400 });
 					}
 
 					const userId = verifyPasswordResetToken(token);
@@ -699,7 +717,9 @@ const server = Bun.serve({
 
 					// Get user's email for client-side password hashing
 					const user = db
-						.query<{ email: string }, [number]>("SELECT email FROM users WHERE id = ?")
+						.query<{ email: string }, [number]>(
+							"SELECT email FROM users WHERE id = ?",
+						)
 						.get(userId);
 
 					if (!user) {
@@ -1089,13 +1109,16 @@ const server = Bun.serve({
 						}),
 					});
 
-					return Response.json({ 
+					return Response.json({
 						success: true,
 						message: `Verification email sent to ${user.email}`,
-						pendingEmail: email
+						pendingEmail: email,
 					});
 				} catch (error) {
-					console.error("[Email] Failed to send email change verification:", error);
+					console.error(
+						"[Email] Failed to send email change verification:",
+						error,
+					);
 					return Response.json(
 						{ error: "Failed to send verification email" },
 						{ status: 500 },
@@ -1110,13 +1133,19 @@ const server = Bun.serve({
 					const token = url.searchParams.get("token");
 
 					if (!token) {
-						return Response.redirect("/settings?tab=account&error=invalid-token", 302);
+						return Response.redirect(
+							"/settings?tab=account&error=invalid-token",
+							302,
+						);
 					}
 
 					const result = verifyEmailChangeToken(token);
 
 					if (!result) {
-						return Response.redirect("/settings?tab=account&error=expired-token", 302);
+						return Response.redirect(
+							"/settings?tab=account&error=expired-token",
+							302,
+						);
 					}
 
 					// Update the user's email
@@ -1126,10 +1155,16 @@ const server = Bun.serve({
 					consumeEmailChangeToken(token);
 
 					// Redirect to settings with success message
-					return Response.redirect("/settings?tab=account&success=email-changed", 302);
+					return Response.redirect(
+						"/settings?tab=account&success=email-changed",
+						302,
+					);
 				} catch (error) {
 					console.error("[Email] Email change verification error:", error);
-					return Response.redirect("/settings?tab=account&error=verification-failed", 302);
+					return Response.redirect(
+						"/settings?tab=account&error=verification-failed",
+						302,
+					);
 				}
 			},
 		},
@@ -1238,10 +1273,16 @@ const server = Bun.serve({
 				const body = await req.json();
 				const { email_notifications_enabled } = body;
 				if (typeof email_notifications_enabled !== "boolean") {
-					return Response.json({ error: "email_notifications_enabled must be a boolean" }, { status: 400 });
+					return Response.json(
+						{ error: "email_notifications_enabled must be a boolean" },
+						{ status: 400 },
+					);
 				}
 				try {
-					db.run("UPDATE users SET email_notifications_enabled = ? WHERE id = ?", [email_notifications_enabled ? 1 : 0, user.id]);
+					db.run(
+						"UPDATE users SET email_notifications_enabled = ? WHERE id = ?",
+						[email_notifications_enabled ? 1 : 0, user.id],
+					);
 					return Response.json({ success: true });
 				} catch {
 					return Response.json(
@@ -1491,11 +1532,19 @@ const server = Bun.serve({
 					const transcriptionId = req.params.id;
 					// Verify ownership
 					const transcription = db
-						.query<{ id: string; user_id: number; class_id: string | null; status: string }, [string]>(
+						.query<
+							{
+								id: string;
+								user_id: number;
+								class_id: string | null;
+								status: string;
+							},
+							[string]
+						>(
 							"SELECT id, user_id, class_id, status FROM transcriptions WHERE id = ?",
 						)
 						.get(transcriptionId);
-					
+
 					if (!transcription) {
 						return Response.json(
 							{ error: "Transcription not found" },
@@ -1510,7 +1559,10 @@ const server = Bun.serve({
 
 					// If transcription belongs to a class, check enrollment
 					if (transcription.class_id) {
-						isClassMember = isUserEnrolledInClass(user.id, transcription.class_id);
+						isClassMember = isUserEnrolledInClass(
+							user.id,
+							transcription.class_id,
+						);
 					}
 
 					// Allow access if: owner, admin, or enrolled in the class
@@ -1522,7 +1574,12 @@ const server = Bun.serve({
 					}
 
 					// Require subscription only if accessing own transcription (not class)
-					if (isOwner && !transcription.class_id && !isAdmin && !hasActiveSubscription(user.id)) {
+					if (
+						isOwner &&
+						!transcription.class_id &&
+						!isAdmin &&
+						!hasActiveSubscription(user.id)
+					) {
 						throw AuthErrors.subscriptionRequired();
 					}
 					// Event-driven SSE stream with reconnection support
@@ -1677,7 +1734,10 @@ const server = Bun.serve({
 
 					// If transcription belongs to a class, check enrollment
 					if (transcription.class_id) {
-						isClassMember = isUserEnrolledInClass(user.id, transcription.class_id);
+						isClassMember = isUserEnrolledInClass(
+							user.id,
+							transcription.class_id,
+						);
 					}
 
 					// Allow access if: owner, admin, or enrolled in the class
@@ -1689,7 +1749,12 @@ const server = Bun.serve({
 					}
 
 					// Require subscription only if accessing own transcription (not class)
-					if (isOwner && !transcription.class_id && !isAdmin && !hasActiveSubscription(user.id)) {
+					if (
+						isOwner &&
+						!transcription.class_id &&
+						!isAdmin &&
+						!hasActiveSubscription(user.id)
+					) {
 						throw AuthErrors.subscriptionRequired();
 					}
 
@@ -1777,7 +1842,10 @@ const server = Bun.serve({
 
 					// If transcription belongs to a class, check enrollment
 					if (transcription.class_id) {
-						isClassMember = isUserEnrolledInClass(user.id, transcription.class_id);
+						isClassMember = isUserEnrolledInClass(
+							user.id,
+							transcription.class_id,
+						);
 					}
 
 					// Allow access if: owner, admin, or enrolled in the class
@@ -1789,7 +1857,12 @@ const server = Bun.serve({
 					}
 
 					// Require subscription only if accessing own transcription (not class)
-					if (isOwner && !transcription.class_id && !isAdmin && !hasActiveSubscription(user.id)) {
+					if (
+						isOwner &&
+						!transcription.class_id &&
+						!isAdmin &&
+						!hasActiveSubscription(user.id)
+					) {
 						throw AuthErrors.subscriptionRequired();
 					}
 
@@ -2165,10 +2238,7 @@ const server = Bun.serve({
 						.get(userId);
 
 					if (!user) {
-						return Response.json(
-							{ error: "User not found" },
-							{ status: 404 },
-						);
+						return Response.json({ error: "User not found" }, { status: 404 });
 					}
 
 					try {
@@ -2304,9 +2374,9 @@ const server = Bun.serve({
 						}),
 					});
 
-					return Response.json({ 
+					return Response.json({
 						success: true,
-						message: "Password reset email sent"
+						message: "Password reset email sent",
 					});
 				} catch (error) {
 					console.error("[Admin] Password reset error:", error);
@@ -2367,7 +2437,10 @@ const server = Bun.serve({
 					}
 
 					const body = await req.json();
-					const { email, skipVerification } = body as { email: string; skipVerification?: boolean };
+					const { email, skipVerification } = body as {
+						email: string;
+						skipVerification?: boolean;
+					};
 
 					if (!email || !email.includes("@")) {
 						return Response.json(
@@ -2393,9 +2466,9 @@ const server = Bun.serve({
 					if (skipVerification) {
 						// Admin override: change email immediately without verification
 						updateUserEmailAddress(userId, email);
-						return Response.json({ 
+						return Response.json({
 							success: true,
-							message: "Email updated immediately (verification skipped)"
+							message: "Email updated immediately (verification skipped)",
 						});
 					}
 

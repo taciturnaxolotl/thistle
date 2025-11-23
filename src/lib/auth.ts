@@ -190,16 +190,19 @@ export async function deleteUser(userId: number): Promise<void> {
 
 	// Get user's subscription if they have one
 	const subscription = db
-		.query<{ id: string; status: string; cancel_at_period_end: number }, [number]>(
+		.query<
+			{ id: string; status: string; cancel_at_period_end: number },
+			[number]
+		>(
 			"SELECT id, status, cancel_at_period_end FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
 		)
 		.get(userId);
 
 	// Cancel subscription if it exists and is not already canceled or scheduled to cancel
 	if (
-		subscription && 
-		subscription.status !== 'canceled' && 
-		subscription.status !== 'expired' &&
+		subscription &&
+		subscription.status !== "canceled" &&
+		subscription.status !== "expired" &&
 		!subscription.cancel_at_period_end
 	) {
 		try {
@@ -230,10 +233,9 @@ export async function deleteUser(userId: number): Promise<void> {
 		"UPDATE transcriptions SET user_id = 0 WHERE user_id = ? AND class_id IS NOT NULL",
 		[userId],
 	);
-	db.run(
-		"DELETE FROM transcriptions WHERE user_id = ? AND class_id IS NULL",
-		[userId],
-	);
+	db.run("DELETE FROM transcriptions WHERE user_id = ? AND class_id IS NULL", [
+		userId,
+	]);
 
 	// Delete user (CASCADE will handle sessions, passkeys, subscriptions, class_members)
 	db.run("DELETE FROM users WHERE id = ?", [userId]);
@@ -266,7 +268,11 @@ export async function updateUserPassword(
  * Email verification functions
  */
 
-export function createEmailVerificationToken(userId: number): { code: string; token: string; sentAt: number } {
+export function createEmailVerificationToken(userId: number): {
+	code: string;
+	token: string;
+	sentAt: number;
+} {
 	// Generate a 6-digit code for user to enter
 	const code = Math.floor(100000 + Math.random() * 900000).toString();
 	const id = crypto.randomUUID();
@@ -282,7 +288,7 @@ export function createEmailVerificationToken(userId: number): { code: string; to
 		"INSERT INTO email_verification_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
 		[id, userId, code, expiresAt],
 	);
-	
+
 	// Store the URL token as a separate entry
 	db.run(
 		"INSERT INTO email_verification_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
@@ -298,10 +304,7 @@ export function verifyEmailToken(
 	const now = Math.floor(Date.now() / 1000);
 
 	const result = db
-		.query<
-			{ user_id: number; email: string },
-			[string, number]
-		>(
+		.query<{ user_id: number; email: string }, [string, number]>(
 			`SELECT evt.user_id, u.email 
        FROM email_verification_tokens evt
        JOIN users u ON evt.user_id = u.id
@@ -320,17 +323,11 @@ export function verifyEmailToken(
 	return { userId: result.user_id, email: result.email };
 }
 
-export function verifyEmailCode(
-	userId: number,
-	code: string,
-): boolean {
+export function verifyEmailCode(userId: number, code: string): boolean {
 	const now = Math.floor(Date.now() / 1000);
 
 	const result = db
-		.query<
-			{ user_id: number },
-			[number, string, number]
-		>(
+		.query<{ user_id: number }, [number, string, number]>(
 			`SELECT user_id 
        FROM email_verification_tokens
        WHERE user_id = ? AND token = ? AND expires_at > ?`,
@@ -408,7 +405,10 @@ export function consumePasswordResetToken(token: string): void {
  * Email change functions
  */
 
-export function createEmailChangeToken(userId: number, newEmail: string): string {
+export function createEmailChangeToken(
+	userId: number,
+	newEmail: string,
+): string {
 	const token = crypto.randomUUID();
 	const id = crypto.randomUUID();
 	const expiresAt = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 hours
@@ -424,7 +424,9 @@ export function createEmailChangeToken(userId: number, newEmail: string): string
 	return token;
 }
 
-export function verifyEmailChangeToken(token: string): { userId: number; newEmail: string } | null {
+export function verifyEmailChangeToken(
+	token: string,
+): { userId: number; newEmail: string } | null {
 	const now = Math.floor(Date.now() / 1000);
 
 	const result = db

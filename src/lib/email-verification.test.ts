@@ -1,13 +1,13 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import db from "../db/schema";
 import {
-	createUser,
-	createEmailVerificationToken,
-	verifyEmailToken,
-	isEmailVerified,
-	createPasswordResetToken,
-	verifyPasswordResetToken,
 	consumePasswordResetToken,
+	createEmailVerificationToken,
+	createPasswordResetToken,
+	createUser,
+	isEmailVerified,
+	verifyEmailToken,
+	verifyPasswordResetToken,
 } from "./auth";
 
 describe("Email Verification", () => {
@@ -23,9 +23,7 @@ describe("Email Verification", () => {
 	afterEach(() => {
 		// Cleanup
 		db.run("DELETE FROM users WHERE email = ?", [testEmail]);
-		db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [
-			userId,
-		]);
+		db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [userId]);
 	});
 
 	test("creates verification token", () => {
@@ -138,10 +136,10 @@ describe("Password Reset", () => {
 		const token = createPasswordResetToken(userId);
 
 		// Manually expire the token
-		db.run(
-			"UPDATE password_reset_tokens SET expires_at = ? WHERE token = ?",
-			[Math.floor(Date.now() / 1000) - 100, token],
-		);
+		db.run("UPDATE password_reset_tokens SET expires_at = ? WHERE token = ?", [
+			Math.floor(Date.now() / 1000) - 100,
+			token,
+		]);
 
 		const verifiedUserId = verifyPasswordResetToken(token);
 		expect(verifiedUserId).toBeNull();

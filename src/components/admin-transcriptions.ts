@@ -196,7 +196,10 @@ export class AdminTranscriptions extends LitElement {
 
 			this.transcriptions = await response.json();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to load transcriptions. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to load transcriptions. Please try again.";
 		} finally {
 			this.isLoading = false;
 		}
@@ -228,7 +231,10 @@ export class AdminTranscriptions extends LitElement {
 			await this.loadTranscriptions();
 			this.dispatchEvent(new CustomEvent("transcription-deleted"));
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to delete transcription. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to delete transcription. Please try again.";
 		}
 	}
 

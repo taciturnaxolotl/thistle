@@ -1,18 +1,22 @@
-import { test, expect } from "bun:test";
+import { expect, test } from "bun:test";
 import db from "../db/schema";
 import {
-	createUser,
-	createEmailChangeToken,
-	verifyEmailChangeToken,
 	consumeEmailChangeToken,
-	updateUserEmail,
+	createEmailChangeToken,
+	createUser,
 	getUserByEmail,
+	updateUserEmail,
+	verifyEmailChangeToken,
 } from "./auth";
 
 test("email change token lifecycle", async () => {
 	// Create a test user with unique email
 	const timestamp = Date.now();
-	const user = await createUser(`test-email-change-${timestamp}@example.com`, "password123", "Test User");
+	const user = await createUser(
+		`test-email-change-${timestamp}@example.com`,
+		"password123",
+		"Test User",
+	);
 
 	// Create an email change token
 	const newEmail = `new-email-${timestamp}@example.com`;
@@ -28,7 +32,9 @@ test("email change token lifecycle", async () => {
 	expect(result?.newEmail).toBe(newEmail);
 
 	// Update the email
-	updateUserEmail(result!.userId, result!.newEmail);
+	if (result) {
+		updateUserEmail(result.userId, result.newEmail);
+	}
 
 	// Consume the token
 	consumeEmailChangeToken(token);
@@ -50,7 +56,11 @@ test("email change token lifecycle", async () => {
 test("email change token expires", async () => {
 	// Create a test user with unique email
 	const timestamp = Date.now();
-	const user = await createUser(`test-expire-${timestamp}@example.com`, "password123", "Test User");
+	const user = await createUser(
+		`test-expire-${timestamp}@example.com`,
+		"password123",
+		"Test User",
+	);
 
 	// Create an email change token
 	const newEmail = `new-expire-${timestamp}@example.com`;
@@ -73,13 +83,23 @@ test("email change token expires", async () => {
 test("only one email change token per user", async () => {
 	// Create a test user with unique email
 	const timestamp = Date.now();
-	const user = await createUser(`test-single-token-${timestamp}@example.com`, "password123", "Test User");
+	const user = await createUser(
+		`test-single-token-${timestamp}@example.com`,
+		"password123",
+		"Test User",
+	);
 
 	// Create first token
-	const token1 = createEmailChangeToken(user.id, `email1-${timestamp}@example.com`);
+	const token1 = createEmailChangeToken(
+		user.id,
+		`email1-${timestamp}@example.com`,
+	);
 
 	// Create second token (should delete first)
-	const token2 = createEmailChangeToken(user.id, `email2-${timestamp}@example.com`);
+	const token2 = createEmailChangeToken(
+		user.id,
+		`email2-${timestamp}@example.com`,
+	);
 
 	// First token should be invalid
 	const result1 = verifyEmailChangeToken(token1);

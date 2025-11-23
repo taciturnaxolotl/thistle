@@ -66,4 +66,3 @@ export async function hashPasswordClient(
 	const hashArray = Array.from(hashBuffer);
 	return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-

@@ -155,9 +155,14 @@ export class ResetPasswordForm extends LitElement {
 
 	override async updated(changedProperties: Map<string, unknown>) {
 		super.updated(changedProperties);
-		
+
 		// When token property changes and we don't have email yet, load it
-		if (changedProperties.has('token') && this.token && !this.email && !this.isLoadingEmail) {
+		if (
+			changedProperties.has("token") &&
+			this.token &&
+			!this.email &&
+			!this.isLoadingEmail
+		) {
 			await this.loadEmail();
 		}
 	}
@@ -177,7 +182,8 @@ export class ResetPasswordForm extends LitElement {
 
 			this.email = data.email;
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to verify reset token";
+			this.error =
+				err instanceof Error ? err.message : "Failed to verify reset token";
 		} finally {
 			this.isLoadingEmail = false;
 		}
@@ -230,9 +236,11 @@ export class ResetPasswordForm extends LitElement {
 				<h1 class="reset-title">Reset Password</h1>
 				
 				<form @submit=${this.handleSubmit}>
-					${this.error
-						? html`<div class="error-banner">${this.error}</div>`
-						: ""}
+					${
+						this.error
+							? html`<div class="error-banner">${this.error}</div>`
+							: ""
+					}
 					
 					<div class="form-group">
 						<label for="password">New Password</label>
@@ -298,7 +306,10 @@ export class ResetPasswordForm extends LitElement {
 			}
 
 			// Hash password client-side with user's email
-			const hashedPassword = await hashPasswordClient(this.password, this.email);
+			const hashedPassword = await hashPasswordClient(
+				this.password,
+				this.email,
+			);
 
 			const response = await fetch("/api/auth/reset-password", {
 				method: "POST",

@@ -5,9 +5,9 @@
 
 import { sendEmail } from "../src/lib/email";
 import {
-	verifyEmailTemplate,
 	passwordResetTemplate,
 	transcriptionCompleteTemplate,
+	verifyEmailTemplate,
 } from "../src/lib/email-templates";
 
 const targetEmail = process.argv[2];

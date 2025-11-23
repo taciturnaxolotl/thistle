@@ -792,16 +792,21 @@ export class TranscriptionComponent extends LitElement {
 	}
 
 	override render() {
-		const canUpload = this.serviceAvailable && (this.hasSubscription || this.isAdmin);
+		const canUpload =
+			this.serviceAvailable && (this.hasSubscription || this.isAdmin);
 
 		return html`
-      ${!this.hasSubscription && !this.isAdmin ? html`
+      ${
+				!this.hasSubscription && !this.isAdmin
+					? html`
         <div style="background: color-mix(in srgb, var(--accent) 10%, transparent); border: 1px solid var(--accent); border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; text-align: center;">
           <h3 style="margin: 0 0 0.5rem 0; color: var(--text);">Subscribe to Upload Transcriptions</h3>
           <p style="margin: 0 0 1rem 0; color: var(--text); opacity: 0.8;">You need an active subscription to upload and transcribe audio files.</p>
           <a href="/settings?tab=billing" style="display: inline-block; padding: 0.75rem 1.5rem; background: var(--accent); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: opacity 0.2s;">Subscribe Now</a>
         </div>
-      ` : ''}
+      `
+					: ""
+			}
 
       <div class="upload-area ${this.dragOver ? "drag-over" : ""} ${!canUpload ? "disabled" : ""}"
            @dragover=${canUpload ? this.handleDragOver : null}

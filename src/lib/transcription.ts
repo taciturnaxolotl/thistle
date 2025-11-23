@@ -502,12 +502,9 @@ export class WhisperServiceManager {
 
 	private async deleteWhisperJob(jobId: string) {
 		try {
-			const response = await fetch(
-				`${this.serviceUrl}/transcribe/${jobId}`,
-				{
-					method: "DELETE",
-				},
-			);
+			const response = await fetch(`${this.serviceUrl}/transcribe/${jobId}`, {
+				method: "DELETE",
+			});
 			if (response.ok) {
 				console.log(`[Cleanup] Deleted job ${jobId} from Murmur`);
 			} else {

@@ -23,8 +23,7 @@ export async function sha256(data: Uint8Array): Promise<Uint8Array> {
 
 	const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
 	const ch = (x: number, y: number, z: number) => (x & y) ^ (~x & z);
-	const maj = (x: number, y: number, z: number) =>
-		(x & y) ^ (x & z) ^ (y & z);
+	const maj = (x: number, y: number, z: number) => (x & y) ^ (x & z) ^ (y & z);
 	const s0 = (x: number) => rotr(x, 2) ^ rotr(x, 13) ^ rotr(x, 22);
 	const s1 = (x: number) => rotr(x, 6) ^ rotr(x, 11) ^ rotr(x, 25);
 	const g0 = (x: number) => rotr(x, 7) ^ rotr(x, 18) ^ (x >>> 3);

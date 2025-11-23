@@ -326,7 +326,10 @@ export class AdminUsers extends LitElement {
 
 			this.users = await response.json();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to load users. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to load users. Please try again.";
 		} finally {
 			this.isLoading = false;
 		}
@@ -389,7 +392,8 @@ export class AdminUsers extends LitElement {
 				await this.loadUsers();
 			}
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to update user role";
+			this.error =
+				err instanceof Error ? err.message : "Failed to update user role";
 			select.value = oldRole;
 		}
 	}
@@ -460,14 +464,22 @@ export class AdminUsers extends LitElement {
 			}
 
 			// Remove user from local array instead of reloading
-			this.users = this.users.filter(u => u.id !== userId);
+			this.users = this.users.filter((u) => u.id !== userId);
 			this.dispatchEvent(new CustomEvent("user-deleted"));
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to delete user. Please try again.";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to delete user. Please try again.";
 		}
 	}
 
-	private handleRevokeClick(userId: number, email: string, subscriptionId: string, event: Event) {
+	private handleRevokeClick(
+		userId: number,
+		email: string,
+		subscriptionId: string,
+		event: Event,
+	) {
 		event.stopPropagation();
 
 		// If this is a different item or timeout expired, reset
@@ -510,10 +522,19 @@ export class AdminUsers extends LitElement {
 			this.deleteState = null;
 		}, 1000);
 
-		this.deleteState = { id: userId, type: "revoke", clicks: newClicks, timeout };
+		this.deleteState = {
+			id: userId,
+			type: "revoke",
+			clicks: newClicks,
+			timeout,
+		};
 	}
 
-	private async performRevokeSubscription(userId: number, _email: string, subscriptionId: string) {
+	private async performRevokeSubscription(
+		userId: number,
+		_email: string,
+		subscriptionId: string,
+	) {
 		this.revokingSubscriptions.add(userId);
 		this.requestUpdate();
 		this.error = null;
@@ -532,7 +553,8 @@ export class AdminUsers extends LitElement {
 
 			await this.loadUsers();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to revoke subscription";
+			this.error =
+				err instanceof Error ? err.message : "Failed to revoke subscription";
 			this.revokingSubscriptions.delete(userId);
 		}
 	}
@@ -591,7 +613,7 @@ export class AdminUsers extends LitElement {
 		if (userId === 0) {
 			return;
 		}
-		
+
 		// Don't open modal if clicking on delete button, revoke button, sync button, or role select
 		if (
 			(event.target as HTMLElement).closest(".delete-btn") ||
@@ -616,19 +638,23 @@ export class AdminUsers extends LitElement {
 
 	private get filteredUsers() {
 		const query = this.searchQuery.toLowerCase();
-		
+
 		// Filter users based on search query
 		let filtered = this.users.filter(
 			(u) =>
 				u.email.toLowerCase().includes(query) ||
 				u.name?.toLowerCase().includes(query),
 		);
-		
+
 		// Hide ghost user unless specifically searched for
-		if (!query.includes("deleted") && !query.includes("ghost") && !query.includes("system")) {
-			filtered = filtered.filter(u => u.id !== 0);
+		if (
+			!query.includes("deleted") &&
+			!query.includes("ghost") &&
+			!query.includes("system")
+		) {
+			filtered = filtered.filter((u) => u.id !== 0);
 		}
-		
+
 		return filtered;
 	}
 
@@ -666,7 +692,7 @@ export class AdminUsers extends LitElement {
           <div class="users-grid">
             ${filtered.map(
 							(u) => html`
-              <div class="user-card ${u.id === 0 ? 'system' : ''}" @click=${(e: Event) => this.handleCardClick(u.id, e)}>
+              <div class="user-card ${u.id === 0 ? "system" : ""}" @click=${(e: Event) => this.handleCardClick(u.id, e)}>
                 <div class="card-header">
                   <div class="user-info">
                     <img
@@ -679,12 +705,13 @@ export class AdminUsers extends LitElement {
                       <div class="user-email">${u.email}</div>
                     </div>
                   </div>
-                  ${u.id === 0 
-                    ? html`<span class="system-badge">System</span>` 
-                    : u.role === "admin" 
-                      ? html`<span class="admin-badge">Admin</span>` 
-                      : ""
-                  }
+                  ${
+										u.id === 0
+											? html`<span class="system-badge">System</span>`
+											: u.role === "admin"
+												? html`<span class="admin-badge">Admin</span>`
+												: ""
+									}
                 </div>
 
                 <div class="meta-row">
@@ -695,10 +722,11 @@ export class AdminUsers extends LitElement {
                   <div class="meta-item">
                     <div class="meta-label">Subscription</div>
                     <div class="meta-value">
-                      ${u.subscription_status 
-                        ? html`<span class="subscription-badge ${u.subscription_status.toLowerCase()}">${u.subscription_status}</span>` 
-                        : html`<span class="subscription-badge none">None</span>`
-                      }
+                      ${
+												u.subscription_status
+													? html`<span class="subscription-badge ${u.subscription_status.toLowerCase()}">${u.subscription_status}</span>`
+													: html`<span class="subscription-badge none">None</span>`
+											}
                     </div>
                   </div>
                   <div class="meta-item">
@@ -716,9 +744,10 @@ export class AdminUsers extends LitElement {
                 </div>
 
                 <div class="actions">
-                  ${u.id === 0 
-                    ? html`<div style="color: var(--paynes-gray); font-size: 0.875rem; padding: 0.5rem;">System account cannot be modified</div>`
-                    : html`
+                  ${
+										u.id === 0
+											? html`<div style="color: var(--paynes-gray); font-size: 0.875rem; padding: 0.5rem;">System account cannot be modified</div>`
+											: html`
                       <select
                         class="role-select"
                         .value=${u.role}
@@ -740,7 +769,12 @@ export class AdminUsers extends LitElement {
                         ?disabled=${!u.subscription_status || !u.subscription_id || this.revokingSubscriptions.has(u.id)}
                         @click=${(e: Event) => {
 													if (u.subscription_id) {
-														this.handleRevokeClick(u.id, u.email, u.subscription_id, e);
+														this.handleRevokeClick(
+															u.id,
+															u.email,
+															u.subscription_id,
+															e,
+														);
 													}
 												}}
                       >
@@ -750,7 +784,7 @@ export class AdminUsers extends LitElement {
                         ${this.getDeleteButtonText(u.id, "user")}
                       </button>
                     `
-                  }
+									}
                 </div>
               </div>
             `,

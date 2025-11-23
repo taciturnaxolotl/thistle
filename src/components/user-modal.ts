@@ -410,7 +410,9 @@ export class UserModal extends LitElement {
 		e.preventDefault();
 		const form = e.target as HTMLFormElement;
 		const input = form.querySelector('input[type="email"]') as HTMLInputElement;
-		const checkbox = form.querySelector('input[type="checkbox"]') as HTMLInputElement;
+		const checkbox = form.querySelector(
+			'input[type="checkbox"]',
+		) as HTMLInputElement;
 		const email = input.value.trim();
 		const skipVerification = checkbox?.checked || false;
 
@@ -470,10 +472,13 @@ export class UserModal extends LitElement {
 		submitBtn.textContent = "Sending...";
 
 		try {
-			const res = await fetch(`/api/admin/users/${this.userId}/password-reset`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-			});
+			const res = await fetch(
+				`/api/admin/users/${this.userId}/password-reset`,
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+				},
+			);
 
 			if (!res.ok) {
 				const data = await res.json();
@@ -484,7 +489,10 @@ export class UserModal extends LitElement {
 				"Password reset email sent successfully. The user will receive a link to set a new password.",
 			);
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to send password reset email";
+			this.error =
+				err instanceof Error
+					? err.message
+					: "Failed to send password reset email";
 		} finally {
 			submitBtn.disabled = false;
 			submitBtn.textContent = "Send Reset Email";

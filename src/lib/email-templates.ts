@@ -210,11 +210,15 @@ export function transcriptionCompleteTemplate(
       <p>Your transcription is ready!</p>
       
       <div class="info-box">
-        ${options.className ? `
+        ${
+					options.className
+						? `
         <p class="info-box-label">Class</p>
         <p class="info-box-value">${options.className}</p>
         <hr class="info-box-divider">
-        ` : ''}
+        `
+						: ""
+				}
         <p class="info-box-label">File</p>
         <p class="info-box-value">${options.originalFilename}</p>
       </div>
@@ -291,4 +295,3 @@ export function emailChangeTemplate(options: EmailChangeOptions): string {
 </html>
   `.trim();
 }
-

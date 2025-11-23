@@ -36,7 +36,13 @@ interface Subscription {
 	canceled_at: number | null;
 }
 
-type SettingsPage = "account" | "sessions" | "passkeys" | "billing" | "notifications" | "danger";
+type SettingsPage =
+	| "account"
+	| "sessions"
+	| "passkeys"
+	| "billing"
+	| "notifications"
+	| "danger";
 
 @customElement("user-settings")
 export class UserSettings extends LitElement {
@@ -544,14 +550,14 @@ export class UserSettings extends LitElement {
 	override async connectedCallback() {
 		super.connectedCallback();
 		this.passkeySupported = isPasskeySupported();
-		
+
 		// Check for tab query parameter
 		const params = new URLSearchParams(window.location.search);
 		const tab = params.get("tab");
 		if (tab && this.isValidTab(tab)) {
 			this.currentPage = tab as SettingsPage;
 		}
-		
+
 		await this.loadUser();
 		await this.loadSessions();
 		await this.loadSubscription();
@@ -561,7 +567,14 @@ export class UserSettings extends LitElement {
 	}
 
 	private isValidTab(tab: string): boolean {
-		return ["account", "sessions", "passkeys", "billing", "notifications", "danger"].includes(tab);
+		return [
+			"account",
+			"sessions",
+			"passkeys",
+			"billing",
+			"notifications",
+			"danger",
+		].includes(tab);
 	}
 
 	private setTab(tab: SettingsPage) {
@@ -674,7 +687,8 @@ export class UserSettings extends LitElement {
 			// Reload passkeys
 			await this.loadPasskeys();
 		} catch (err) {
-			this.error = err instanceof Error ? err.message : "Failed to delete passkey";
+			this.error =
+				err instanceof Error ? err.message : "Failed to delete passkey";
 		}
 	}
 
@@ -682,13 +696,13 @@ export class UserSettings extends LitElement {
 		this.error = "";
 		try {
 			const response = await fetch("/api/auth/logout", { method: "POST" });
-			
+
 			if (!response.ok) {
 				const data = await response.json();
 				this.error = data.error || "Failed to logout";
 				return;
 			}
-			
+
 			window.location.href = "/";
 		} catch (err) {
 			this.error = err instanceof Error ? err.message : "Failed to logout";
@@ -699,7 +713,7 @@ export class UserSettings extends LitElement {
 		this.deletingAccount = true;
 		this.error = "";
 		document.body.style.cursor = "wait";
-		
+
 		try {
 			const response = await fetch("/api/user", {
 				method: "DELETE",
@@ -1023,11 +1037,15 @@ export class UserSettings extends LitElement {
 
 		return html`
 			<div class="content-inner">
-			${this.error ? html`
+			${
+				this.error
+					? html`
 				<div class="error-banner">
 					${this.error}
 				</div>
-			` : ""}
+			`
+					: ""
+			}
 			<div class="section">
 				<h2 class="section-title">Profile Information</h2>
 
@@ -1069,14 +1087,14 @@ export class UserSettings extends LitElement {
 							? html`
 							<div class="success-message" style="margin-bottom: 1rem;">
 								${this.emailChangeMessage}
-								${this.pendingEmailChange ? html`<br><strong>New email:</strong> ${this.pendingEmailChange}` : ''}
+								${this.pendingEmailChange ? html`<br><strong>New email:</strong> ${this.pendingEmailChange}` : ""}
 							</div>
 							<div class="field-row">
 								<div class="field-value">${this.user.email}</div>
 							</div>
 						  `
 							: this.editingEmail
-							? html`
+								? html`
 							<div style="display: flex; gap: 0.5rem; align-items: center;">
 								<input
 									type="email"
@@ -1092,7 +1110,7 @@ export class UserSettings extends LitElement {
 									@click=${this.handleUpdateEmail}
 									?disabled=${this.updatingEmail}
 								>
-									${this.updatingEmail ? html`<span class="spinner"></span>` : 'Save'}
+									${this.updatingEmail ? html`<span class="spinner"></span>` : "Save"}
 								</button>
 								<button
 									class="btn btn-neutral btn-small"
@@ -1105,7 +1123,7 @@ export class UserSettings extends LitElement {
 								</button>
 							</div>
 						  `
-							: html`
+								: html`
 							<div class="field-row">
 								<div class="field-value">${this.user.email}</div>
 								<button
@@ -1248,11 +1266,15 @@ export class UserSettings extends LitElement {
 	renderSessionsPage() {
 		return html`
 			<div class="content-inner">
-			${this.error ? html`
+			${
+				this.error
+					? html`
 				<div class="error-banner">
 					${this.error}
 				</div>
-			` : ""}
+			`
+					: ""
+			}
 			<div class="section">
 				<h2 class="section-title">Active Sessions</h2>
 				${
@@ -1330,24 +1352,29 @@ export class UserSettings extends LitElement {
 			`;
 		}
 
-		const hasActiveSubscription = this.subscription && (
-			this.subscription.status === "active" || 
-			this.subscription.status === "trialing"
-		);
+		const hasActiveSubscription =
+			this.subscription &&
+			(this.subscription.status === "active" ||
+				this.subscription.status === "trialing");
 
 		if (this.subscription && !hasActiveSubscription) {
 			// Has a subscription but it's not active (canceled, expired, etc.)
-			const statusColor = 
-				this.subscription.status === "canceled" ? "var(--accent)" :
-				"var(--secondary)";
+			const statusColor =
+				this.subscription.status === "canceled"
+					? "var(--accent)"
+					: "var(--secondary)";
 
 			return html`
 				<div class="content-inner">
-					${this.error ? html`
+					${
+						this.error
+							? html`
 						<div class="error-banner">
 							${this.error}
 						</div>
-					` : ""}
+					`
+							: ""
+					}
 					<div class="section">
 						<h2 class="section-title">Subscription</h2>
 						
@@ -1369,14 +1396,18 @@ export class UserSettings extends LitElement {
 							</div>
 						</div>
 
-						${this.subscription.canceled_at ? html`
+						${
+							this.subscription.canceled_at
+								? html`
 							<div class="field-group">
 								<label class="field-label">Canceled At</label>
 								<div class="field-value" style="color: var(--accent);">
 									${this.formatDate(this.subscription.canceled_at)}
 								</div>
 							</div>
-						` : ""}
+						`
+								: ""
+						}
 
 						<div class="field-group" style="margin-top: 2rem;">
 							<button
@@ -1398,11 +1429,15 @@ export class UserSettings extends LitElement {
 		if (hasActiveSubscription) {
 			return html`
 				<div class="content-inner">
-					${this.error ? html`
+					${
+						this.error
+							? html`
 						<div class="error-banner">
 							${this.error}
 						</div>
-					` : ""}
+					`
+							: ""
+					}
 					<div class="section">
 						<h2 class="section-title">Subscription</h2>
 						
@@ -1421,15 +1456,22 @@ export class UserSettings extends LitElement {
 								">
 									${this.subscription.status}
 								</span>
-								${this.subscription.cancel_at_period_end ? html`
+								${
+									this.subscription.cancel_at_period_end
+										? html`
 									<span style="color: var(--accent); font-size: 0.875rem;">
 										(Cancels at end of period)
 									</span>
-								` : ""}
+								`
+										: ""
+								}
 							</div>
 						</div>
 
-						${this.subscription.current_period_start && this.subscription.current_period_end ? html`
+						${
+							this.subscription.current_period_start &&
+							this.subscription.current_period_end
+								? html`
 							<div class="field-group">
 								<label class="field-label">Current Period</label>
 								<div class="field-value">
@@ -1437,7 +1479,9 @@ export class UserSettings extends LitElement {
 									${this.formatDate(this.subscription.current_period_end)}
 								</div>
 							</div>
-						` : ""}
+						`
+								: ""
+						}
 
 						<div class="field-group" style="margin-top: 2rem;">
 							<button
@@ -1458,11 +1502,15 @@ export class UserSettings extends LitElement {
 
 		return html`
 			<div class="content-inner">
-				${this.error ? html`
+				${
+					this.error
+						? html`
 					<div class="error-banner">
 						${this.error}
 					</div>
-				` : ""}
+				`
+						: ""
+				}
 				<div class="section">
 					<h2 class="section-title">Billing & Subscription</h2>
 					<p class="field-description" style="margin-bottom: 1.5rem;">
@@ -1483,11 +1531,15 @@ export class UserSettings extends LitElement {
 	renderDangerPage() {
 		return html`
 			<div class="content-inner">
-			${this.error ? html`
+			${
+				this.error
+					? html`
 				<div class="error-banner">
 					${this.error}
 				</div>
-			` : ""}
+			`
+					: ""
+			}
 			<div class="section danger-section">
 				<h2 class="section-title">Delete Account</h2>
 				<p class="danger-text">
@@ -1510,11 +1562,15 @@ export class UserSettings extends LitElement {
 	renderNotificationsPage() {
 		return html`
 			<div class="content-inner">
-				${this.error ? html`
+				${
+					this.error
+						? html`
 					<div class="error-banner">
 						${this.error}
 					</div>
-				` : ""}
+				`
+						: ""
+				}
 				<div class="section">
 					<h2 class="section-title">Email Notifications</h2>
 					<p style="color: var(--text); margin-bottom: 1rem;">
@@ -1536,25 +1592,31 @@ export class UserSettings extends LitElement {
 									const target = e.target as HTMLInputElement;
 									this.emailNotificationsEnabled = target.checked;
 									this.error = "";
-									
+
 									try {
 										const response = await fetch("/api/user/notifications", {
 											method: "PUT",
 											headers: { "Content-Type": "application/json" },
 											body: JSON.stringify({
-												email_notifications_enabled: this.emailNotificationsEnabled,
+												email_notifications_enabled:
+													this.emailNotificationsEnabled,
 											}),
 										});
-										
+
 										if (!response.ok) {
 											const data = await response.json();
-											throw new Error(data.error || "Failed to update notification settings");
+											throw new Error(
+												data.error || "Failed to update notification settings",
+											);
 										}
 									} catch (err) {
 										// Revert on error
 										this.emailNotificationsEnabled = !target.checked;
 										target.checked = !target.checked;
-										this.error = err instanceof Error ? err.message : "Failed to update notification settings";
+										this.error =
+											err instanceof Error
+												? err.message
+												: "Failed to update notification settings";
 									}
 								}}
 							/>

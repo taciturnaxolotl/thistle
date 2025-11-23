@@ -467,7 +467,7 @@ export class AdminClasses extends LitElement {
 
 	override async connectedCallback() {
 		super.connectedCallback();
-		
+
 		// Check for subtab query parameter
 		const params = new URLSearchParams(window.location.search);
 		const subtab = params.get("subtab");
@@ -477,7 +477,7 @@ export class AdminClasses extends LitElement {
 			// Set default subtab in URL if on classes tab
 			this.setActiveTab(this.activeTab);
 		}
-		
+
 		await this.loadData();
 	}
 
@@ -526,7 +526,7 @@ export class AdminClasses extends LitElement {
 	private async handleToggleArchive(classId: string) {
 		try {
 			// Find the class to toggle its archived state
-			const classToToggle = this.classes.find(c => c.id === classId);
+			const classToToggle = this.classes.find((c) => c.id === classId);
 			if (!classToToggle) return;
 
 			const response = await fetch(`/api/classes/${classId}/archive`, {
@@ -540,8 +540,8 @@ export class AdminClasses extends LitElement {
 			}
 
 			// Update local state instead of reloading
-			this.classes = this.classes.map(c => 
-				c.id === classId ? { ...c, archived: !c.archived } : c
+			this.classes = this.classes.map((c) =>
+				c.id === classId ? { ...c, archived: !c.archived } : c,
 			);
 		} catch {
 			this.error = "Failed to update class. Please try again.";

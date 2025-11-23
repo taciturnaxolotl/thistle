@@ -324,7 +324,8 @@ export class AdminUsers extends LitElement {
 				throw new Error(data.error || "Failed to load users");
 			}
 
-			this.users = await response.json();
+			const result = await response.json();
+			this.users = result.data || result;
 		} catch (err) {
 			this.error =
 				err instanceof Error

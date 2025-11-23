@@ -194,7 +194,8 @@ export class AdminTranscriptions extends LitElement {
 				throw new Error(data.error || "Failed to load transcriptions");
 			}
 
-			this.transcriptions = await response.json();
+			const result = await response.json();
+			this.transcriptions = result.data || result;
 		} catch (err) {
 			this.error =
 				err instanceof Error

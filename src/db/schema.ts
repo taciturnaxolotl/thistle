@@ -13,7 +13,7 @@ db.run(`
 const migrations = [
 	{
 		version: 1,
-		name: "Complete schema with class system",
+		name: "Initial schema with all tables and constraints",
 		sql: `
       -- Users table
       CREATE TABLE IF NOT EXISTS users (
@@ -24,11 +24,14 @@ const migrations = [
         avatar TEXT DEFAULT 'd',
         role TEXT NOT NULL DEFAULT 'user',
         last_login INTEGER,
+        email_verified BOOLEAN DEFAULT 0,
+        email_notifications_enabled BOOLEAN DEFAULT 1,
         created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
       );
 
       CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
       CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login);
+      CREATE INDEX IF NOT EXISTS idx_users_email_verified ON users(email_verified);
 
       -- Sessions table
       CREATE TABLE IF NOT EXISTS sessions (
@@ -84,6 +87,7 @@ const migrations = [
 
       CREATE INDEX IF NOT EXISTS idx_classes_semester_year ON classes(semester, year);
       CREATE INDEX IF NOT EXISTS idx_classes_archived ON classes(archived);
+      CREATE INDEX IF NOT EXISTS idx_classes_course_code ON classes(course_code);
 
       -- Class members table
       CREATE TABLE IF NOT EXISTS class_members (
@@ -132,29 +136,18 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_transcriptions_class_id ON transcriptions(class_id);
       CREATE INDEX IF NOT EXISTS idx_transcriptions_status ON transcriptions(status);
       CREATE INDEX IF NOT EXISTS idx_transcriptions_whisper_job_id ON transcriptions(whisper_job_id);
-    `,
-	},
-	{
-		version: 2,
-		name: "Add section column to classes table",
-		sql: `
-      ALTER TABLE classes ADD COLUMN section TEXT;
-      CREATE INDEX IF NOT EXISTS idx_classes_course_code ON classes(course_code);
-    `,
-	},
-	{
-		version: 3,
-		name: "Add class waitlist table",
-		sql: `
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_meeting_time_id ON transcriptions(meeting_time_id);
+
+      -- Class waitlist table
       CREATE TABLE IF NOT EXISTS class_waitlist (
         id TEXT PRIMARY KEY,
         user_id INTEGER NOT NULL,
         course_code TEXT NOT NULL,
         course_name TEXT NOT NULL,
         professor TEXT NOT NULL,
-        section TEXT,
         semester TEXT NOT NULL,
         year INTEGER NOT NULL,
+        meeting_times TEXT,
         additional_info TEXT,
         created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -162,28 +155,7 @@ const migrations = [
 
       CREATE INDEX IF NOT EXISTS idx_waitlist_user_id ON class_waitlist(user_id);
       CREATE INDEX IF NOT EXISTS idx_waitlist_course_code ON class_waitlist(course_code);
-    `,
-	},
-	{
-		version: 4,
-		name: "Add meeting_times to class_waitlist",
-		sql: `
-      ALTER TABLE class_waitlist ADD COLUMN meeting_times TEXT;
-    `,
-	},
-	{
-		version: 5,
-		name: "Remove section columns",
-		sql: `
-      DROP INDEX IF EXISTS idx_classes_section;
-      ALTER TABLE classes DROP COLUMN section;
-      ALTER TABLE class_waitlist DROP COLUMN section;
-    `,
-	},
-	{
-		version: 6,
-		name: "Add subscriptions table for Polar integration",
-		sql: `
+
       -- Subscriptions table
       CREATE TABLE IF NOT EXISTS subscriptions (
         id TEXT PRIMARY KEY,
@@ -202,23 +174,6 @@ const migrations = [
       CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
       CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
       CREATE INDEX IF NOT EXISTS idx_subscriptions_customer_id ON subscriptions(customer_id);
-    `,
-	},
-	{
-		version: 7,
-		name: "Create ghost user for deleted accounts",
-		sql: `
-      -- Create a ghost user account for orphaned transcriptions
-      INSERT OR IGNORE INTO users (id, email, password_hash, name, avatar, role, created_at)
-      VALUES (0, 'ghosty@thistle.internal', NULL, 'Ghosty', '👻', 'user', strftime('%s', 'now'));
-    `,
-	},
-	{
-		version: 8,
-		name: "Add email verification system",
-		sql: `
-      -- Add email verification flag to users
-      ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0;
 
       -- Email verification tokens table
       CREATE TABLE IF NOT EXISTS email_verification_tokens (
@@ -245,19 +200,7 @@ const migrations = [
 
       CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
       CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
-    `,
-	},
-	{
-		version: 10,
-		name: "Add email notification preferences",
-		sql: `
-      ALTER TABLE users ADD COLUMN email_notifications_enabled BOOLEAN DEFAULT 1;
-    `,
-	},
-	{
-		version: 9,
-		name: "Add email change tokens table",
-		sql: `
+
       -- Email change tokens table
       CREATE TABLE IF NOT EXISTS email_change_tokens (
         id TEXT PRIMARY KEY,
@@ -271,19 +214,10 @@ const migrations = [
 
       CREATE INDEX IF NOT EXISTS idx_email_change_tokens_user_id ON email_change_tokens(user_id);
       CREATE INDEX IF NOT EXISTS idx_email_change_tokens_token ON email_change_tokens(token);
-    `,
-	},
-	{
-		version: 11,
-		name: "Add NOT NULL constraints and missing indexes",
-		sql: `
-      -- Note: SQLite doesn't support ALTER COLUMN to add NOT NULL to existing columns
-      -- These tables were created in migration 6 and 8, but the columns should have been NOT NULL
-      -- The constraints are enforced at the application level, this migration documents the intent
-      
-      -- Add missing indexes for performance
-      CREATE INDEX IF NOT EXISTS idx_users_email_verified ON users(email_verified);
-      CREATE INDEX IF NOT EXISTS idx_transcriptions_meeting_time_id ON transcriptions(meeting_time_id);
+
+      -- Create ghost user for deleted accounts
+      INSERT OR IGNORE INTO users (id, email, password_hash, name, avatar, role, created_at)
+      VALUES (0, 'ghosty@thistle.internal', NULL, 'Ghosty', '👻', 'user', strftime('%s', 'now'));
     `,
 	},
 ];

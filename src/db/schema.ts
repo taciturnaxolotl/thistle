@@ -248,7 +248,7 @@ const migrations = [
     `,
 	},
 	{
-		version: 4,
+		version: 10,
 		name: "Add email notification preferences",
 		sql: `
       ALTER TABLE users ADD COLUMN email_notifications_enabled BOOLEAN DEFAULT 1;
@@ -271,6 +271,19 @@ const migrations = [
 
       CREATE INDEX IF NOT EXISTS idx_email_change_tokens_user_id ON email_change_tokens(user_id);
       CREATE INDEX IF NOT EXISTS idx_email_change_tokens_token ON email_change_tokens(token);
+    `,
+	},
+	{
+		version: 11,
+		name: "Add NOT NULL constraints and missing indexes",
+		sql: `
+      -- Note: SQLite doesn't support ALTER COLUMN to add NOT NULL to existing columns
+      -- These tables were created in migration 6 and 8, but the columns should have been NOT NULL
+      -- The constraints are enforced at the application level, this migration documents the intent
+      
+      -- Add missing indexes for performance
+      CREATE INDEX IF NOT EXISTS idx_users_email_verified ON users(email_verified);
+      CREATE INDEX IF NOT EXISTS idx_transcriptions_meeting_time_id ON transcriptions(meeting_time_id);
     `,
 	},
 ];

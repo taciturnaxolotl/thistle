@@ -32,6 +32,9 @@ import {
 	createPasswordResetToken,
 	verifyPasswordResetToken,
 	consumePasswordResetToken,
+	createEmailChangeToken,
+	verifyEmailChangeToken,
+	consumeEmailChangeToken,
 } from "./lib/auth";
 import {
 	addToWaitlist,
@@ -82,6 +85,7 @@ import { sendEmail } from "./lib/email";
 import {
 	verifyEmailTemplate,
 	passwordResetTemplate,
+	emailChangeTemplate,
 } from "./lib/email-templates";
 import adminHTML from "./pages/admin.html";
 import checkoutHTML from "./pages/checkout.html";
@@ -1056,21 +1060,76 @@ const server = Bun.serve({
 				if (!email) {
 					return Response.json({ error: "Email required" }, { status: 400 });
 				}
-				try {
-					updateUserEmail(user.id, email);
-					return Response.json({ success: true });
-				} catch (err: unknown) {
-					const error = err as { message?: string };
-					if (error.message?.includes("UNIQUE constraint failed")) {
-						return Response.json(
-							{ error: "Email already in use" },
-							{ status: 400 },
-						);
-					}
+
+				// Check if email is already in use
+				const existingUser = getUserByEmail(email);
+				if (existingUser) {
 					return Response.json(
-						{ error: "Failed to update email" },
+						{ error: "Email already in use" },
+						{ status: 400 },
+					);
+				}
+
+				try {
+					// Create email change token
+					const token = createEmailChangeToken(user.id, email);
+
+					// Send verification email to the CURRENT address
+					const origin = process.env.ORIGIN || "http://localhost:3000";
+					const verifyUrl = `${origin}/api/user/email/verify?token=${token}`;
+
+					await sendEmail({
+						to: user.email,
+						subject: "Verify your email change",
+						html: emailChangeTemplate({
+							name: user.name,
+							currentEmail: user.email,
+							newEmail: email,
+							verifyLink: verifyUrl,
+						}),
+					});
+
+					return Response.json({ 
+						success: true,
+						message: `Verification email sent to ${user.email}`,
+						pendingEmail: email
+					});
+				} catch (error) {
+					console.error("[Email] Failed to send email change verification:", error);
+					return Response.json(
+						{ error: "Failed to send verification email" },
 						{ status: 500 },
 					);
+				}
+			},
+		},
+		"/api/user/email/verify": {
+			GET: async (req) => {
+				try {
+					const url = new URL(req.url);
+					const token = url.searchParams.get("token");
+
+					if (!token) {
+						return Response.redirect("/settings?tab=account&error=invalid-token", 302);
+					}
+
+					const result = verifyEmailChangeToken(token);
+
+					if (!result) {
+						return Response.redirect("/settings?tab=account&error=expired-token", 302);
+					}
+
+					// Update the user's email
+					updateUserEmail(result.userId, result.newEmail);
+
+					// Consume the token
+					consumeEmailChangeToken(token);
+
+					// Redirect to settings with success message
+					return Response.redirect("/settings?tab=account&success=email-changed", 302);
+				} catch (error) {
+					console.error("[Email] Email change verification error:", error);
+					return Response.redirect("/settings?tab=account&error=verification-failed", 302);
 				}
 			},
 		},
@@ -2308,7 +2367,7 @@ const server = Bun.serve({
 					}
 
 					const body = await req.json();
-					const { email } = body as { email: string };
+					const { email, skipVerification } = body as { email: string; skipVerification?: boolean };
 
 					if (!email || !email.includes("@")) {
 						return Response.json(
@@ -2329,6 +2388,15 @@ const server = Bun.serve({
 							{ error: "Email already in use" },
 							{ status: 400 },
 						);
+					}
+
+					if (skipVerification) {
+						// Admin override: change email immediately without verification
+						updateUserEmailAddress(userId, email);
+						return Response.json({ 
+							success: true,
+							message: "Email updated immediately (verification skipped)"
+						});
 					}
 
 					updateUserEmailAddress(userId, email);

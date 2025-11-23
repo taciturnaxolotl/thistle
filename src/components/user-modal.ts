@@ -409,8 +409,10 @@ export class UserModal extends LitElement {
 	private async handleChangeEmail(e: Event) {
 		e.preventDefault();
 		const form = e.target as HTMLFormElement;
-		const input = form.querySelector("input") as HTMLInputElement;
+		const input = form.querySelector('input[type="email"]') as HTMLInputElement;
+		const checkbox = form.querySelector('input[type="checkbox"]') as HTMLInputElement;
 		const email = input.value.trim();
+		const skipVerification = checkbox?.checked || false;
 
 		if (!email || !email.includes("@")) {
 			alert("Please enter a valid email");
@@ -427,7 +429,7 @@ export class UserModal extends LitElement {
 			const res = await fetch(`/api/admin/users/${this.userId}/email`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email }),
+				body: JSON.stringify({ email, skipVerification }),
 			});
 
 			if (!res.ok) {
@@ -435,7 +437,8 @@ export class UserModal extends LitElement {
 				throw new Error(data.error || "Failed to update email");
 			}
 
-			alert("Email updated successfully");
+			const data = await res.json();
+			alert(data.message || "Email updated successfully");
 			await this.loadUserDetails();
 			this.dispatchEvent(
 				new CustomEvent("user-updated", { bubbles: true, composed: true }),
@@ -638,6 +641,12 @@ export class UserModal extends LitElement {
           <div class="form-group">
             <label class="form-label" for="new-email">New Email</label>
             <input type="email" id="new-email" class="form-input" placeholder="Enter new email" value=${this.user.email}>
+          </div>
+          <div class="form-group" style="margin-top: 0.5rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.875rem;">
+              <input type="checkbox" id="skip-verification" style="cursor: pointer;">
+              <span>Skip verification (use if user is locked out of email)</span>
+            </label>
           </div>
           <button type="submit" class="btn btn-primary">Update Email</button>
         </form>

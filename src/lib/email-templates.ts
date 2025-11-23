@@ -231,3 +231,64 @@ export function transcriptionCompleteTemplate(
 </html>
   `.trim();
 }
+
+interface EmailChangeOptions {
+	name: string | null;
+	currentEmail: string;
+	newEmail: string;
+	verifyLink: string;
+}
+
+export function emailChangeTemplate(options: EmailChangeOptions): string {
+	const greeting = options.name ? `Hi ${options.name}` : "Hi there";
+
+	return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Email Change - Thistle</title>
+  <style>${baseStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🪻 Thistle</h1>
+    </div>
+    <div class="content">
+      <h2>${greeting}!</h2>
+      <p>You requested to change your email address.</p>
+      
+      <div class="info-box">
+        <p class="info-box-label">Current Email</p>
+        <p class="info-box-value">${options.currentEmail}</p>
+        <hr class="info-box-divider">
+        <p class="info-box-label">New Email</p>
+        <p class="info-box-value">${options.newEmail}</p>
+      </div>
+
+      <p>Click the button below to confirm this change:</p>
+
+      <p style="text-align: center; margin-top: 1.5rem; margin-bottom: 0;">
+        <a href="${options.verifyLink}" class="button" style="display: inline-block; background-color: #ef8354; color: #ffffff; text-decoration: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: 500; font-size: 1rem; margin: 0; border: 2px solid #ef8354;">Verify Email Change</a>
+      </p>
+
+      <p style="color: #4f5d75; font-size: 0.875rem; margin-top: 1.5rem;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="${options.verifyLink}" style="color: #4f5d75; word-break: break-all;">${options.verifyLink}</a>
+      </p>
+
+      <p style="color: #4f5d75; font-size: 0.875rem;">
+        This link will expire in 24 hours.
+      </p>
+    </div>
+    <div class="footer">
+      <p>If you didn't request this change, please ignore this email and your email address will remain unchanged.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+

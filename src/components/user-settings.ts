@@ -61,6 +61,9 @@ export class UserSettings extends LitElement {
 	@state() addingPasskey = false;
 	@state() emailNotificationsEnabled = true;
 	@state() deletingAccount = false;
+	@state() emailChangeMessage = "";
+	@state() pendingEmailChange = "";
+	@state() updatingEmail = false;
 
 	static override styles = css`
 		:host {
@@ -286,6 +289,30 @@ export class UserSettings extends LitElement {
 			opacity: 0.7;
 			margin-bottom: 1.5rem;
 			line-height: 1.5;
+		}
+
+		.success-message {
+			padding: 1rem;
+			background: rgba(76, 175, 80, 0.1);
+			border: 1px solid rgba(76, 175, 80, 0.3);
+			border-radius: 0.5rem;
+			color: var(--text);
+		}
+
+		.spinner {
+			display: inline-block;
+			width: 1rem;
+			height: 1rem;
+			border: 2px solid rgba(255, 255, 255, 0.3);
+			border-top-color: white;
+			border-radius: 50%;
+			animation: spin 0.6s linear infinite;
+		}
+
+		@keyframes spin {
+			to {
+				transform: rotate(360deg);
+			}
 		}
 
 		.session-list {
@@ -696,11 +723,13 @@ export class UserSettings extends LitElement {
 
 	async handleUpdateEmail() {
 		this.error = "";
+		this.emailChangeMessage = "";
 		if (!this.newEmail) {
 			this.error = "Email required";
 			return;
 		}
 
+		this.updatingEmail = true;
 		try {
 			const response = await fetch("/api/user/email", {
 				method: "PUT",
@@ -708,18 +737,22 @@ export class UserSettings extends LitElement {
 				body: JSON.stringify({ email: this.newEmail }),
 			});
 
+			const data = await response.json();
+
 			if (!response.ok) {
-				const data = await response.json();
 				this.error = data.error || "Failed to update email";
 				return;
 			}
 
-			// Reload user data
-			await this.loadUser();
+			// Show success message with pending email
+			this.emailChangeMessage = data.message || "Verification email sent";
+			this.pendingEmailChange = data.pendingEmail || this.newEmail;
 			this.editingEmail = false;
 			this.newEmail = "";
 		} catch {
 			this.error = "Failed to update email";
+		} finally {
+			this.updatingEmail = false;
 		}
 	}
 
@@ -1032,7 +1065,17 @@ export class UserSettings extends LitElement {
 				<div class="field-group">
 					<label class="field-label">Email</label>
 					${
-						this.editingEmail
+						this.emailChangeMessage
+							? html`
+							<div class="success-message" style="margin-bottom: 1rem;">
+								${this.emailChangeMessage}
+								${this.pendingEmailChange ? html`<br><strong>New email:</strong> ${this.pendingEmailChange}` : ''}
+							</div>
+							<div class="field-row">
+								<div class="field-value">${this.user.email}</div>
+							</div>
+						  `
+							: this.editingEmail
 							? html`
 							<div style="display: flex; gap: 0.5rem; align-items: center;">
 								<input
@@ -1047,8 +1090,9 @@ export class UserSettings extends LitElement {
 								<button
 									class="btn btn-affirmative btn-small"
 									@click=${this.handleUpdateEmail}
+									?disabled=${this.updatingEmail}
 								>
-									Save
+									${this.updatingEmail ? html`<span class="spinner"></span>` : 'Save'}
 								</button>
 								<button
 									class="btn btn-neutral btn-small"
@@ -1069,6 +1113,7 @@ export class UserSettings extends LitElement {
 									@click=${() => {
 										this.editingEmail = true;
 										this.newEmail = this.user?.email ?? "";
+										this.emailChangeMessage = "";
 									}}
 								>
 									Change

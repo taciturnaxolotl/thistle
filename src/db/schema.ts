@@ -254,6 +254,25 @@ const migrations = [
       ALTER TABLE users ADD COLUMN email_notifications_enabled BOOLEAN DEFAULT 1;
     `,
 	},
+	{
+		version: 9,
+		name: "Add email change tokens table",
+		sql: `
+      -- Email change tokens table
+      CREATE TABLE IF NOT EXISTS email_change_tokens (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        new_email TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_email_change_tokens_user_id ON email_change_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_email_change_tokens_token ON email_change_tokens(token);
+    `,
+	},
 ];
 
 function getCurrentVersion(): number {

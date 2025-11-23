@@ -404,6 +404,44 @@ export function consumePasswordResetToken(token: string): void {
 	db.run("DELETE FROM password_reset_tokens WHERE token = ?", [token]);
 }
 
+/**
+ * Email change functions
+ */
+
+export function createEmailChangeToken(userId: number, newEmail: string): string {
+	const token = crypto.randomUUID();
+	const id = crypto.randomUUID();
+	const expiresAt = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 hours
+
+	// Delete any existing email change tokens for this user
+	db.run("DELETE FROM email_change_tokens WHERE user_id = ?", [userId]);
+
+	db.run(
+		"INSERT INTO email_change_tokens (id, user_id, new_email, token, expires_at) VALUES (?, ?, ?, ?, ?)",
+		[id, userId, newEmail, token, expiresAt],
+	);
+
+	return token;
+}
+
+export function verifyEmailChangeToken(token: string): { userId: number; newEmail: string } | null {
+	const now = Math.floor(Date.now() / 1000);
+
+	const result = db
+		.query<{ user_id: number; new_email: string }, [string, number]>(
+			"SELECT user_id, new_email FROM email_change_tokens WHERE token = ? AND expires_at > ?",
+		)
+		.get(token, now);
+
+	if (!result) return null;
+
+	return { userId: result.user_id, newEmail: result.new_email };
+}
+
+export function consumeEmailChangeToken(token: string): void {
+	db.run("DELETE FROM email_change_tokens WHERE token = ?", [token]);
+}
+
 export function isUserAdmin(userId: number): boolean {
 	const result = db
 		.query<{ role: UserRole }, [number]>("SELECT role FROM users WHERE id = ?")

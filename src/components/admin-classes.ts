@@ -12,6 +12,8 @@ interface Class {
 	year: number;
 	archived: boolean;
 	created_at: number;
+	student_count?: number;
+	transcript_count?: number;
 }
 
 interface WaitlistEntry {
@@ -747,6 +749,8 @@ export class AdminClasses extends LitElement {
                     <div class="class-meta">
                       <span>👤 ${cls.professor}</span>
                       <span>📅 ${cls.semester} ${cls.year}</span>
+                      <span>👥 ${cls.student_count || 0} students</span>
+                      <span>📄 ${cls.transcript_count || 0} transcripts</span>
                       ${cls.archived ? html`<span class="badge archived">Archived</span>` : ""}
                     </div>
                   </div>

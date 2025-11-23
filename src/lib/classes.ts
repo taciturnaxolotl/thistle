@@ -25,20 +25,33 @@ export interface ClassMember {
 	enrolled_at: number;
 }
 
+export interface ClassWithStats extends Class {
+	student_count?: number;
+	transcript_count?: number;
+}
+
 /**
  * Get all classes for a user (either enrolled or admin sees all)
  */
-export function getClassesForUser(userId: number, isAdmin: boolean): Class[] {
+export function getClassesForUser(
+	userId: number,
+	isAdmin: boolean,
+): ClassWithStats[] {
 	if (isAdmin) {
 		return db
-			.query<Class, []>(
-				"SELECT * FROM classes ORDER BY year DESC, semester DESC, course_code ASC",
+			.query<ClassWithStats, []>(
+				`SELECT 
+					c.*,
+					(SELECT COUNT(*) FROM class_members WHERE class_id = c.id) as student_count,
+					(SELECT COUNT(*) FROM transcriptions WHERE class_id = c.id) as transcript_count
+				FROM classes c 
+				ORDER BY c.year DESC, c.semester DESC, c.course_code ASC`,
 			)
 			.all();
 	}
 
 	return db
-		.query<Class, [number]>(
+		.query<ClassWithStats, [number]>(
 			`SELECT c.* FROM classes c
        INNER JOIN class_members cm ON c.id = cm.class_id
        WHERE cm.user_id = ?

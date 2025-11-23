@@ -465,7 +465,30 @@ export class AdminClasses extends LitElement {
 
 	override async connectedCallback() {
 		super.connectedCallback();
+		
+		// Check for subtab query parameter
+		const params = new URLSearchParams(window.location.search);
+		const subtab = params.get("subtab");
+		if (subtab && this.isValidSubtab(subtab)) {
+			this.activeTab = subtab as "classes" | "waitlist";
+		} else {
+			// Set default subtab in URL if on classes tab
+			this.setActiveTab(this.activeTab);
+		}
+		
 		await this.loadData();
+	}
+
+	private isValidSubtab(subtab: string): boolean {
+		return ["classes", "waitlist"].includes(subtab);
+	}
+
+	private setActiveTab(tab: "classes" | "waitlist") {
+		this.activeTab = tab;
+		// Update URL without reloading page
+		const url = new URL(window.location.href);
+		url.searchParams.set("subtab", tab);
+		window.history.pushState({}, "", url);
 	}
 
 	private async loadData() {
@@ -664,7 +687,7 @@ export class AdminClasses extends LitElement {
         <button
           class="tab ${this.activeTab === "classes" ? "active" : ""}"
           @click=${() => {
-						this.activeTab = "classes";
+						this.setActiveTab("classes");
 					}}
         >
           Classes
@@ -672,7 +695,7 @@ export class AdminClasses extends LitElement {
         <button
           class="tab ${this.activeTab === "waitlist" ? "active" : ""}"
           @click=${() => {
-						this.activeTab = "waitlist";
+						this.setActiveTab("waitlist");
 					}}
         >
           Waitlist
@@ -892,7 +915,7 @@ export class AdminClasses extends LitElement {
 
 			await this.loadData();
 
-			this.activeTab = "classes";
+			this.setActiveTab("classes");
 			this.showModal = false;
 			this.approvingEntry = null;
 			this.meetingTimes = [];

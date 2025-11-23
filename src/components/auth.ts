@@ -32,6 +32,10 @@ export class AuthComponent extends LitElement {
 	@state() passkeySupported = false;
 	@state() needsEmailVerification = false;
 	@state() verificationCode = "";
+	@state() resendCodeTimer = 0;
+	@state() resendingCode = false;
+	private resendInterval: number | null = null;
+	private codeSentAt: number | null = null; // Unix timestamp in seconds when code was sent
 
 	static override styles = css`
 		:host {
@@ -283,6 +287,34 @@ export class AuthComponent extends LitElement {
 			font-family: 'Monaco', 'Courier New', monospace;
 		}
 
+		.resend-link {
+			text-align: center;
+			margin-top: 1rem;
+			font-size: 0.875rem;
+			color: var(--text);
+		}
+
+		.resend-button {
+			background: none;
+			border: none;
+			color: var(--primary);
+			cursor: pointer;
+			text-decoration: underline;
+			font-size: 0.875rem;
+			padding: 0;
+			font-family: inherit;
+		}
+
+		.resend-button:hover:not(:disabled) {
+			color: var(--accent);
+		}
+
+		.resend-button:disabled {
+			color: var(--secondary);
+			cursor: not-allowed;
+			text-decoration: none;
+		}
+
 		.btn-secondary {
 			background: transparent;
 			color: var(--text);
@@ -413,6 +445,7 @@ export class AuthComponent extends LitElement {
 					this.needsEmailVerification = true;
 					this.password = "";
 					this.error = "";
+					this.startResendTimer(data.verification_code_sent_at);
 					return;
 				}
 
@@ -450,6 +483,7 @@ export class AuthComponent extends LitElement {
 					this.needsEmailVerification = true;
 					this.password = "";
 					this.error = "";
+					this.startResendTimer(data.verification_code_sent_at);
 					return;
 				}
 
@@ -571,6 +605,84 @@ export class AuthComponent extends LitElement {
 		}
 	}
 
+	private startResendTimer(sentAtTimestamp: number) {
+		// Use provided timestamp
+		this.codeSentAt = sentAtTimestamp;
+		
+		// Clear existing interval if any
+		if (this.resendInterval !== null) {
+			clearInterval(this.resendInterval);
+		}
+		
+		// Update timer based on elapsed time
+		const updateTimer = () => {
+			if (this.codeSentAt === null) return;
+			
+			const now = Math.floor(Date.now() / 1000);
+			const elapsed = now - this.codeSentAt;
+			const remaining = Math.max(0, (5 * 60) - elapsed);
+			this.resendCodeTimer = remaining;
+			
+			if (remaining <= 0) {
+				if (this.resendInterval !== null) {
+					clearInterval(this.resendInterval);
+					this.resendInterval = null;
+				}
+			}
+		};
+		
+		// Update immediately
+		updateTimer();
+		
+		// Then update every second
+		this.resendInterval = window.setInterval(updateTimer, 1000);
+	}
+
+	private async handleResendCode() {
+		this.error = "";
+		this.resendingCode = true;
+
+		try {
+			const response = await fetch("/api/auth/resend-verification-code", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					email: this.email,
+				}),
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to resend code";
+				return;
+			}
+
+			// Start the 5-minute timer
+			this.startResendTimer(data.verification_code_sent_at);
+		} catch (error) {
+			this.error = error instanceof Error ? error.message : "An error occurred";
+		} finally {
+			this.resendingCode = false;
+		}
+	}
+
+	private formatTimer(seconds: number): string {
+		const mins = Math.floor(seconds / 60);
+		const secs = seconds % 60;
+		return `${mins}:${secs.toString().padStart(2, '0')}`;
+	}
+
+	override disconnectedCallback() {
+		super.disconnectedCallback();
+		// Clean up timer when component is removed
+		if (this.resendInterval !== null) {
+			clearInterval(this.resendInterval);
+			this.resendInterval = null;
+		}
+	}
+
 	override render() {
 		if (this.loading) {
 			return html`<div class="loading">Loading...</div>`;
@@ -659,6 +771,23 @@ export class AuthComponent extends LitElement {
 														? html`<div class="error-message">${this.error}</div>`
 														: ""
 												}
+
+												<div class="resend-link">
+													${
+														this.resendCodeTimer > 0
+															? html`Resend code in ${this.formatTimer(this.resendCodeTimer)}`
+															: html`
+																<button
+																	type="button"
+																	class="resend-button"
+																	@click=${this.handleResendCode}
+																	?disabled=${this.resendingCode}
+																>
+																	${this.resendingCode ? "Sending..." : "Resend code"}
+																</button>
+															`
+													}
+												</div>
 
 												<div class="modal-actions">
 													<button

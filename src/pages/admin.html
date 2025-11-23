@@ -319,6 +319,10 @@
         // Update URL without reloading
         const url = new URL(window.location.href);
         url.searchParams.set('tab', tabName);
+        // Remove subtab param when leaving classes tab
+        if (tabName !== 'classes') {
+          url.searchParams.delete('subtab');
+        }
         window.history.pushState({}, '', url);
       }
     }

@@ -135,10 +135,14 @@ export function createClass(data: {
  * Archive or unarchive a class
  */
 export function toggleClassArchive(classId: string, archived: boolean): void {
-	db.run("UPDATE classes SET archived = ? WHERE id = ?", [
+	const result = db.run("UPDATE classes SET archived = ? WHERE id = ?", [
 		archived ? 1 : 0,
 		classId,
 	]);
+
+	if (result.changes === 0) {
+		throw new Error("Class not found");
+	}
 }
 
 /**

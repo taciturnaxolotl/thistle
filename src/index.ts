@@ -593,6 +593,7 @@ const server = Bun.serve({
 
 					return Response.json(
 						{
+							success: true,
 							message: "Email verified successfully",
 							email_verified: true,
 							user: { id: user.id, email: user.email },
@@ -640,7 +641,7 @@ const server = Bun.serve({
 						}),
 					});
 
-					return Response.json({ message: "Verification email sent" });
+					return Response.json({ success: true, message: "Verification email sent" });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -671,6 +672,7 @@ const server = Bun.serve({
 					if (!user) {
 						// Don't reveal if user exists
 						return Response.json({
+							success: true,
 							message:
 								"If an account exists with that email, a verification code has been sent",
 						});
@@ -698,6 +700,7 @@ const server = Bun.serve({
 					});
 
 					return Response.json({
+						success: true,
 						message: "Verification code sent",
 						verification_code_sent_at: sentAt,
 					});
@@ -742,6 +745,7 @@ const server = Bun.serve({
 					}
 
 					return Response.json({
+						success: true,
 						message:
 							"If an account exists with that email, a password reset link has been sent",
 					});
@@ -825,7 +829,7 @@ const server = Bun.serve({
 					await updateUserPassword(userId, password);
 					consumePasswordResetToken(token);
 
-					return Response.json({ message: "Password reset successfully" });
+					return Response.json({ success: true, message: "Password reset successfully" });
 				} catch (error) {
 					console.error("[Email] Reset password error:", error);
 					return Response.json(

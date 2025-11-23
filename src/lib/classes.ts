@@ -36,28 +36,134 @@ export interface ClassWithStats extends Class {
 export function getClassesForUser(
 	userId: number,
 	isAdmin: boolean,
-): ClassWithStats[] {
+	limit = 50,
+	cursor?: string,
+): {
+	data: ClassWithStats[];
+	pagination: {
+		limit: number;
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+} {
+	let classes: ClassWithStats[];
+
 	if (isAdmin) {
-		return db
-			.query<ClassWithStats, []>(
-				`SELECT 
-					c.*,
-					(SELECT COUNT(*) FROM class_members WHERE class_id = c.id) as student_count,
-					(SELECT COUNT(*) FROM transcriptions WHERE class_id = c.id) as transcript_count
-				FROM classes c 
-				ORDER BY c.year DESC, c.semester DESC, c.course_code ASC`,
-			)
-			.all();
+		if (cursor) {
+			const { decodeClassCursor } = require("./cursor");
+			const { year, semester, courseCode, id } = decodeClassCursor(cursor);
+
+			classes = db
+				.query<ClassWithStats, [number, string, string, string, number]>(
+					`SELECT 
+						c.*,
+						(SELECT COUNT(*) FROM class_members WHERE class_id = c.id) as student_count,
+						(SELECT COUNT(*) FROM transcriptions WHERE class_id = c.id) as transcript_count
+					FROM classes c 
+					WHERE (c.year < ? OR 
+						(c.year = ? AND c.semester < ?) OR 
+						(c.year = ? AND c.semester = ? AND c.course_code > ?) OR
+						(c.year = ? AND c.semester = ? AND c.course_code = ? AND c.id > ?))
+					ORDER BY c.year DESC, c.semester DESC, c.course_code ASC, c.id ASC
+					LIMIT ?`,
+				)
+				.all(
+					year,
+					year,
+					semester,
+					year,
+					semester,
+					courseCode,
+					year,
+					semester,
+					courseCode,
+					id,
+					limit + 1,
+				);
+		} else {
+			classes = db
+				.query<ClassWithStats, [number]>(
+					`SELECT 
+						c.*,
+						(SELECT COUNT(*) FROM class_members WHERE class_id = c.id) as student_count,
+						(SELECT COUNT(*) FROM transcriptions WHERE class_id = c.id) as transcript_count
+					FROM classes c 
+					ORDER BY c.year DESC, c.semester DESC, c.course_code ASC, c.id ASC
+					LIMIT ?`,
+				)
+				.all(limit + 1);
+		}
+	} else {
+		if (cursor) {
+			const { decodeClassCursor } = require("./cursor");
+			const { year, semester, courseCode, id } = decodeClassCursor(cursor);
+
+			classes = db
+				.query<ClassWithStats, [number, number, string, string, string, number]>(
+					`SELECT c.* FROM classes c
+					INNER JOIN class_members cm ON c.id = cm.class_id
+					WHERE cm.user_id = ? AND 
+						(c.year < ? OR 
+						(c.year = ? AND c.semester < ?) OR 
+						(c.year = ? AND c.semester = ? AND c.course_code > ?) OR
+						(c.year = ? AND c.semester = ? AND c.course_code = ? AND c.id > ?))
+					ORDER BY c.year DESC, c.semester DESC, c.course_code ASC, c.id ASC
+					LIMIT ?`,
+				)
+				.all(
+					userId,
+					year,
+					year,
+					semester,
+					year,
+					semester,
+					courseCode,
+					year,
+					semester,
+					courseCode,
+					id,
+					limit + 1,
+				);
+		} else {
+			classes = db
+				.query<ClassWithStats, [number, number]>(
+					`SELECT c.* FROM classes c
+					INNER JOIN class_members cm ON c.id = cm.class_id
+					WHERE cm.user_id = ?
+					ORDER BY c.year DESC, c.semester DESC, c.course_code ASC, c.id ASC
+					LIMIT ?`,
+				)
+				.all(userId, limit + 1);
+		}
 	}
 
-	return db
-		.query<ClassWithStats, [number]>(
-			`SELECT c.* FROM classes c
-       INNER JOIN class_members cm ON c.id = cm.class_id
-       WHERE cm.user_id = ?
-       ORDER BY c.year DESC, c.semester DESC, c.course_code ASC`,
-		)
-		.all(userId);
+	const hasMore = classes.length > limit;
+	if (hasMore) {
+		classes.pop();
+	}
+
+	let nextCursor: string | null = null;
+	if (hasMore && classes.length > 0) {
+		const { encodeClassCursor } = require("./cursor");
+		const last = classes[classes.length - 1];
+		if (last) {
+			nextCursor = encodeClassCursor(
+				last.year,
+				last.semester,
+				last.course_code,
+				last.id,
+			);
+		}
+	}
+
+	return {
+		data: classes,
+		pagination: {
+			limit,
+			hasMore,
+			nextCursor,
+		},
+	};
 }
 
 /**

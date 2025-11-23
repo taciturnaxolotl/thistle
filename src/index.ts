@@ -2090,23 +2090,108 @@ const server = Bun.serve({
 			GET: async (req) => {
 				try {
 					const user = requireSubscription(req);
+					const url = new URL(req.url);
 
-					const transcriptions = db
-						.query<
-							{
-								id: string;
-								filename: string;
-								original_filename: string;
-								class_id: string | null;
-								status: string;
-								progress: number;
-								created_at: number;
-							},
-							[number]
-						>(
-							"SELECT id, filename, original_filename, class_id, status, progress, created_at FROM transcriptions WHERE user_id = ? ORDER BY created_at DESC",
-						)
-						.all(user.id);
+					// Parse pagination params
+					const limit = Math.min(
+						Number.parseInt(url.searchParams.get("limit") || "50", 10),
+						100,
+					);
+					const cursorParam = url.searchParams.get("cursor");
+
+					let transcriptions: Array<{
+						id: string;
+						filename: string;
+						original_filename: string;
+						class_id: string | null;
+						status: string;
+						progress: number;
+						created_at: number;
+					}>;
+
+					if (cursorParam) {
+						// Decode cursor
+						const { decodeCursor } = await import("./lib/cursor");
+						const parts = decodeCursor(cursorParam);
+
+						if (parts.length !== 2) {
+							return Response.json(
+								{ error: "Invalid cursor format" },
+								{ status: 400 },
+							);
+						}
+
+						const cursorTime = Number.parseInt(parts[0] || "", 10);
+						const id = parts[1] || "";
+
+						if (Number.isNaN(cursorTime) || !id) {
+							return Response.json(
+								{ error: "Invalid cursor format" },
+								{ status: 400 },
+							);
+						}
+
+						transcriptions = db
+							.query<
+								{
+									id: string;
+									filename: string;
+									original_filename: string;
+									class_id: string | null;
+									status: string;
+									progress: number;
+									created_at: number;
+								},
+								[number, number, string, number]
+							>(
+								`SELECT id, filename, original_filename, class_id, status, progress, created_at 
+								FROM transcriptions 
+								WHERE user_id = ? AND (created_at < ? OR (created_at = ? AND id < ?))
+								ORDER BY created_at DESC, id DESC 
+								LIMIT ?`,
+							)
+							.all(user.id, cursorTime, cursorTime, id, limit + 1);
+					} else {
+						transcriptions = db
+							.query<
+								{
+									id: string;
+									filename: string;
+									original_filename: string;
+									class_id: string | null;
+									status: string;
+									progress: number;
+									created_at: number;
+								},
+								[number, number]
+							>(
+								`SELECT id, filename, original_filename, class_id, status, progress, created_at 
+								FROM transcriptions 
+								WHERE user_id = ? 
+								ORDER BY created_at DESC, id DESC 
+								LIMIT ?`,
+							)
+							.all(user.id, limit + 1);
+					}
+
+					// Check if there are more results
+					const hasMore = transcriptions.length > limit;
+					if (hasMore) {
+						transcriptions.pop(); // Remove extra item
+					}
+
+					// Build next cursor
+					let nextCursor: string | null = null;
+					if (hasMore && transcriptions.length > 0) {
+						const { encodeCursor } = await import("./lib/cursor");
+						const last = transcriptions[transcriptions.length - 1];
+						if (last) {
+							nextCursor = encodeCursor([
+								last.created_at.toString(),
+								last.id,
+							]);
+						}
+					}
 
 					// Load transcripts from files for completed jobs
 					const jobs = await Promise.all(
@@ -2122,7 +2207,14 @@ const server = Bun.serve({
 						}),
 					);
 
-					return Response.json({ jobs });
+					return Response.json({
+						jobs,
+						pagination: {
+							limit,
+							hasMore,
+							nextCursor,
+						},
+					});
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2238,8 +2330,16 @@ const server = Bun.serve({
 			GET: async (req) => {
 				try {
 					requireAdmin(req);
-					const transcriptions = getAllTranscriptions();
-					return Response.json(transcriptions);
+					const url = new URL(req.url);
+
+					const limit = Math.min(
+						Number.parseInt(url.searchParams.get("limit") || "50", 10),
+						100,
+					);
+					const cursor = url.searchParams.get("cursor") || undefined;
+
+					const result = getAllTranscriptions(limit, cursor);
+					return Response.json(result);
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2249,8 +2349,16 @@ const server = Bun.serve({
 			GET: async (req) => {
 				try {
 					requireAdmin(req);
-					const users = getAllUsersWithStats();
-					return Response.json(users);
+					const url = new URL(req.url);
+
+					const limit = Math.min(
+						Number.parseInt(url.searchParams.get("limit") || "50", 10),
+						100,
+					);
+					const cursor = url.searchParams.get("cursor") || undefined;
+
+					const result = getAllUsersWithStats(limit, cursor);
+					return Response.json(result);
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2799,7 +2907,20 @@ const server = Bun.serve({
 			GET: async (req) => {
 				try {
 					const user = requireAuth(req);
-					const classes = getClassesForUser(user.id, user.role === "admin");
+					const url = new URL(req.url);
+
+					const limit = Math.min(
+						Number.parseInt(url.searchParams.get("limit") || "50", 10),
+						100,
+					);
+					const cursor = url.searchParams.get("cursor") || undefined;
+
+					const result = getClassesForUser(
+						user.id,
+						user.role === "admin",
+						limit,
+						cursor,
+					);
 
 					// Group by semester/year
 					const grouped: Record<
@@ -2815,7 +2936,7 @@ const server = Bun.serve({
 						}>
 					> = {};
 
-					for (const cls of classes) {
+					for (const cls of result.data) {
 						const key = `${cls.semester} ${cls.year}`;
 						if (!grouped[key]) {
 							grouped[key] = [];
@@ -2831,7 +2952,10 @@ const server = Bun.serve({
 						});
 					}
 
-					return Response.json({ classes: grouped });
+					return Response.json({
+						classes: grouped,
+						pagination: result.pagination,
+					});
 				} catch (error) {
 					return handleError(error);
 				}

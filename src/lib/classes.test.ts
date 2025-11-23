@@ -129,15 +129,15 @@ test("gets classes for enrolled user", () => {
 	enrollUserInClass(userId, cls1.id);
 
 	// Get classes for user (non-admin)
-	const classes = getClassesForUser(userId, false);
-	expect(classes.length).toBe(1);
-	expect(classes[0]?.id).toBe(cls1.id);
+	const classesResult = getClassesForUser(userId, false);
+	expect(classesResult.data.length).toBe(1);
+	expect(classesResult.data[0]?.id).toBe(cls1.id);
 
 	// Admin should see all classes (not just the 2 test classes, but all in DB)
-	const allClasses = getClassesForUser(userId, true);
-	expect(allClasses.length).toBeGreaterThanOrEqual(2);
-	expect(allClasses.some((c) => c.id === cls1.id)).toBe(true);
-	expect(allClasses.some((c) => c.id === cls2.id)).toBe(true);
+	const allClassesResult = getClassesForUser(userId, true);
+	expect(allClassesResult.data.length).toBeGreaterThanOrEqual(2);
+	expect(allClassesResult.data.some((c) => c.id === cls1.id)).toBe(true);
+	expect(allClassesResult.data.some((c) => c.id === cls2.id)).toBe(true);
 
 	// Cleanup enrollment
 	removeUserFromClass(userId, cls1.id);

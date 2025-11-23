@@ -482,44 +482,114 @@ export function getAllUsers(): Array<{
 		.all();
 }
 
-export function getAllTranscriptions(): Array<{
-	id: string;
-	user_id: number;
-	user_email: string;
-	user_name: string | null;
-	original_filename: string;
-	status: string;
-	created_at: number;
-	error_message: string | null;
-}> {
-	return db
-		.query<
-			{
-				id: string;
-				user_id: number;
-				user_email: string;
-				user_name: string | null;
-				original_filename: string;
-				status: string;
-				created_at: number;
-				error_message: string | null;
-			},
-			[]
-		>(
-			`SELECT 
-        t.id, 
-        t.user_id, 
-        u.email as user_email, 
-        u.name as user_name, 
-        t.original_filename, 
-        t.status, 
-        t.created_at,
-        t.error_message
-      FROM transcriptions t
-      LEFT JOIN users u ON t.user_id = u.id
-      ORDER BY t.created_at DESC`,
-		)
-		.all();
+export function getAllTranscriptions(
+	limit = 50,
+	cursor?: string,
+): {
+	data: Array<{
+		id: string;
+		user_id: number;
+		user_email: string;
+		user_name: string | null;
+		original_filename: string;
+		status: string;
+		created_at: number;
+		error_message: string | null;
+	}>;
+	pagination: {
+		limit: number;
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+} {
+	type TranscriptionRow = {
+		id: string;
+		user_id: number;
+		user_email: string;
+		user_name: string | null;
+		original_filename: string;
+		status: string;
+		created_at: number;
+		error_message: string | null;
+	};
+
+	let transcriptions: TranscriptionRow[];
+
+	if (cursor) {
+		const { decodeCursor } = require("./cursor");
+		const parts = decodeCursor(cursor);
+
+		if (parts.length !== 2) {
+			throw new Error("Invalid cursor format");
+		}
+
+		const cursorTime = Number.parseInt(parts[0] || "", 10);
+		const id = parts[1] || "";
+
+		if (Number.isNaN(cursorTime) || !id) {
+			throw new Error("Invalid cursor format");
+		}
+
+		transcriptions = db
+			.query<TranscriptionRow, [number, number, string, number]>(
+				`SELECT 
+					t.id, 
+					t.user_id, 
+					u.email as user_email, 
+					u.name as user_name, 
+					t.original_filename, 
+					t.status, 
+					t.created_at,
+					t.error_message
+				FROM transcriptions t
+				LEFT JOIN users u ON t.user_id = u.id
+				WHERE t.created_at < ? OR (t.created_at = ? AND t.id < ?)
+				ORDER BY t.created_at DESC, t.id DESC
+				LIMIT ?`,
+			)
+			.all(cursorTime, cursorTime, id, limit + 1);
+	} else {
+		transcriptions = db
+			.query<TranscriptionRow, [number]>(
+				`SELECT 
+					t.id, 
+					t.user_id, 
+					u.email as user_email, 
+					u.name as user_name, 
+					t.original_filename, 
+					t.status, 
+					t.created_at,
+					t.error_message
+				FROM transcriptions t
+				LEFT JOIN users u ON t.user_id = u.id
+				ORDER BY t.created_at DESC, t.id DESC
+				LIMIT ?`,
+			)
+			.all(limit + 1);
+	}
+
+	const hasMore = transcriptions.length > limit;
+	if (hasMore) {
+		transcriptions.pop();
+	}
+
+	let nextCursor: string | null = null;
+	if (hasMore && transcriptions.length > 0) {
+		const { encodeCursor } = require("./cursor");
+		const last = transcriptions[transcriptions.length - 1];
+		if (last) {
+			nextCursor = encodeCursor([last.created_at.toString(), last.id]);
+		}
+	}
+
+	return {
+		data: transcriptions,
+		pagination: {
+			limit,
+			hasMore,
+			nextCursor,
+		},
+	};
 }
 
 export function deleteTranscription(transcriptionId: string): void {
@@ -605,25 +675,100 @@ export interface UserWithStats {
 	subscription_id: string | null;
 }
 
-export function getAllUsersWithStats(): UserWithStats[] {
-	return db
-		.query<UserWithStats, []>(
-			`SELECT 
-        u.id, 
-        u.email, 
-        u.name, 
-        u.avatar, 
-        u.created_at, 
-        u.role,
-        u.last_login,
-        COUNT(DISTINCT t.id) as transcription_count,
-        s.status as subscription_status,
-        s.id as subscription_id
-      FROM users u
-      LEFT JOIN transcriptions t ON u.id = t.user_id
-      LEFT JOIN subscriptions s ON u.id = s.user_id AND s.status IN ('active', 'trialing', 'past_due')
-      GROUP BY u.id
-      ORDER BY u.created_at DESC`,
-		)
-		.all();
+export function getAllUsersWithStats(
+	limit = 50,
+	cursor?: string,
+): {
+	data: UserWithStats[];
+	pagination: {
+		limit: number;
+		hasMore: boolean;
+		nextCursor: string | null;
+	};
+} {
+	let users: UserWithStats[];
+
+	if (cursor) {
+		const { decodeCursor } = require("./cursor");
+		const parts = decodeCursor(cursor);
+
+		if (parts.length !== 2) {
+			throw new Error("Invalid cursor format");
+		}
+
+		const cursorTime = Number.parseInt(parts[0] || "", 10);
+		const cursorId = Number.parseInt(parts[1] || "", 10);
+
+		if (Number.isNaN(cursorTime) || Number.isNaN(cursorId)) {
+			throw new Error("Invalid cursor format");
+		}
+
+		users = db
+			.query<UserWithStats, [number, number, number, number]>(
+				`SELECT 
+					u.id, 
+					u.email, 
+					u.name, 
+					u.avatar, 
+					u.created_at, 
+					u.role,
+					u.last_login,
+					COUNT(DISTINCT t.id) as transcription_count,
+					s.status as subscription_status,
+					s.id as subscription_id
+				FROM users u
+				LEFT JOIN transcriptions t ON u.id = t.user_id
+				LEFT JOIN subscriptions s ON u.id = s.user_id AND s.status IN ('active', 'trialing', 'past_due')
+				WHERE u.created_at < ? OR (u.created_at = ? AND u.id < ?)
+				GROUP BY u.id
+				ORDER BY u.created_at DESC, u.id DESC
+				LIMIT ?`,
+			)
+			.all(cursorTime, cursorTime, cursorId, limit + 1);
+	} else {
+		users = db
+			.query<UserWithStats, [number]>(
+				`SELECT 
+					u.id, 
+					u.email, 
+					u.name, 
+					u.avatar, 
+					u.created_at, 
+					u.role,
+					u.last_login,
+					COUNT(DISTINCT t.id) as transcription_count,
+					s.status as subscription_status,
+					s.id as subscription_id
+				FROM users u
+				LEFT JOIN transcriptions t ON u.id = t.user_id
+				LEFT JOIN subscriptions s ON u.id = s.user_id AND s.status IN ('active', 'trialing', 'past_due')
+				GROUP BY u.id
+				ORDER BY u.created_at DESC, u.id DESC
+				LIMIT ?`,
+			)
+			.all(limit + 1);
+	}
+
+	const hasMore = users.length > limit;
+	if (hasMore) {
+		users.pop();
+	}
+
+	let nextCursor: string | null = null;
+	if (hasMore && users.length > 0) {
+		const { encodeCursor } = require("./cursor");
+		const last = users[users.length - 1];
+		if (last) {
+			nextCursor = encodeCursor([last.created_at.toString(), last.id.toString()]);
+		}
+	}
+
+	return {
+		data: users,
+		pagination: {
+			limit,
+			hasMore,
+			nextCursor,
+		},
+	};
 }

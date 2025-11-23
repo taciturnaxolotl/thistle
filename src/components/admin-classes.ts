@@ -510,7 +510,9 @@ export class AdminClasses extends LitElement {
 			const classesData = await classesRes.json();
 			const waitlistData = await waitlistRes.json();
 
-			this.classes = classesData.classes || [];
+			// Flatten grouped classes into array
+			const groupedClasses = classesData.classes || {};
+			this.classes = Object.values(groupedClasses).flat();
 			this.waitlist = waitlistData.waitlist || [];
 		} catch {
 			this.error = "Failed to load data. Please try again.";

@@ -2343,7 +2343,7 @@ const server = Bun.serve({
 					const cursor = url.searchParams.get("cursor") || undefined;
 
 					const result = getAllTranscriptions(limit, cursor);
-					return Response.json(result);
+					return Response.json(result.data); // Return just the array for now, can add pagination UI later
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2362,7 +2362,7 @@ const server = Bun.serve({
 					const cursor = url.searchParams.get("cursor") || undefined;
 
 					const result = getAllUsersWithStats(limit, cursor);
-					return Response.json(result);
+					return Response.json(result.data); // Return just the array for now, can add pagination UI later
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2926,7 +2926,12 @@ const server = Bun.serve({
 						cursor,
 					);
 
-					// Group by semester/year
+					// For admin, return flat array. For users, group by semester/year
+					if (user.role === "admin") {
+						return Response.json(result.data);
+					}
+
+					// Group by semester/year for regular users
 					const grouped: Record<
 						string,
 						Array<{

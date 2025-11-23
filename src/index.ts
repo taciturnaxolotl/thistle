@@ -165,7 +165,10 @@ const whisperService = new WhisperServiceManager(
 );
 
 // Clean up expired sessions every hour
-setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
+const sessionCleanupInterval = setInterval(
+	cleanupExpiredSessions,
+	60 * 60 * 1000,
+);
 
 // Helper function to sync user subscriptions from Polar
 async function syncUserSubscriptionsFromPolar(
@@ -277,7 +280,7 @@ try {
 }
 
 // Periodic sync every 5 minutes as backup (SSE handles real-time updates)
-setInterval(
+const syncInterval = setInterval(
 	async () => {
 		try {
 			await whisperService.syncWithWhisper();
@@ -292,7 +295,10 @@ setInterval(
 );
 
 // Clean up stale files daily
-setInterval(() => whisperService.cleanupStaleFiles(), 24 * 60 * 60 * 1000);
+const fileCleanupInterval = setInterval(
+	() => whisperService.cleanupStaleFiles(),
+	24 * 60 * 60 * 1000,
+);
 
 const server = Bun.serve({
 	port: process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000,
@@ -1619,6 +1625,9 @@ const server = Bun.serve({
 					// Event-driven SSE stream with reconnection support
 					const stream = new ReadableStream({
 						async start(controller) {
+							// Track this stream for graceful shutdown
+							activeSSEStreams.add(controller);
+
 							const encoder = new TextEncoder();
 							let isClosed = false;
 							let lastEventId = Math.floor(Date.now() / 1000);
@@ -1669,6 +1678,7 @@ const server = Bun.serve({
 								current?.status === "failed"
 							) {
 								isClosed = true;
+								activeSSEStreams.delete(controller);
 								controller.close();
 								return;
 							}
@@ -1699,6 +1709,7 @@ const server = Bun.serve({
 									isClosed = true;
 									clearInterval(heartbeatInterval);
 									transcriptionEvents.off(transcriptionId, updateHandler);
+									activeSSEStreams.delete(controller);
 									controller.close();
 								}
 							};
@@ -1708,6 +1719,7 @@ const server = Bun.serve({
 								isClosed = true;
 								clearInterval(heartbeatInterval);
 								transcriptionEvents.off(transcriptionId, updateHandler);
+								activeSSEStreams.delete(controller);
 							};
 						},
 					});
@@ -3095,3 +3107,51 @@ const server = Bun.serve({
 	},
 });
 console.log(`🪻 Thistle running at http://localhost:${server.port}`);
+
+// Track active SSE streams for graceful shutdown
+const activeSSEStreams = new Set<ReadableStreamDefaultController>();
+
+// Graceful shutdown handler
+let isShuttingDown = false;
+
+async function shutdown(signal: string) {
+	if (isShuttingDown) return;
+	isShuttingDown = true;
+
+	console.log(`\n${signal} received, starting graceful shutdown...`);
+
+	// 1. Stop accepting new requests
+	console.log("[Shutdown] Closing server...");
+	server.stop();
+
+	// 2. Close all active SSE streams (safe to kill - sync will handle reconnection)
+	console.log(`[Shutdown] Closing ${activeSSEStreams.size} active SSE streams...`);
+	for (const controller of activeSSEStreams) {
+		try {
+			controller.close();
+		} catch {
+			// Already closed
+		}
+	}
+	activeSSEStreams.clear();
+
+	// 3. Stop transcription service (closes streams to Murmur)
+	whisperService.stop();
+
+	// 4. Stop cleanup intervals
+	console.log("[Shutdown] Stopping cleanup intervals...");
+	clearInterval(sessionCleanupInterval);
+	clearInterval(syncInterval);
+	clearInterval(fileCleanupInterval);
+
+	// 5. Close database connections
+	console.log("[Shutdown] Closing database...");
+	db.close();
+
+	console.log("[Shutdown] Complete");
+	process.exit(0);
+}
+
+// Register shutdown handlers
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

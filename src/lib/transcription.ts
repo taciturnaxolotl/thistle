@@ -669,4 +669,22 @@ export class WhisperServiceManager {
 			console.error("[Cleanup] Failed:", error);
 		}
 	}
+
+	stop(): void {
+		console.log("[Transcription] Closing active streams...");
+		// Close all active SSE streams to Murmur
+		for (const [transcriptionId, stream] of this.activeStreams.entries()) {
+			try {
+				stream.close();
+				this.streamLocks.delete(transcriptionId);
+			} catch (error) {
+				console.error(
+					`[Transcription] Error closing stream ${transcriptionId}:`,
+					error,
+				);
+			}
+		}
+		this.activeStreams.clear();
+		console.log("[Transcription] All streams closed");
+	}
 }

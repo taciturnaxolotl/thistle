@@ -135,9 +135,7 @@ function validateEnvVars() {
 		console.warn(
 			"[Startup] ORIGIN not set, defaulting to http://localhost:3000",
 		);
-		console.warn(
-			"[Startup] Set ORIGIN in production for correct email links",
-		);
+		console.warn("[Startup] Set ORIGIN in production for correct email links");
 	}
 
 	console.log("[Startup] Environment variable validation passed");
@@ -641,7 +639,10 @@ const server = Bun.serve({
 						}),
 					});
 
-					return Response.json({ success: true, message: "Verification email sent" });
+					return Response.json({
+						success: true,
+						message: "Verification email sent",
+					});
 				} catch (error) {
 					return handleError(error);
 				}
@@ -829,7 +830,10 @@ const server = Bun.serve({
 					await updateUserPassword(userId, password);
 					consumePasswordResetToken(token);
 
-					return Response.json({ success: true, message: "Password reset successfully" });
+					return Response.json({
+						success: true,
+						message: "Password reset successfully",
+					});
 				} catch (error) {
 					console.error("[Email] Reset password error:", error);
 					return Response.json(
@@ -898,9 +902,13 @@ const server = Bun.serve({
 				try {
 					const user = requireAuth(req);
 
-					const rateLimitError = enforceRateLimit(req, "passkey-register-options", {
-						ip: { max: 10, windowSeconds: 5 * 60 },
-					});
+					const rateLimitError = enforceRateLimit(
+						req,
+						"passkey-register-options",
+						{
+							ip: { max: 10, windowSeconds: 5 * 60 },
+						},
+					);
 					if (rateLimitError) return rateLimitError;
 
 					const options = await createRegistrationOptions(user);
@@ -915,9 +923,13 @@ const server = Bun.serve({
 				try {
 					const _user = requireAuth(req);
 
-					const rateLimitError = enforceRateLimit(req, "passkey-register-verify", {
-						ip: { max: 10, windowSeconds: 5 * 60 },
-					});
+					const rateLimitError = enforceRateLimit(
+						req,
+						"passkey-register-verify",
+						{
+							ip: { max: 10, windowSeconds: 5 * 60 },
+						},
+					);
 					if (rateLimitError) return rateLimitError;
 
 					const body = await req.json();
@@ -2195,10 +2207,7 @@ const server = Bun.serve({
 						const { encodeCursor } = await import("./lib/cursor");
 						const last = transcriptions[transcriptions.length - 1];
 						if (last) {
-							nextCursor = encodeCursor([
-								last.created_at.toString(),
-								last.id,
-							]);
+							nextCursor = encodeCursor([last.created_at.toString(), last.id]);
 						}
 					}
 
@@ -3440,7 +3449,9 @@ async function shutdown(signal: string) {
 	server.stop();
 
 	// 2. Close all active SSE streams (safe to kill - sync will handle reconnection)
-	console.log(`[Shutdown] Closing ${activeSSEStreams.size} active SSE streams...`);
+	console.log(
+		`[Shutdown] Closing ${activeSSEStreams.size} active SSE streams...`,
+	);
 	for (const controller of activeSSEStreams) {
 		try {
 			controller.close();

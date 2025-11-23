@@ -99,7 +99,10 @@ export function getClassesForUser(
 			const { year, semester, courseCode, id } = decodeClassCursor(cursor);
 
 			classes = db
-				.query<ClassWithStats, [number, number, string, string, string, number]>(
+				.query<
+					ClassWithStats,
+					[number, number, string, string, string, number]
+				>(
 					`SELECT c.* FROM classes c
 					INNER JOIN class_members cm ON c.id = cm.class_id
 					WHERE cm.user_id = ? AND 

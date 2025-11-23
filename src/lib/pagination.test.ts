@@ -1,5 +1,5 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 let testDb: Database;
 
@@ -171,21 +171,11 @@ beforeAll(() => {
 	// Create test users
 	testDb.run(
 		"INSERT INTO users (email, password_hash, email_verified, created_at, role) VALUES (?, ?, 1, ?, ?)",
-		[
-			"user1@test.com",
-			"hash1",
-			Math.floor(Date.now() / 1000) - 100,
-			"user",
-		],
+		["user1@test.com", "hash1", Math.floor(Date.now() / 1000) - 100, "user"],
 	);
 	testDb.run(
 		"INSERT INTO users (email, password_hash, email_verified, created_at, role) VALUES (?, ?, 1, ?, ?)",
-		[
-			"user2@test.com",
-			"hash2",
-			Math.floor(Date.now() / 1000) - 50,
-			"user",
-		],
+		["user2@test.com", "hash2", Math.floor(Date.now() / 1000) - 50, "user"],
 	);
 	testDb.run(
 		"INSERT INTO users (email, password_hash, email_verified, created_at, role) VALUES (?, ?, 1, ?, ?)",

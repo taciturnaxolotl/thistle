@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 /**
  * API Response Format Standards
- * 
+ *
  * This test documents the standardized response formats across the API.
  * All endpoints should follow these patterns for consistency.
  */

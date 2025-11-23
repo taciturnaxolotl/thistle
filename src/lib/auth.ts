@@ -759,7 +759,10 @@ export function getAllUsersWithStats(
 		const { encodeCursor } = require("./cursor");
 		const last = users[users.length - 1];
 		if (last) {
-			nextCursor = encodeCursor([last.created_at.toString(), last.id.toString()]);
+			nextCursor = encodeCursor([
+				last.created_at.toString(),
+				last.id.toString(),
+			]);
 		}
 	}
 

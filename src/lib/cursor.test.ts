@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
-	encodeCursor,
+	decodeClassCursor,
 	decodeCursor,
-	encodeSimpleCursor,
 	decodeSimpleCursor,
 	encodeClassCursor,
-	decodeClassCursor,
+	encodeCursor,
+	encodeSimpleCursor,
 } from "./cursor";
 
 describe("Cursor encoding/decoding", () => {

@@ -893,6 +893,12 @@ const server = Bun.serve({
 			POST: async (req) => {
 				try {
 					const user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "passkey-register-options", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const options = await createRegistrationOptions(user);
 					return Response.json(options);
 				} catch (err) {
@@ -904,6 +910,12 @@ const server = Bun.serve({
 			POST: async (req) => {
 				try {
 					const _user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "passkey-register-verify", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const body = await req.json();
 					const { response: credentialResponse, challenge, name } = body;
 
@@ -929,6 +941,11 @@ const server = Bun.serve({
 		"/api/passkeys/authenticate/options": {
 			POST: async (req) => {
 				try {
+					const rateLimitError = enforceRateLimit(req, "passkey-auth-options", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const body = await req.json();
 					const { email } = body;
 
@@ -942,6 +959,11 @@ const server = Bun.serve({
 		"/api/passkeys/authenticate/verify": {
 			POST: async (req) => {
 				try {
+					const rateLimitError = enforceRateLimit(req, "passkey-auth-verify", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const body = await req.json();
 					const { response: credentialResponse, challenge } = body;
 
@@ -1007,6 +1029,12 @@ const server = Bun.serve({
 			PUT: async (req) => {
 				try {
 					const user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "passkey-update", {
+						ip: { max: 10, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const body = await req.json();
 					const { name } = body;
 					const passkeyId = req.params.id;
@@ -1024,6 +1052,12 @@ const server = Bun.serve({
 			DELETE: async (req) => {
 				try {
 					const user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "passkey-delete", {
+						ip: { max: 10, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
 					const passkeyId = req.params.id;
 					deletePasskey(passkeyId, user.id);
 					return Response.json({ success: true });
@@ -1063,6 +1097,12 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				const rateLimitError = enforceRateLimit(req, "delete-session", {
+					ip: { max: 20, windowSeconds: 60 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				const body = await req.json();
 				const targetSessionId = body.sessionId;
 				if (!targetSessionId) {
@@ -1277,6 +1317,12 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				const rateLimitError = enforceRateLimit(req, "update-name", {
+					ip: { max: 10, windowSeconds: 5 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				const body = await req.json();
 				const { name } = body;
 				if (!name) {
@@ -1303,6 +1349,12 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				const rateLimitError = enforceRateLimit(req, "update-avatar", {
+					ip: { max: 10, windowSeconds: 5 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				const body = await req.json();
 				const { avatar } = body;
 				if (!avatar) {
@@ -1329,6 +1381,12 @@ const server = Bun.serve({
 				if (!user) {
 					return Response.json({ error: "Invalid session" }, { status: 401 });
 				}
+
+				const rateLimitError = enforceRateLimit(req, "update-notifications", {
+					ip: { max: 10, windowSeconds: 5 * 60 },
+				});
+				if (rateLimitError) return rateLimitError;
+
 				const body = await req.json();
 				const { email_notifications_enabled } = body;
 				if (typeof email_notifications_enabled !== "boolean") {
@@ -2015,6 +2073,11 @@ const server = Bun.serve({
 			POST: async (req) => {
 				try {
 					const user = requireSubscription(req);
+
+					const rateLimitError = enforceRateLimit(req, "upload-transcription", {
+						ip: { max: 20, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
 
 					const formData = await req.formData();
 					const file = formData.get("audio") as File;

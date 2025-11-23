@@ -292,10 +292,10 @@ const syncInterval = setInterval(
 	5 * 60 * 1000,
 );
 
-// Clean up stale files daily
+// Clean up stale files hourly
 const fileCleanupInterval = setInterval(
 	() => whisperService.cleanupStaleFiles(),
-	24 * 60 * 60 * 1000,
+	60 * 60 * 1000, // 1 hour
 );
 
 const server = Bun.serve({

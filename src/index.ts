@@ -1545,20 +1545,27 @@ const server = Bun.serve({
 		},
 		"/api/webhooks/polar": {
 			POST: async (req) => {
+				const { validateEvent } = await import("@polar-sh/sdk/webhooks");
+
+				// Get raw body as string
+				const rawBody = await req.text();
+				const headers = Object.fromEntries(req.headers.entries());
+
+				// Validate webhook signature (validated at startup)
+				const webhookSecret = process.env.POLAR_WEBHOOK_SECRET as string;
+				let event: ReturnType<typeof validateEvent>;
 				try {
-					const { validateEvent } = await import("@polar-sh/sdk/webhooks");
+					event = validateEvent(rawBody, headers, webhookSecret);
+				} catch (error) {
+					// Validation failed - log but return generic response
+					console.error("[Webhook] Signature validation failed:", error);
+					return Response.json({ error: "Invalid webhook" }, { status: 400 });
+				}
 
-					// Get raw body as string
-					const rawBody = await req.text();
-					const headers = Object.fromEntries(req.headers.entries());
+				console.log(`[Webhook] Received event: ${event.type}`);
 
-					// Validate webhook signature (validated at startup)
-					const webhookSecret = process.env.POLAR_WEBHOOK_SECRET as string;
-					const event = validateEvent(rawBody, headers, webhookSecret);
-
-					console.log(`[Webhook] Received event: ${event.type}`);
-
-					// Handle different event types
+				// Handle different event types
+				try {
 					switch (event.type) {
 						case "subscription.updated": {
 							const { id, status, customerId, metadata } = event.data;
@@ -1619,11 +1626,9 @@ const server = Bun.serve({
 
 					return Response.json({ received: true });
 				} catch (error) {
-					console.error("[Webhook] Error processing webhook:", error);
-					return Response.json(
-						{ error: "Webhook processing failed" },
-						{ status: 400 },
-					);
+					// Processing failed - log with detail but return generic response
+					console.error("[Webhook] Event processing failed:", error);
+					return Response.json({ error: "Invalid webhook" }, { status: 400 });
 				}
 			},
 		},

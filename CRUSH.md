@@ -688,6 +688,113 @@ The `TranscriptionService` runs periodic syncs to reconcile state between our da
 **Configuration:**
 Set `WHISPER_SERVICE_URL` in `.env` (default: `http://localhost:8000`)
 
+## Issue Tracking
+
+This project uses [Tangled](https://tangled.org) for issue tracking via the `tangled-cli` tool.
+
+**Installation:**
+```bash
+cargo install --git https://tangled.org/vitorpy.com/tangled-cli
+```
+
+**Authentication:**
+```bash
+tangled-cli auth login
+```
+
+**Creating issues:**
+```bash
+tangled-cli issue create --repo "thistle" --title "Issue title" --body "Issue description"
+
+# With labels (if created in the repo):
+tangled-cli issue create --repo "thistle" --title "Issue title" --label "bug" --label "priority:high" --body "Issue description"
+```
+
+**Listing issues:**
+```bash
+# List all open issues
+tangled-cli issue list --repo "thistle"
+
+# List with specific state
+tangled-cli issue list --repo "thistle" --state open
+tangled-cli issue list --repo "thistle" --state closed
+
+# List by label
+tangled-cli issue list --repo "thistle" --label "priority: low"
+tangled-cli issue list --repo "thistle" --label "bug"
+
+# List by author
+tangled-cli issue list --repo "thistle" --author "username"
+
+# JSON output format
+tangled-cli issue list --repo "thistle" --format json
+```
+
+**Showing issue details:**
+```bash
+# Show specific issue by ID
+tangled-cli issue show <issue-id>
+
+# Show with comments
+tangled-cli issue show <issue-id> --comments
+
+# JSON format
+tangled-cli issue show <issue-id> --json
+```
+
+**Commenting on issues:**
+```bash
+tangled-cli issue comment <issue-id> --body "Your comment here"
+```
+
+**Editing issues:**
+```bash
+# Update title
+tangled-cli issue edit <issue-id> --title "New title"
+
+# Update body
+tangled-cli issue edit <issue-id> --body "New description"
+
+# Close an issue
+tangled-cli issue edit <issue-id> --state closed
+
+# Reopen an issue
+tangled-cli issue edit <issue-id> --state open
+```
+
+**Repository commands:**
+```bash
+# List your repositories
+tangled-cli repo list
+
+# Show repository details
+tangled-cli repo info thistle
+
+# Create a new repository
+tangled-cli repo create --name "repo-name" --description "Description"
+```
+
+**Viewing issues by priority:**
+
+The thistle repo uses priority labels:
+- `priority: high` - Critical issues that need immediate attention
+- `priority: medium` - Important issues to address soon
+- `priority: low` - Nice-to-have improvements
+
+```bash
+# View all low priority issues
+tangled-cli issue list --repo "thistle" --label "priority: low" --state open
+
+# View all high priority issues
+tangled-cli issue list --repo "thistle" --label "priority: high" --state open
+```
+
+**Note:** The repo name for this project is `thistle` (resolves to `dunkirk.sh/thistle` in Tangled). Labels are supported but need to be created in the repository first.
+
+**Known Issues:**
+- The CLI may have decoding issues with some API responses (missing `createdAt` field). If `tangled-cli issue list` fails, you can access issues via the web interface at https://tangled.org/dunkirk.sh/thistle
+- For complex filtering or browsing, the web UI may be more reliable than the CLI
+
 ## Future Additions
 
 As the codebase grows, document:

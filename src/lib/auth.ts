@@ -257,12 +257,13 @@ export async function updateUserPassword(
  * Email verification functions
  */
 
-export function createEmailVerificationToken(userId: number): { code: string; token: string } {
+export function createEmailVerificationToken(userId: number): { code: string; token: string; sentAt: number } {
 	// Generate a 6-digit code for user to enter
 	const code = Math.floor(100000 + Math.random() * 900000).toString();
 	const id = crypto.randomUUID();
 	const token = crypto.randomUUID(); // Separate token for URL
 	const expiresAt = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 hours
+	const sentAt = Math.floor(Date.now() / 1000); // Timestamp when code is created
 
 	// Delete any existing tokens for this user
 	db.run("DELETE FROM email_verification_tokens WHERE user_id = ?", [userId]);
@@ -279,7 +280,7 @@ export function createEmailVerificationToken(userId: number): { code: string; to
 		[crypto.randomUUID(), userId, token, expiresAt],
 	);
 
-	return { code, token };
+	return { code, token, sentAt };
 }
 
 export function verifyEmailToken(
@@ -346,6 +347,16 @@ export function isEmailVerified(userId: number): boolean {
 		.get(userId);
 
 	return result?.email_verified === 1;
+}
+
+export function getVerificationCodeSentAt(userId: number): number | null {
+	const result = db
+		.query<{ created_at: number }, [number]>(
+			"SELECT MAX(created_at) as created_at FROM email_verification_tokens WHERE user_id = ?",
+		)
+		.get(userId);
+
+	return result?.created_at ?? null;
 }
 
 /**

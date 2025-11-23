@@ -28,6 +28,7 @@ import {
 	verifyEmailToken,
 	verifyEmailCode,
 	isEmailVerified,
+	getVerificationCodeSentAt,
 	createPasswordResetToken,
 	verifyPasswordResetToken,
 	consumePasswordResetToken,
@@ -267,7 +268,7 @@ const server = Bun.serve({
 					const user = await createUser(email, password, name);
 					
 					// Send verification email - MUST succeed for registration to complete
-					const { code, token } = createEmailVerificationToken(user.id);
+					const { code, token, sentAt } = createEmailVerificationToken(user.id);
 					
 					try {
 						await sendEmail({
@@ -309,6 +310,7 @@ const server = Bun.serve({
 						{ 
 							user: { id: user.id, email: user.email },
 							email_verification_required: true,
+							verification_code_sent_at: sentAt,
 						},
 						{ status: 200 },
 					);
@@ -320,6 +322,7 @@ const server = Bun.serve({
 							{ status: 400 },
 						);
 					}
+					console.error("[Auth] Registration error:", err);
 					return Response.json(
 						{ error: "Registration failed" },
 						{ status: 500 },
@@ -370,10 +373,35 @@ const server = Bun.serve({
 					
 					// Check if email is verified
 					if (!isEmailVerified(user.id)) {
+						let codeSentAt = getVerificationCodeSentAt(user.id);
+						
+						// If no verification code exists, auto-send one
+						if (!codeSentAt) {
+							const { code, token, sentAt } = createEmailVerificationToken(user.id);
+							codeSentAt = sentAt;
+							
+							try {
+								await sendEmail({
+									to: user.email,
+									subject: "Verify your email - Thistle",
+									html: verifyEmailTemplate({
+										name: user.name,
+										code,
+										token,
+									}),
+								});
+							} catch (err) {
+								console.error("[Email] Failed to send verification email on login:", err);
+								// Don't fail login - just return null timestamp so client can try resend
+								codeSentAt = null;
+							}
+						}
+						
 						return Response.json(
 							{ 
 								user: { id: user.id, email: user.email },
 								email_verification_required: true,
+								verification_code_sent_at: codeSentAt,
 							},
 							{ status: 200 },
 						);
@@ -389,7 +417,8 @@ const server = Bun.serve({
 							},
 						},
 					);
-				} catch {
+				} catch (error) {
+					console.error("[Auth] Login error:", error);
 					return Response.json({ error: "Login failed" }, { status: 500 });
 				}
 			},
@@ -527,6 +556,59 @@ const server = Bun.serve({
 					});
 
 					return Response.json({ message: "Verification email sent" });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/auth/resend-verification-code": {
+			POST: async (req) => {
+				try {
+					const body = await req.json();
+					const { email } = body;
+
+					if (!email) {
+						return Response.json({ error: "Email required" }, { status: 400 });
+					}
+
+					// Rate limiting by email
+					const rateLimitError = enforceRateLimit(req, "resend-verification-code", {
+						account: { max: 3, windowSeconds: 5 * 60, email },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					// Get user by email
+					const user = getUserByEmail(email);
+					if (!user) {
+						// Don't reveal if user exists
+						return Response.json({ message: "If an account exists with that email, a verification code has been sent" });
+					}
+
+					// Check if already verified
+					if (isEmailVerified(user.id)) {
+						return Response.json(
+							{ error: "Email already verified" },
+							{ status: 400 },
+						);
+					}
+
+					// Generate new code and send email
+					const { code, token, sentAt } = createEmailVerificationToken(user.id);
+
+					await sendEmail({
+						to: user.email,
+						subject: "Verify your email - Thistle",
+						html: verifyEmailTemplate({
+							name: user.name,
+							code,
+							token,
+						}),
+					});
+
+					return Response.json({ 
+						message: "Verification code sent",
+						verification_code_sent_at: sentAt,
+					});
 				} catch (error) {
 					return handleError(error);
 				}

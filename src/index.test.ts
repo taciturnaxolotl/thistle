@@ -18,7 +18,7 @@ let serverAvailable = false;
 
 beforeAll(async () => {
 	try {
-		const response = await fetch(`${BASE_URL}/api/transcriptions/health`, {
+		const response = await fetch(`${BASE_URL}/api/health`, {
 			signal: AbortSignal.timeout(1000),
 		});
 		serverAvailable = response.ok || response.status === 404;
@@ -969,21 +969,27 @@ describe("API Endpoints - User Management", () => {
 	});
 });
 
-describe("API Endpoints - Transcriptions", () => {
-	describe("GET /api/transcriptions/health", () => {
+describe("API Endpoints - Health", () => {
+	describe("GET /api/health", () => {
 		serverTest(
-			"should return transcription service health status",
+			"should return service health status with details",
 			async () => {
-				const response = await fetch(`${BASE_URL}/api/transcriptions/health`);
+				const response = await fetch(`${BASE_URL}/api/health`);
 
 				expect(response.status).toBe(200);
 				const data = await response.json();
-				expect(data).toHaveProperty("available");
-				expect(typeof data.available).toBe("boolean");
+				expect(data).toHaveProperty("status");
+				expect(data).toHaveProperty("timestamp");
+				expect(data).toHaveProperty("services");
+				expect(data.services).toHaveProperty("database");
+				expect(data.services).toHaveProperty("whisper");
+				expect(data.services).toHaveProperty("storage");
 			},
 		);
 	});
+});
 
+describe("API Endpoints - Transcriptions", () => {
 	describe("GET /api/transcriptions", () => {
 		serverTest("should return user transcriptions", async () => {
 			// Register user

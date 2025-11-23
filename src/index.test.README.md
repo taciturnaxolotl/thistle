@@ -55,8 +55,10 @@ The integration tests cover the following endpoint groups:
 - `PUT /api/passkeys/:id` - Update passkey name
 - `DELETE /api/passkeys/:id` - Delete passkey
 
+### Health Endpoint
+- `GET /api/health` - Check service health (database, whisper, storage)
+
 ### Transcription Endpoints
-- `GET /api/transcriptions/health` - Check transcription service health
 - `GET /api/transcriptions` - List user transcriptions
 - `POST /api/transcriptions` - Upload audio file and start transcription
 - `GET /api/transcriptions/:id` - Get transcription details

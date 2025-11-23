@@ -1814,7 +1814,7 @@ const server = Bun.serve({
 				}
 			},
 		},
-		"/api/transcriptions/health": {
+		"/api/health": {
 			GET: async () => {
 				const health = {
 					status: "healthy",
@@ -1853,10 +1853,15 @@ const server = Bun.serve({
 
 				// Check storage (uploads and transcripts directories)
 				try {
-					const uploadsDir = Bun.file("./uploads");
-					const transcriptsDir = Bun.file("./transcripts");
-					const uploadsExists = await uploadsDir.exists();
-					const transcriptsExists = await transcriptsDir.exists();
+					const fs = await import("node:fs/promises");
+					const uploadsExists = await fs
+						.access("./uploads")
+						.then(() => true)
+						.catch(() => false);
+					const transcriptsExists = await fs
+						.access("./transcripts")
+						.then(() => true)
+						.catch(() => false);
 					health.services.storage = uploadsExists && transcriptsExists;
 					if (!health.services.storage) {
 						health.status = "unhealthy";

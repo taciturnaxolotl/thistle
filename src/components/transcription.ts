@@ -565,10 +565,10 @@ export class TranscriptionComponent extends LitElement {
 
 	async checkHealth() {
 		try {
-			const response = await fetch("/api/transcriptions/health");
+			const response = await fetch("/api/health");
 			if (response.ok) {
 				const data = await response.json();
-				this.serviceAvailable = data.available;
+				this.serviceAvailable = data.status === "healthy";
 			} else {
 				this.serviceAvailable = false;
 			}

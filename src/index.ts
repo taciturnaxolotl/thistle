@@ -164,10 +164,10 @@ const whisperService = new WhisperServiceManager(
 	transcriptionEvents,
 );
 
-// Clean up expired sessions every hour
+// Clean up expired sessions every 15 minutes
 const sessionCleanupInterval = setInterval(
 	cleanupExpiredSessions,
-	60 * 60 * 1000,
+	15 * 60 * 1000,
 );
 
 // Helper function to sync user subscriptions from Polar
@@ -1795,8 +1795,65 @@ const server = Bun.serve({
 		},
 		"/api/transcriptions/health": {
 			GET: async () => {
-				const isHealthy = await whisperService.checkHealth();
-				return Response.json({ available: isHealthy });
+				const health = {
+					status: "healthy",
+					timestamp: new Date().toISOString(),
+					services: {
+						database: false,
+						whisper: false,
+						storage: false,
+					},
+					details: {} as Record<string, unknown>,
+				};
+
+				// Check database
+				try {
+					db.query("SELECT 1").get();
+					health.services.database = true;
+				} catch (error) {
+					health.status = "unhealthy";
+					health.details.databaseError =
+						error instanceof Error ? error.message : String(error);
+				}
+
+				// Check Whisper service
+				try {
+					const whisperHealthy = await whisperService.checkHealth();
+					health.services.whisper = whisperHealthy;
+					if (!whisperHealthy) {
+						health.status = "degraded";
+						health.details.whisperNote = "Whisper service unavailable";
+					}
+				} catch (error) {
+					health.status = "degraded";
+					health.details.whisperError =
+						error instanceof Error ? error.message : String(error);
+				}
+
+				// Check storage (uploads and transcripts directories)
+				try {
+					const uploadsDir = Bun.file("./uploads");
+					const transcriptsDir = Bun.file("./transcripts");
+					const uploadsExists = await uploadsDir.exists();
+					const transcriptsExists = await transcriptsDir.exists();
+					health.services.storage = uploadsExists && transcriptsExists;
+					if (!health.services.storage) {
+						health.status = "unhealthy";
+						health.details.storageNote = `Missing directories: ${[
+							!uploadsExists && "uploads",
+							!transcriptsExists && "transcripts",
+						]
+							.filter(Boolean)
+							.join(", ")}`;
+					}
+				} catch (error) {
+					health.status = "unhealthy";
+					health.details.storageError =
+						error instanceof Error ? error.message : String(error);
+				}
+
+				const statusCode = health.status === "healthy" ? 200 : 503;
+				return Response.json(health, { status: statusCode });
 			},
 		},
 		"/api/transcriptions/:id": {
@@ -2583,8 +2640,49 @@ const server = Bun.serve({
 						});
 					}
 
-					updateUserEmailAddress(userId, email);
-					return Response.json({ success: true });
+					// Get user's current email
+					const user = db
+						.query<{ email: string; name: string | null }, [number]>(
+							"SELECT email, name FROM users WHERE id = ?",
+						)
+						.get(userId);
+
+					if (!user) {
+						return Response.json({ error: "User not found" }, { status: 404 });
+					}
+
+					// Send verification email to user's current email
+					try {
+						const token = createEmailChangeToken(userId, email);
+						const origin = process.env.ORIGIN || "http://localhost:3000";
+						const verifyUrl = `${origin}/api/user/email/verify?token=${token}`;
+
+						await sendEmail({
+							to: user.email,
+							subject: "Verify your email change",
+							html: emailChangeTemplate({
+								name: user.name,
+								currentEmail: user.email,
+								newEmail: email,
+								verifyLink: verifyUrl,
+							}),
+						});
+
+						return Response.json({
+							success: true,
+							message: `Verification email sent to ${user.email}`,
+							pendingEmail: email,
+						});
+					} catch (emailError) {
+						console.error(
+							"[Admin] Failed to send email change verification:",
+							emailError,
+						);
+						return Response.json(
+							{ error: "Failed to send verification email" },
+							{ status: 500 },
+						);
+					}
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3137,25 +3235,41 @@ const server = Bun.serve({
 					requireAdmin(req);
 					const transcriptId = req.params.id;
 
+					// Check if transcription exists and get its current status
+					const transcription = db
+						.query<{ filename: string; status: string }, [string]>(
+							"SELECT filename, status FROM transcriptions WHERE id = ?",
+						)
+						.get(transcriptId);
+
+					if (!transcription) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					// Validate that status is appropriate for selection (e.g., 'uploading' or 'pending')
+					const validStatuses = ["uploading", "pending", "failed"];
+					if (!validStatuses.includes(transcription.status)) {
+						return Response.json(
+							{
+								error: `Cannot select transcription with status: ${transcription.status}`,
+							},
+							{ status: 400 },
+						);
+					}
+
 					// Update status to 'selected' and start transcription
 					db.run("UPDATE transcriptions SET status = ? WHERE id = ?", [
 						"selected",
 						transcriptId,
 					]);
 
-					// Get filename to start transcription
-					const transcription = db
-						.query<{ filename: string }, [string]>(
-							"SELECT filename FROM transcriptions WHERE id = ?",
-						)
-						.get(transcriptId);
-
-					if (transcription) {
-						whisperService.startTranscription(
-							transcriptId,
-							transcription.filename,
-						);
-					}
+					whisperService.startTranscription(
+						transcriptId,
+						transcription.filename,
+					);
 
 					return Response.json({ success: true });
 				} catch (error) {

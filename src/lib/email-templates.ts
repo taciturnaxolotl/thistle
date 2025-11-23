@@ -96,8 +96,8 @@ interface VerifyEmailOptions {
 
 export function verifyEmailTemplate(options: VerifyEmailOptions): string {
 	const greeting = options.name ? `Hi ${options.name}` : "Hi there";
-	const domain = process.env.DOMAIN || "https://thistle.app";
-	const verifyLink = `${domain}/api/auth/verify-email?token=${options.token}`;
+	const origin = process.env.ORIGIN || "http://localhost:3000";
+	const verifyLink = `${origin}/api/auth/verify-email?token=${options.token}`;
 
 	return `
 <!DOCTYPE html>

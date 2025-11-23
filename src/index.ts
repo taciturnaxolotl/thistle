@@ -633,8 +633,7 @@ const server = Bun.serve({
 					// Always return success to prevent email enumeration
 					const user = getUserByEmail(email);
 					if (user) {
-						const origin =
-							req.headers.get("origin") || "http://localhost:3000";
+						const origin = process.env.ORIGIN || "http://localhost:3000";
 						const resetToken = createPasswordResetToken(user.id);
 						const resetLink = `${origin}/reset-password?token=${resetToken}`;
 
@@ -2222,7 +2221,7 @@ const server = Bun.serve({
 					}
 
 					// Create password reset token
-					const origin = req.headers.get("origin") || "http://localhost:3000";
+					const origin = process.env.ORIGIN || "http://localhost:3000";
 					const resetToken = createPasswordResetToken(user.id);
 					const resetLink = `${origin}/reset-password?token=${resetToken}`;
 

@@ -6,6 +6,16 @@ This is a Bun-based transcription service using the [Bun fullstack pattern](http
 
 **IMPORTANT**: Do NOT commit changes until the user explicitly asks you to commit. Always wait for user verification that changes are working correctly before making commits.
 
+## Environment Variables
+
+**CRITICAL**: Always use `process.env.ORIGIN` for generating URLs in emails and links, NOT hardcoded domains.
+
+- `ORIGIN` - The public URL of the application (e.g., `https://thistle.app` or `http://localhost:3000`)
+- Used for: Email verification links, password reset links, any user-facing URLs
+- Default: `http://localhost:3000` (development only)
+
+**Never hardcode domain names** like `https://thistle.app` in code - always use `process.env.ORIGIN`.
+
 ## Project Info
 
 - Name: Thistle

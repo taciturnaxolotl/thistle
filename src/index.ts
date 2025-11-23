@@ -96,6 +96,45 @@ import resetPasswordHTML from "./pages/reset-password.html";
 import settingsHTML from "./pages/settings.html";
 import transcribeHTML from "./pages/transcribe.html";
 
+// Validate required environment variables at startup
+function validateEnvVars() {
+	const required = [
+		"POLAR_ORGANIZATION_ID",
+		"POLAR_PRODUCT_ID",
+		"POLAR_SUCCESS_URL",
+		"POLAR_WEBHOOK_SECRET",
+		"MAILCHANNELS_API_KEY",
+		"DKIM_PRIVATE_KEY",
+		"LLM_API_KEY",
+		"LLM_API_BASE_URL",
+		"LLM_MODEL",
+	];
+
+	const missing = required.filter((key) => !process.env[key]);
+
+	if (missing.length > 0) {
+		console.error(
+			`[Startup] Missing required environment variables: ${missing.join(", ")}`,
+		);
+		console.error("[Startup] Please check your .env file");
+		process.exit(1);
+	}
+
+	// Validate ORIGIN is set for production
+	if (!process.env.ORIGIN) {
+		console.warn(
+			"[Startup] ORIGIN not set, defaulting to http://localhost:3000",
+		);
+		console.warn(
+			"[Startup] Set ORIGIN in production for correct email links",
+		);
+	}
+
+	console.log("[Startup] Environment variable validation passed");
+}
+
+validateEnvVars();
+
 // Environment variables
 const WHISPER_SERVICE_URL =
 	process.env.WHISPER_SERVICE_URL || "http://localhost:8000";
@@ -126,9 +165,9 @@ async function syncUserSubscriptionsFromPolar(
 	try {
 		const { polar } = await import("./lib/polar");
 
-		// Search for customer by email
+		// Search for customer by email (validated at startup)
 		const customers = await polar.customers.list({
-			organizationId: process.env.POLAR_ORGANIZATION_ID,
+			organizationId: process.env.POLAR_ORGANIZATION_ID as string,
 			query: email,
 		});
 
@@ -1306,21 +1345,10 @@ const server = Bun.serve({
 				try {
 					const { polar } = await import("./lib/polar");
 
-					const productId = process.env.POLAR_PRODUCT_ID;
-					if (!productId) {
-						return Response.json(
-							{ error: "Product not configured" },
-							{ status: 500 },
-						);
-					}
-
-					const successUrl = process.env.POLAR_SUCCESS_URL;
-					if (!successUrl) {
-						return Response.json(
-							{ error: "Success URL not configured" },
-							{ status: 500 },
-						);
-					}
+					// Validated at startup
+					const productId = process.env.POLAR_PRODUCT_ID as string;
+					const successUrl =
+						process.env.POLAR_SUCCESS_URL || "http://localhost:3000";
 
 					const checkout = await polar.checkouts.create({
 						products: [productId],
@@ -1442,16 +1470,8 @@ const server = Bun.serve({
 					const rawBody = await req.text();
 					const headers = Object.fromEntries(req.headers.entries());
 
-					// Validate webhook signature
-					const webhookSecret = process.env.POLAR_WEBHOOK_SECRET;
-					if (!webhookSecret) {
-						console.error("[Webhook] POLAR_WEBHOOK_SECRET not configured");
-						return Response.json(
-							{ error: "Webhook secret not configured" },
-							{ status: 500 },
-						);
-					}
-
+					// Validate webhook signature (validated at startup)
+					const webhookSecret = process.env.POLAR_WEBHOOK_SECRET as string;
 					const event = validateEvent(rawBody, headers, webhookSecret);
 
 					console.log(`[Webhook] Received event: ${event.type}`);

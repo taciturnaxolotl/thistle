@@ -28,20 +28,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
 	const fromEmail = process.env.SMTP_FROM_EMAIL || "noreply@thistle.app";
 	const fromName = process.env.SMTP_FROM_NAME || "Thistle";
 	const dkimDomain = process.env.DKIM_DOMAIN || "thistle.app";
-	const dkimPrivateKey = process.env.DKIM_PRIVATE_KEY;
-	const mailchannelsApiKey = process.env.MAILCHANNELS_API_KEY;
-
-	if (!dkimPrivateKey) {
-		throw new Error(
-			"DKIM_PRIVATE_KEY environment variable is required for sending emails",
-		);
-	}
-
-	if (!mailchannelsApiKey) {
-		throw new Error(
-			"MAILCHANNELS_API_KEY environment variable is required for sending emails",
-		);
-	}
+	// Validated at startup
+	const dkimPrivateKey = process.env.DKIM_PRIVATE_KEY as string;
+	const mailchannelsApiKey = process.env.MAILCHANNELS_API_KEY as string;
 
 	// Normalize recipient
 	const recipient =

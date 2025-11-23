@@ -338,16 +338,10 @@ export async function cleanVTT(
 		`[VTTCleaner] Processing ${segments.length} segments for ${transcriptionId}`,
 	);
 
-	const apiKey = process.env.LLM_API_KEY;
-	const apiBaseUrl = process.env.LLM_API_BASE_URL;
-	const model = process.env.LLM_MODEL;
-
-	if (!apiKey || !apiBaseUrl || !model) {
-		console.warn(
-			"[VTTCleaner] LLM configuration incomplete (need LLM_API_KEY, LLM_API_BASE_URL, LLM_MODEL), returning uncleaned VTT",
-		);
-		return vttContent;
-	}
+	// Validated at startup
+	const apiKey = process.env.LLM_API_KEY as string;
+	const apiBaseUrl = process.env.LLM_API_BASE_URL as string;
+	const model = process.env.LLM_MODEL as string;
 
 	try {
 		// Build the input segments

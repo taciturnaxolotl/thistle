@@ -87,6 +87,16 @@ import {
 	type TranscriptionUpdate,
 	WhisperServiceManager,
 } from "./lib/transcription";
+import {
+	validateClassId,
+	validateCourseCode,
+	validateCourseName,
+	validateEmail,
+	validateName,
+	validatePasswordHash,
+	validateSemester,
+	validateYear,
+} from "./lib/validation";
 import adminHTML from "./pages/admin.html";
 import checkoutHTML from "./pages/checkout.html";
 import classHTML from "./pages/class.html";
@@ -318,10 +328,11 @@ const server = Bun.serve({
 							{ status: 400 },
 						);
 					}
-					// Password is client-side hashed (PBKDF2), should be 64 char hex
-					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
+					// Validate password format (client-side hashed PBKDF2)
+					const passwordValidation = validatePasswordHash(password);
+					if (!passwordValidation.valid) {
 						return Response.json(
-							{ error: "Invalid password format" },
+							{ error: passwordValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -414,10 +425,11 @@ const server = Bun.serve({
 					});
 					if (rateLimitError) return rateLimitError;
 
-					// Password is client-side hashed (PBKDF2), should be 64 char hex
-					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
+					// Validate password format (client-side hashed PBKDF2)
+					const passwordValidation = validatePasswordHash(password);
+					if (!passwordValidation.valid) {
 						return Response.json(
-							{ error: "Invalid password format" },
+							{ error: passwordValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -787,9 +799,10 @@ const server = Bun.serve({
 					}
 
 					// Validate password format (client-side hashed PBKDF2)
-					if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
+					const passwordValidation = validatePasswordHash(password);
+					if (!passwordValidation.valid) {
 						return Response.json(
-							{ error: "Invalid password format" },
+							{ error: passwordValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -1229,10 +1242,11 @@ const server = Bun.serve({
 				if (!password) {
 					return Response.json({ error: "Password required" }, { status: 400 });
 				}
-				// Password is client-side hashed (PBKDF2), should be 64 char hex
-				if (password.length !== 64 || !/^[0-9a-f]+$/.test(password)) {
+				// Validate password format (client-side hashed PBKDF2)
+				const passwordValidation = validatePasswordHash(password);
+				if (!passwordValidation.valid) {
 					return Response.json(
-						{ error: "Invalid password format" },
+						{ error: passwordValidation.error },
 						{ status: 400 },
 					);
 				}
@@ -2433,9 +2447,10 @@ const server = Bun.serve({
 					const body = await req.json();
 					const { name } = body as { name: string };
 
-					if (!name || name.trim().length === 0) {
+					const nameValidation = validateName(name);
+					if (!nameValidation.valid) {
 						return Response.json(
-							{ error: "Name cannot be empty" },
+							{ error: nameValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -2462,9 +2477,10 @@ const server = Bun.serve({
 						skipVerification?: boolean;
 					};
 
-					if (!email || !email.includes("@")) {
+					const emailValidation = validateEmail(email);
+					if (!emailValidation.valid) {
 						return Response.json(
-							{ error: "Invalid email address" },
+							{ error: emailValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -2660,9 +2676,43 @@ const server = Bun.serve({
 						meeting_times,
 					} = body;
 
-					if (!course_code || !name || !professor || !semester || !year) {
+					// Validate all required fields
+					const courseCodeValidation = validateCourseCode(course_code);
+					if (!courseCodeValidation.valid) {
 						return Response.json(
-							{ error: "Missing required fields" },
+							{ error: courseCodeValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const nameValidation = validateCourseName(name);
+					if (!nameValidation.valid) {
+						return Response.json(
+							{ error: nameValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const professorValidation = validateName(professor, "Professor name");
+					if (!professorValidation.valid) {
+						return Response.json(
+							{ error: professorValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const semesterValidation = validateSemester(semester);
+					if (!semesterValidation.valid) {
+						return Response.json(
+							{ error: semesterValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const yearValidation = validateYear(year);
+					if (!yearValidation.valid) {
+						return Response.json(
+							{ error: yearValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -2722,9 +2772,10 @@ const server = Bun.serve({
 					const body = await req.json();
 					const classId = body.class_id;
 
-					if (!classId || typeof classId !== "string") {
+					const classIdValidation = validateClassId(classId);
+					if (!classIdValidation.valid) {
 						return Response.json(
-							{ error: "Class ID required" },
+							{ error: classIdValidation.error },
 							{ status: 400 },
 						);
 					}
@@ -2757,9 +2808,45 @@ const server = Bun.serve({
 						meetingTimes,
 					} = body;
 
-					if (!courseCode || !courseName || !professor || !semester || !year) {
+					// Validate all required fields
+					const courseCodeValidation = validateCourseCode(courseCode);
+					if (!courseCodeValidation.valid) {
 						return Response.json(
-							{ error: "Missing required fields" },
+							{ error: courseCodeValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const nameValidation = validateCourseName(courseName);
+					if (!nameValidation.valid) {
+						return Response.json(
+							{ error: nameValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const professorValidation = validateName(professor, "Professor name");
+					if (!professorValidation.valid) {
+						return Response.json(
+							{ error: professorValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const semesterValidation = validateSemester(semester);
+					if (!semesterValidation.valid) {
+						return Response.json(
+							{ error: semesterValidation.error },
+							{ status: 400 },
+						);
+					}
+
+					const yearValidation = validateYear(
+						typeof year === "string" ? Number.parseInt(year, 10) : year,
+					);
+					if (!yearValidation.valid) {
+						return Response.json(
+							{ error: yearValidation.error },
 							{ status: 400 },
 						);
 					}

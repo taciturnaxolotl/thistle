@@ -190,13 +190,18 @@ export async function deleteUser(userId: number): Promise<void> {
 
 	// Get user's subscription if they have one
 	const subscription = db
-		.query<{ id: string }, [number]>(
-			"SELECT id FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+		.query<{ id: string; status: string; cancel_at_period_end: number }, [number]>(
+			"SELECT id, status, cancel_at_period_end FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
 		)
 		.get(userId);
 
-	// Cancel subscription if it exists (soft cancel - keeps access until period end)
-	if (subscription) {
+	// Cancel subscription if it exists and is not already canceled or scheduled to cancel
+	if (
+		subscription && 
+		subscription.status !== 'canceled' && 
+		subscription.status !== 'expired' &&
+		!subscription.cancel_at_period_end
+	) {
 		try {
 			const { polar } = await import("./polar");
 			await polar.subscriptions.update({
@@ -213,6 +218,10 @@ export async function deleteUser(userId: number): Promise<void> {
 			);
 			// Continue with user deletion even if subscription cancellation fails
 		}
+	} else if (subscription) {
+		console.log(
+			`[User Delete] Skipping cancellation for subscription ${subscription.id} (status: ${subscription.status}, cancel_at_period_end: ${subscription.cancel_at_period_end})`,
+		);
 	}
 
 	// Reassign class transcriptions to ghost user (id=0)

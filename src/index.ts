@@ -145,8 +145,18 @@ async function syncUserSubscriptionsFromPolar(
 			return;
 		}
 
-		// Update each subscription in the database
-		for (const subscription of subscriptions.result.items) {
+		// Filter to only active/trialing/past_due subscriptions (not canceled/expired)
+		const currentSubscriptions = subscriptions.result.items.filter(
+			(sub) => sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due'
+		);
+
+		if (currentSubscriptions.length === 0) {
+			console.log(`[Sync] No current subscriptions found for customer ${customer.id}`);
+			return;
+		}
+
+		// Update each current subscription in the database
+		for (const subscription of currentSubscriptions) {
 			db.run(
 				`INSERT INTO subscriptions (id, user_id, customer_id, status, current_period_start, current_period_end, cancel_at_period_end, canceled_at, updated_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -183,7 +193,7 @@ async function syncUserSubscriptionsFromPolar(
 		}
 
 		console.log(
-			`[Sync] Linked ${subscriptions.result.items.length} subscription(s) to user ${userId} (${email})`,
+			`[Sync] Linked ${currentSubscriptions.length} current subscription(s) to user ${userId} (${email})`,
 		);
 	} catch (error) {
 		console.error(

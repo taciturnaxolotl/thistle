@@ -70,7 +70,7 @@ The integration tests cover the following endpoint groups:
 - `PUT /api/admin/users/:id/role` - Update user role
 - `PUT /api/admin/users/:id/name` - Update user name
 - `PUT /api/admin/users/:id/email` - Update user email
-- `PUT /api/admin/users/:id/password` - Update user password
+- `POST /api/admin/users/:id/password-reset` - Send password reset email
 - `GET /api/admin/users/:id/sessions` - List user sessions
 - `DELETE /api/admin/users/:id/sessions` - Delete all user sessions
 - `DELETE /api/admin/users/:id/sessions/:sessionId` - Delete specific session

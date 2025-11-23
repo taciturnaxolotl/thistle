@@ -233,6 +233,14 @@ export class UserModal extends LitElement {
       color: #991b1b;
     }
 
+    .info-text {
+      color: var(--text);
+      font-size: 0.875rem;
+      margin: 0 0 1rem 0;
+      line-height: 1.5;
+      opacity: 0.8;
+    }
+
     .session-list, .passkey-list {
       list-style: none;
       padding: 0;
@@ -442,50 +450,41 @@ export class UserModal extends LitElement {
 
 	private async handleChangePassword(e: Event) {
 		e.preventDefault();
-		const form = e.target as HTMLFormElement;
-		const input = form.querySelector("input") as HTMLInputElement;
-		const password = input.value;
-
-		if (password.length < 8) {
-			alert("Password must be at least 8 characters");
-			return;
-		}
 
 		if (
 			!confirm(
-				"Are you sure you want to change this user's password? This will log them out of all devices.",
+				"Send a password reset email to this user? They will receive a link to set a new password.",
 			)
 		) {
 			return;
 		}
 
+		const form = e.target as HTMLFormElement;
 		const submitBtn = form.querySelector(
 			'button[type="submit"]',
 		) as HTMLButtonElement;
 		submitBtn.disabled = true;
-		submitBtn.textContent = "Updating...";
+		submitBtn.textContent = "Sending...";
 
 		try {
-			const res = await fetch(`/api/admin/users/${this.userId}/password`, {
-				method: "PUT",
+			const res = await fetch(`/api/admin/users/${this.userId}/password-reset`, {
+				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ password }),
 			});
 
 			if (!res.ok) {
-				throw new Error("Failed to update password");
+				const data = await res.json();
+				throw new Error(data.error || "Failed to send password reset email");
 			}
 
 			alert(
-				"Password updated successfully. User has been logged out of all devices.",
+				"Password reset email sent successfully. The user will receive a link to set a new password.",
 			);
-			input.value = "";
-			await this.loadUserDetails();
-		} catch {
-			alert("Failed to update password");
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : "Failed to send password reset email";
 		} finally {
 			submitBtn.disabled = false;
-			submitBtn.textContent = "Update Password";
+			submitBtn.textContent = "Send Reset Email";
 		}
 	}
 
@@ -645,13 +644,10 @@ export class UserModal extends LitElement {
       </div>
 
       <div class="detail-section">
-        <h3 class="detail-section-title">Change Password</h3>
+        <h3 class="detail-section-title">Password Reset</h3>
+        <p class="info-text">Send a password reset email to this user. They will receive a secure link to set a new password.</p>
         <form @submit=${this.handleChangePassword}>
-          <div class="form-group">
-            <label class="form-label" for="new-password">New Password</label>
-            <input type="password" id="new-password" class="form-input" placeholder="Enter new password (min 8 characters)">
-          </div>
-          <button type="submit" class="btn btn-primary">Update Password</button>
+          <button type="submit" class="btn btn-primary">Send Reset Email</button>
         </form>
       </div>
 

@@ -664,6 +664,44 @@ const server = Bun.serve({
 			},
 		},
 		"/api/auth/reset-password": {
+			GET: async (req) => {
+				try {
+					const url = new URL(req.url);
+					const token = url.searchParams.get("token");
+
+					if (!token) {
+						return Response.json(
+							{ error: "Token required" },
+							{ status: 400 },
+						);
+					}
+
+					const userId = verifyPasswordResetToken(token);
+					if (!userId) {
+						return Response.json(
+							{ error: "Invalid or expired reset token" },
+							{ status: 400 },
+						);
+					}
+
+					// Get user's email for client-side password hashing
+					const user = db
+						.query<{ email: string }, [number]>("SELECT email FROM users WHERE id = ?")
+						.get(userId);
+
+					if (!user) {
+						return Response.json({ error: "User not found" }, { status: 404 });
+					}
+
+					return Response.json({ email: user.email });
+				} catch (error) {
+					console.error("[Email] Get reset token info error:", error);
+					return Response.json(
+						{ error: "Failed to verify token" },
+						{ status: 500 },
+					);
+				}
+			},
 			POST: async (req) => {
 				try {
 					const body = await req.json();
@@ -2162,8 +2200,8 @@ const server = Bun.serve({
 				}
 			},
 		},
-		"/api/admin/users/:id/password": {
-			PUT: async (req) => {
+		"/api/admin/users/:id/password-reset": {
+			POST: async (req) => {
 				try {
 					requireAdmin(req);
 					const userId = Number.parseInt(req.params.id, 10);
@@ -2171,19 +2209,39 @@ const server = Bun.serve({
 						return Response.json({ error: "Invalid user ID" }, { status: 400 });
 					}
 
-					const body = await req.json();
-					const { password } = body as { password: string };
+					// Get user details
+					const user = db
+						.query<
+							{ id: number; email: string; name: string | null },
+							[number]
+						>("SELECT id, email, name FROM users WHERE id = ?")
+						.get(userId);
 
-					if (!password || password.length < 8) {
-						return Response.json(
-							{ error: "Password must be at least 8 characters" },
-							{ status: 400 },
-						);
+					if (!user) {
+						return Response.json({ error: "User not found" }, { status: 404 });
 					}
 
-					await updateUserPassword(userId, password);
-					return Response.json({ success: true });
+					// Create password reset token
+					const origin = req.headers.get("origin") || "http://localhost:3000";
+					const resetToken = createPasswordResetToken(user.id);
+					const resetLink = `${origin}/reset-password?token=${resetToken}`;
+
+					// Send password reset email
+					await sendEmail({
+						to: user.email,
+						subject: "Reset your password - Thistle",
+						html: passwordResetTemplate({
+							name: user.name,
+							resetLink,
+						}),
+					});
+
+					return Response.json({ 
+						success: true,
+						message: "Password reset email sent"
+					});
 				} catch (error) {
+					console.error("[Admin] Password reset error:", error);
 					return handleError(error);
 				}
 			},

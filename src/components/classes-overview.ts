@@ -150,6 +150,24 @@ export class ClassesOverview extends LitElement {
       margin-bottom: 1rem;
     }
 
+    .empty-state button {
+      margin-top: 2rem;
+      padding: 0.75rem 2rem;
+      background: var(--accent);
+      color: var(--white);
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .empty-state button:hover {
+      background: color-mix(in srgb, var(--accent) 90%, black);
+      transform: translateY(-2px);
+    }
+
     .loading {
       text-align: center;
       padding: 4rem 2rem;
@@ -259,7 +277,7 @@ export class ClassesOverview extends LitElement {
 										? html`
                   <div class="register-card" @click=${this.handleRegisterClick}>
                     <div class="register-icon">+</div>
-                    <div class="register-text">Register for Class</div>
+                    <div class="register-text">Register for a Class</div>
                   </div>
                 `
 										: ""
@@ -273,12 +291,7 @@ export class ClassesOverview extends LitElement {
           <div class="empty-state">
             <h2>No classes yet</h2>
             <p>You haven't been enrolled in any classes.</p>
-          </div>
-          <div class="classes-grid">
-            <div class="register-card" @click=${this.handleRegisterClick}>
-              <div class="register-icon">+</div>
-              <div class="register-text">Register for Class</div>
-            </div>
+            <button @click=${this.handleRegisterClick}>Register for a Class</button>
           </div>
         `
 			}

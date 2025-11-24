@@ -3439,6 +3439,33 @@ const server = Bun.serve({
 		hmr: true,
 		console: true,
 	},
+	fetch(req, server) {
+		const response = server.fetch(req);
+		
+		// Add security headers to all responses
+		if (response instanceof Response) {
+			const headers = new Headers(response.headers);
+			headers.set("Permissions-Policy", "interest-cohort=()");
+			headers.set("X-Content-Type-Options", "nosniff");
+			headers.set("X-Frame-Options", "DENY");
+			headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+			
+			// Set CSP that allows inline styles with unsafe-inline (needed for Lit components)
+			// and script-src 'self' for bundled scripts
+			headers.set(
+				"Content-Security-Policy",
+				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://hostedboringavatars.vercel.app; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none';"
+			);
+			
+			return new Response(response.body, {
+				status: response.status,
+				statusText: response.statusText,
+				headers,
+			});
+		}
+		
+		return response;
+	},
 });
 console.log(`🪻 Thistle running at http://localhost:${server.port}`);
 

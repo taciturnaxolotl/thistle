@@ -208,7 +208,7 @@ async function registerAndLogin(user: { email: string; password: string; name?: 
 		}),
 	});
 
-	if (registerResponse.status !== 200) {
+	if (registerResponse.status !== 201) {
 		const error = await registerResponse.json();
 		throw new Error(`Registration failed: ${JSON.stringify(error)}`);
 	}
@@ -275,12 +275,12 @@ describe("API Endpoints - Authentication", () => {
 				}),
 			});
 
-			if (response.status !== 200) {
+			if (response.status !== 201) {
 				const error = await response.json();
 				console.error("Registration failed:", response.status, error);
 			}
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(201);
 			
 			const data = await response.json();
 			expect(data.user).toBeDefined();
@@ -348,7 +348,7 @@ describe("API Endpoints - Authentication", () => {
 				}),
 			});
 
-			expect(response.status).toBe(400);
+			expect(response.status).toBe(409);
 			const data = await response.json();
 			expect(data.error).toBe("Email already registered");
 		});
@@ -431,9 +431,7 @@ describe("API Endpoints - User Management", () => {
 				},
 			);
 
-			expect(response.status).toBe(200);
-			const data = await response.json();
-			expect(data.success).toBe(true);
+			expect(response.status).toBe(204);
 
 			// Verify user is deleted
 			const verifyResponse = await authRequest(
@@ -505,7 +503,7 @@ describe("API Endpoints - User Management", () => {
 				},
 			);
 
-			expect(response.status).toBe(400);
+			expect(response.status).toBe(409);
 			const data = await response.json();
 			expect(data.error).toBe("Email already in use");
 		});
@@ -586,8 +584,6 @@ describe("API Endpoints - User Management", () => {
 			);
 
 			expect(response.status).toBe(200);
-			const data = await response.json();
-			expect(data.success).toBe(true);
 
 			// Verify name updated
 			const meResponse = await authRequest(
@@ -720,7 +716,7 @@ describe("API Endpoints - Transcriptions", () => {
 				},
 			);
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(201);
 			const data = await response.json();
 			expect(data.id).toBeDefined();
 			expect(data.message).toContain("Upload successful");
@@ -881,9 +877,7 @@ describe("API Endpoints - Admin", () => {
 				},
 			);
 
-			expect(response.status).toBe(200);
-			const data = await response.json();
-			expect(data.success).toBe(true);
+			expect(response.status).toBe(204);
 
 			// Verify user is deleted
 			const verifyResponse = await authRequest(
@@ -919,8 +913,6 @@ describe("API Endpoints - Admin", () => {
 			);
 
 			expect(response.status).toBe(200);
-			const data = await response.json();
-			expect(data.success).toBe(true);
 
 			// Verify role updated
 			const meResponse = await authRequest(
@@ -1033,7 +1025,7 @@ describe("API Endpoints - Admin", () => {
 				},
 			);
 
-			expect(response.status).toBe(400);
+			expect(response.status).toBe(409);
 			const data = await response.json();
 			expect(data.error).toBe("Email already in use");
 		});
@@ -1062,9 +1054,7 @@ describe("API Endpoints - Admin", () => {
 				},
 			);
 
-			expect(response.status).toBe(200);
-			const data = await response.json();
-			expect(data.success).toBe(true);
+			expect(response.status).toBe(204);
 
 			// Verify sessions are deleted
 			const verifyResponse = await authRequest(

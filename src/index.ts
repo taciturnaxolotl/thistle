@@ -400,14 +400,14 @@ const server = Bun.serve({
 							email_verification_required: true,
 							verification_code_sent_at: sentAt,
 						},
-						{ status: 200 },
+						{ status: 201 },
 					);
 				} catch (err: unknown) {
 					const error = err as { message?: string };
 					if (error.message?.includes("UNIQUE constraint failed")) {
 						return Response.json(
 							{ error: "Email already registered" },
-							{ status: 400 },
+							{ status: 409 },
 						);
 					}
 					console.error("[Auth] Registration error:", err);
@@ -1065,7 +1065,7 @@ const server = Bun.serve({
 					}
 
 					updatePasskeyName(passkeyId, user.id, name);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (err) {
 					return handleError(err);
 				}
@@ -1081,7 +1081,7 @@ const server = Bun.serve({
 
 					const passkeyId = req.params.id;
 					deletePasskey(passkeyId, user.id);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (err) {
 					return handleError(err);
 				}
@@ -1147,10 +1147,10 @@ const server = Bun.serve({
 					// Verify the session belongs to the user
 					const targetSession = getSession(targetSessionId);
 					if (!targetSession || targetSession.user_id !== user.id) {
-						return Response.json({ error: "Session not found" }, { status: 404 });
+						return Response.json({ error: "Forbidden" }, { status: 403 });
 					}
 					deleteSession(targetSessionId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (err) {
 					return handleError(err);
 				}
@@ -1168,15 +1168,13 @@ const server = Bun.serve({
 					if (rateLimitError) return rateLimitError;
 
 					await deleteUser(user.id);
-					return Response.json(
-						{ success: true },
-						{
-							headers: {
-								"Set-Cookie":
-									"session=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=Lax",
-							},
+					return new Response(null, {
+						status: 204,
+						headers: {
+							"Set-Cookie":
+								"session=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=Lax",
 						},
-					);
+					});
 				} catch (err) {
 					return handleError(err);
 				}
@@ -1204,7 +1202,7 @@ const server = Bun.serve({
 					if (existingUser) {
 						return Response.json(
 							{ error: "Email already in use" },
-							{ status: 400 },
+							{ status: 409 },
 						);
 					}
 
@@ -1649,8 +1647,8 @@ const server = Bun.serve({
 					// Allow access if: owner, admin, or enrolled in the class
 					if (!isOwner && !isAdmin && !isClassMember) {
 						return Response.json(
-							{ error: "Transcription not found" },
-							{ status: 404 },
+							{ error: "Forbidden" },
+							{ status: 403 },
 						);
 					}
 
@@ -1892,8 +1890,8 @@ const server = Bun.serve({
 					// Allow access if: owner, admin, or enrolled in the class
 					if (!isOwner && !isAdmin && !isClassMember) {
 						return Response.json(
-							{ error: "Transcription not found" },
-							{ status: 404 },
+							{ error: "Forbidden" },
+							{ status: 403 },
 						);
 					}
 
@@ -1910,7 +1908,7 @@ const server = Bun.serve({
 					if (transcription.status !== "completed") {
 						return Response.json(
 							{ error: "Transcription not completed yet" },
-							{ status: 400 },
+							{ status: 409 },
 						);
 					}
 
@@ -2000,8 +1998,8 @@ const server = Bun.serve({
 					// Allow access if: owner, admin, or enrolled in the class
 					if (!isOwner && !isAdmin && !isClassMember) {
 						return Response.json(
-							{ error: "Transcription not found" },
-							{ status: 404 },
+							{ error: "Forbidden" },
+							{ status: 403 },
 						);
 					}
 
@@ -2302,10 +2300,13 @@ const server = Bun.serve({
 					// Don't auto-start transcription - admin will select recordings
 					// whisperService.startTranscription(transcriptionId, filename);
 
-					return Response.json({
-						id: transcriptionId,
-						message: "Upload successful",
-					});
+					return Response.json(
+						{
+							id: transcriptionId,
+							message: "Upload successful",
+						},
+						{ status: 201 },
+					);
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2377,7 +2378,7 @@ const server = Bun.serve({
 					requireAdmin(req);
 					const id = req.params.id;
 					deleteWaitlistEntry(id);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2389,7 +2390,7 @@ const server = Bun.serve({
 					requireAdmin(req);
 					const transcriptionId = req.params.id;
 					deleteTranscription(transcriptionId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2404,7 +2405,7 @@ const server = Bun.serve({
 						return Response.json({ error: "Invalid user ID" }, { status: 400 });
 					}
 					await deleteUser(userId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2654,7 +2655,7 @@ const server = Bun.serve({
 
 					const { passkeyId } = req.params;
 					deletePasskey(passkeyId, userId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2720,7 +2721,7 @@ const server = Bun.serve({
 					if (existing) {
 						return Response.json(
 							{ error: "Email already in use" },
-							{ status: 400 },
+							{ status: 409 },
 						);
 					}
 
@@ -2805,7 +2806,7 @@ const server = Bun.serve({
 					}
 
 					deleteAllUserSessions(userId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2830,7 +2831,7 @@ const server = Bun.serve({
 						);
 					}
 
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3013,7 +3014,7 @@ const server = Bun.serve({
 						meeting_times,
 					});
 
-					return Response.json(newClass);
+					return Response.json(newClass, { status: 201 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3073,7 +3074,7 @@ const server = Bun.serve({
 						return Response.json({ error: result.error }, { status: 400 });
 					}
 
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3149,7 +3150,7 @@ const server = Bun.serve({
 						meetingTimes || null,
 					);
 
-					return Response.json({ success: true, id });
+					return Response.json({ success: true, id }, { status: 201 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3199,7 +3200,7 @@ const server = Bun.serve({
 					}
 
 					deleteClass(classId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3227,7 +3228,7 @@ const server = Bun.serve({
 					}
 
 					toggleClassArchive(classId, archived);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3268,7 +3269,7 @@ const server = Bun.serve({
 					}
 
 					enrollUserInClass(user.id, classId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 201 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3292,7 +3293,7 @@ const server = Bun.serve({
 					}
 
 					removeUserFromClass(userId, classId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3337,7 +3338,7 @@ const server = Bun.serve({
 					}
 
 					const meetingTime = createMeetingTime(classId, label);
-					return Response.json(meetingTime);
+					return Response.json(meetingTime, { status: 201 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3362,7 +3363,7 @@ const server = Bun.serve({
 					}
 
 					updateMeetingTime(meetingId, label);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3379,7 +3380,7 @@ const server = Bun.serve({
 					}
 
 					deleteMeetingTime(meetingId);
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -3427,7 +3428,7 @@ const server = Bun.serve({
 						transcription.filename,
 					);
 
-					return Response.json({ success: true });
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}

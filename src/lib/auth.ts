@@ -1,6 +1,7 @@
 import db from "../db/schema";
 
 const SESSION_DURATION = 7 * 24 * 60 * 60; // 7 days in seconds
+const MAX_SESSIONS_PER_USER = 10; // Maximum number of sessions per user
 
 export type UserRole = "user" | "admin";
 
@@ -30,6 +31,27 @@ export function createSession(
 ): string {
 	const sessionId = crypto.randomUUID();
 	const expiresAt = Math.floor(Date.now() / 1000) + SESSION_DURATION;
+
+	// Check current session count for user
+	const sessionCount = db
+		.query<{ count: number }, [number]>(
+			"SELECT COUNT(*) as count FROM sessions WHERE user_id = ?",
+		)
+		.get(userId);
+
+	// If at or over limit, delete oldest session(s)
+	if (sessionCount && sessionCount.count >= MAX_SESSIONS_PER_USER) {
+		const sessionsToDelete = sessionCount.count - MAX_SESSIONS_PER_USER + 1;
+		db.run(
+			`DELETE FROM sessions WHERE id IN (
+				SELECT id FROM sessions 
+				WHERE user_id = ? 
+				ORDER BY created_at ASC 
+				LIMIT ?
+			)`,
+			[userId, sessionsToDelete],
+		);
+	}
 
 	db.run(
 		"INSERT INTO sessions (id, user_id, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)",

@@ -130,3 +130,37 @@ test("prevents SQL injection in session lookup", () => {
 	};
 	expect(typeof result.count).toBe("number");
 });
+
+test("enforces maximum session limit per user", () => {
+	const userId = 999;
+
+	// Clean up any existing sessions for this user
+	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+
+	// Create 11 sessions (limit is 10)
+	const sessionIds: string[] = [];
+	for (let i = 0; i < 11; i++) {
+		const sessionId = createSession(userId, `192.168.1.${i}`, `Agent ${i}`);
+		sessionIds.push(sessionId);
+	}
+
+	// Count total sessions for user
+	const sessionCount = db
+		.query<{ count: number }, [number]>(
+			"SELECT COUNT(*) as count FROM sessions WHERE user_id = ?",
+		)
+		.get(userId);
+
+	expect(sessionCount?.count).toBe(10);
+
+	// First session should be deleted (oldest)
+	const firstSession = getSession(sessionIds[0]);
+	expect(firstSession).toBeNull();
+
+	// Last session should exist (newest)
+	const lastSession = getSession(sessionIds[10]);
+	expect(lastSession).not.toBeNull();
+
+	// Cleanup
+	db.run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+});

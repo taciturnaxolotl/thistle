@@ -6,28 +6,118 @@ import {
 	expect,
 	test,
 } from "bun:test";
-import db from "./db/schema";
 import { hashPasswordClient } from "./lib/client-auth";
+import type { Subprocess } from "bun";
 
-// Test server URL - uses port 3001 for testing to avoid conflicts
+// Test server configuration
 const TEST_PORT = 3001;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
+const TEST_DB_PATH = "./thistle.test.db";
 
-// Check if server is available
-let serverAvailable = false;
+// Test server process
+let serverProcess: Subprocess | null = null;
 
 beforeAll(async () => {
+	// Clean up any existing test database
 	try {
-		const response = await fetch(`${BASE_URL}/api/health`, {
-			signal: AbortSignal.timeout(1000),
-		});
-		serverAvailable = response.ok || response.status === 404;
+		await import("node:fs/promises").then((fs) => fs.unlink(TEST_DB_PATH));
 	} catch {
-		console.warn(
-			`\n⚠️  Test server not running on port ${TEST_PORT}. Start it with:\n   PORT=${TEST_PORT} bun run src/index.ts\n   Then run tests in another terminal.\n`,
-		);
-		serverAvailable = false;
+		// Ignore if doesn't exist
 	}
+
+	// Start test server as subprocess
+	serverProcess = Bun.spawn(["bun", "run", "src/index.ts"], {
+		env: {
+			...process.env,
+			NODE_ENV: "test",
+			PORT: TEST_PORT.toString(),
+			SKIP_EMAILS: "true",
+			SKIP_POLAR_SYNC: "true",
+			// Dummy env vars to pass startup validation (won't be used due to SKIP_EMAILS/SKIP_POLAR_SYNC)
+			MAILCHANNELS_API_KEY: "test-key",
+			DKIM_PRIVATE_KEY: "test-key",
+			LLM_API_KEY: "test-key",
+			LLM_API_BASE_URL: "https://test.com",
+			LLM_MODEL: "test-model",
+			POLAR_ACCESS_TOKEN: "test-token",
+			POLAR_ORGANIZATION_ID: "test-org",
+			POLAR_PRODUCT_ID: "test-product",
+			POLAR_SUCCESS_URL: "http://localhost:3001/success",
+			POLAR_WEBHOOK_SECRET: "test-webhook-secret",
+			ORIGIN: "http://localhost:3001",
+		},
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+
+	// Log server output for debugging
+	const stdoutReader = serverProcess.stdout.getReader();
+	const stderrReader = serverProcess.stderr.getReader();
+	const decoder = new TextDecoder();
+	
+	(async () => {
+		try {
+			while (true) {
+				const { value, done } = await stdoutReader.read();
+				if (done) break;
+				const text = decoder.decode(value);
+				console.log("[SERVER OUT]", text.trim());
+			}
+		} catch {}
+	})();
+	
+	(async () => {
+		try {
+			while (true) {
+				const { value, done } = await stderrReader.read();
+				if (done) break;
+				const text = decoder.decode(value);
+				console.error("[SERVER ERR]", text.trim());
+			}
+		} catch {}
+	})();
+
+	// Wait for server to be ready
+	let retries = 30;
+	let ready = false;
+	while (retries > 0 && !ready) {
+		try {
+			const response = await fetch(`${BASE_URL}/api/health`, {
+				signal: AbortSignal.timeout(1000),
+			});
+			if (response.ok) {
+				ready = true;
+				break;
+			}
+		} catch {
+			// Server not ready yet
+		}
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		retries--;
+	}
+
+	if (!ready) {
+		throw new Error("Test server failed to start within 15 seconds");
+	}
+
+	console.log(`✓ Test server running on port ${TEST_PORT}`);
+});
+
+afterAll(async () => {
+	// Kill test server
+	if (serverProcess) {
+		serverProcess.kill();
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+	}
+
+	// Clean up test database
+	try {
+		await import("node:fs/promises").then((fs) => fs.unlink(TEST_DB_PATH));
+	} catch {
+		// Ignore if doesn't exist
+	}
+
+	console.log("✓ Test server stopped and test database cleaned up");
 });
 
 // Test user credentials
@@ -81,54 +171,11 @@ function authRequest(
 	});
 }
 
-// Cleanup helpers
-function cleanupTestData() {
-	// Delete test users and their related data (cascade will handle most of it)
-	// Include 'newemail%' to catch users whose emails were updated during tests
-	db.run(
-		"DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%')",
-	);
-	db.run(
-		"DELETE FROM passkeys WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%')",
-	);
-	db.run(
-		"DELETE FROM transcriptions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%')",
-	);
-	db.run(
-		"DELETE FROM users WHERE email LIKE 'test%' OR email LIKE 'admin@%' OR email LIKE 'newemail%'",
-	);
-
-	// Clear ALL rate limit data to prevent accumulation across tests
-	// (IP-based rate limits don't contain test/admin in the key)
-	db.run("DELETE FROM rate_limit_attempts");
-}
-
-beforeEach(() => {
-	if (serverAvailable) {
-		cleanupTestData();
-	}
-});
-
-afterAll(() => {
-	if (serverAvailable) {
-		cleanupTestData();
-	}
-});
-
-// Helper to skip tests if server is not available
-function serverTest(name: string, fn: () => void | Promise<void>) {
-	test(name, async () => {
-		if (!serverAvailable) {
-			console.log(`⏭️  Skipping: ${name} (server not running)`);
-			return;
-		}
-		await fn();
-	});
-}
+// All tests run against a fresh database, no cleanup needed
 
 describe("API Endpoints - Authentication", () => {
 	describe("POST /api/auth/register", () => {
-		serverTest("should register a new user successfully", async () => {
+		test("should register a new user successfully", async () => {
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
 				TEST_USER.password,
@@ -144,14 +191,23 @@ describe("API Endpoints - Authentication", () => {
 				}),
 			});
 
+			if (response.status !== 200) {
+				const error = await response.json();
+				console.error("Registration failed:", response.status, error);
+			}
+
 			expect(response.status).toBe(200);
+			
+			// Extract session before consuming response body
+			const sessionCookie = extractSessionCookie(response);
+			
 			const data = await response.json();
 			expect(data.user).toBeDefined();
 			expect(data.user.email).toBe(TEST_USER.email);
-			expect(extractSessionCookie(response)).toBeTruthy();
+			expect(sessionCookie).toBeTruthy();
 		});
 
-		serverTest("should reject registration with missing email", async () => {
+		test("should reject registration with missing email", async () => {
 			const response = await fetch(`${BASE_URL}/api/auth/register`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -165,7 +221,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(data.error).toBe("Email and password required");
 		});
 
-		serverTest(
+		test(
 			"should reject registration with invalid password format",
 			async () => {
 				const response = await fetch(`${BASE_URL}/api/auth/register`, {
@@ -183,7 +239,7 @@ describe("API Endpoints - Authentication", () => {
 			},
 		);
 
-		serverTest("should reject duplicate email registration", async () => {
+		test("should reject duplicate email registration", async () => {
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
 				TEST_USER.password,
@@ -216,7 +272,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(data.error).toBe("Email already registered");
 		});
 
-		serverTest("should enforce rate limiting on registration", async () => {
+		test("should enforce rate limiting on registration", async () => {
 			const hashedPassword = await clientHashPassword(
 				"test@example.com",
 				"password",
@@ -246,7 +302,7 @@ describe("API Endpoints - Authentication", () => {
 	});
 
 	describe("POST /api/auth/login", () => {
-		serverTest("should login successfully with valid credentials", async () => {
+		test("should login successfully with valid credentials", async () => {
 			// Register user first
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -279,7 +335,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(extractSessionCookie(response)).toBeTruthy();
 		});
 
-		serverTest("should reject login with invalid credentials", async () => {
+		test("should reject login with invalid credentials", async () => {
 			// Register user first
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -313,7 +369,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(data.error).toBe("Invalid email or password");
 		});
 
-		serverTest("should reject login with missing fields", async () => {
+		test("should reject login with missing fields", async () => {
 			const response = await fetch(`${BASE_URL}/api/auth/login`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -327,7 +383,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(data.error).toBe("Email and password required");
 		});
 
-		serverTest("should enforce rate limiting on login attempts", async () => {
+		test("should enforce rate limiting on login attempts", async () => {
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
 				TEST_USER.password,
@@ -357,7 +413,7 @@ describe("API Endpoints - Authentication", () => {
 	});
 
 	describe("POST /api/auth/logout", () => {
-		serverTest("should logout successfully", async () => {
+		test("should logout successfully", async () => {
 			// Register and login
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -391,7 +447,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(setCookie).toContain("Max-Age=0");
 		});
 
-		serverTest("should logout even without valid session", async () => {
+		test("should logout even without valid session", async () => {
 			const response = await fetch(`${BASE_URL}/api/auth/logout`, {
 				method: "POST",
 			});
@@ -403,7 +459,7 @@ describe("API Endpoints - Authentication", () => {
 	});
 
 	describe("GET /api/auth/me", () => {
-		serverTest(
+		test(
 			"should return current user info when authenticated",
 			async () => {
 				// Register user
@@ -436,7 +492,7 @@ describe("API Endpoints - Authentication", () => {
 			},
 		);
 
-		serverTest("should return 401 when not authenticated", async () => {
+		test("should return 401 when not authenticated", async () => {
 			const response = await fetch(`${BASE_URL}/api/auth/me`);
 
 			expect(response.status).toBe(401);
@@ -444,7 +500,7 @@ describe("API Endpoints - Authentication", () => {
 			expect(data.error).toBe("Not authenticated");
 		});
 
-		serverTest("should return 401 with invalid session", async () => {
+		test("should return 401 with invalid session", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/auth/me`,
 				"invalid-session",
@@ -459,7 +515,7 @@ describe("API Endpoints - Authentication", () => {
 
 describe("API Endpoints - Session Management", () => {
 	describe("GET /api/sessions", () => {
-		serverTest("should return user sessions", async () => {
+		test("should return user sessions", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -490,7 +546,7 @@ describe("API Endpoints - Session Management", () => {
 			expect(data.sessions[0]).toHaveProperty("user_agent");
 		});
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const response = await fetch(`${BASE_URL}/api/sessions`);
 
 			expect(response.status).toBe(401);
@@ -498,7 +554,7 @@ describe("API Endpoints - Session Management", () => {
 	});
 
 	describe("DELETE /api/sessions", () => {
-		serverTest("should delete specific session", async () => {
+		test("should delete specific session", async () => {
 			// Register user and create multiple sessions
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -557,7 +613,7 @@ describe("API Endpoints - Session Management", () => {
 			expect(verifyResponse.status).toBe(401);
 		});
 
-		serverTest("should not delete another user's session", async () => {
+		test("should not delete another user's session", async () => {
 			// Register two users
 			const hashedPassword1 = await clientHashPassword(
 				TEST_USER.email,
@@ -601,7 +657,7 @@ describe("API Endpoints - Session Management", () => {
 			expect(response.status).toBe(404);
 		});
 
-		serverTest("should not delete current session", async () => {
+		test("should not delete current session", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -637,7 +693,7 @@ describe("API Endpoints - Session Management", () => {
 
 describe("API Endpoints - User Management", () => {
 	describe("DELETE /api/user", () => {
-		serverTest("should delete user account", async () => {
+		test("should delete user account", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -674,7 +730,7 @@ describe("API Endpoints - User Management", () => {
 			expect(verifyResponse.status).toBe(401);
 		});
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const response = await fetch(`${BASE_URL}/api/user`, {
 				method: "DELETE",
 			});
@@ -684,7 +740,7 @@ describe("API Endpoints - User Management", () => {
 	});
 
 	describe("PUT /api/user/email", () => {
-		serverTest("should update user email", async () => {
+		test("should update user email", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -725,7 +781,7 @@ describe("API Endpoints - User Management", () => {
 			expect(meData.email).toBe(newEmail);
 		});
 
-		serverTest("should reject duplicate email", async () => {
+		test("should reject duplicate email", async () => {
 			// Register two users
 			const hashedPassword1 = await clientHashPassword(
 				TEST_USER.email,
@@ -772,7 +828,7 @@ describe("API Endpoints - User Management", () => {
 	});
 
 	describe("PUT /api/user/password", () => {
-		serverTest("should update user password", async () => {
+		test("should update user password", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -819,7 +875,7 @@ describe("API Endpoints - User Management", () => {
 			expect(loginResponse.status).toBe(200);
 		});
 
-		serverTest("should reject invalid password format", async () => {
+		test("should reject invalid password format", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -853,7 +909,7 @@ describe("API Endpoints - User Management", () => {
 	});
 
 	describe("PUT /api/user/name", () => {
-		serverTest("should update user name", async () => {
+		test("should update user name", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -895,7 +951,7 @@ describe("API Endpoints - User Management", () => {
 			expect(meData.name).toBe(newName);
 		});
 
-		serverTest("should reject missing name", async () => {
+		test("should reject missing name", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -926,7 +982,7 @@ describe("API Endpoints - User Management", () => {
 	});
 
 	describe("PUT /api/user/avatar", () => {
-		serverTest("should update user avatar", async () => {
+		test("should update user avatar", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -971,7 +1027,7 @@ describe("API Endpoints - User Management", () => {
 
 describe("API Endpoints - Health", () => {
 	describe("GET /api/health", () => {
-		serverTest(
+		test(
 			"should return service health status with details",
 			async () => {
 				const response = await fetch(`${BASE_URL}/api/health`);
@@ -991,7 +1047,7 @@ describe("API Endpoints - Health", () => {
 
 describe("API Endpoints - Transcriptions", () => {
 	describe("GET /api/transcriptions", () => {
-		serverTest("should return user transcriptions", async () => {
+		test("should return user transcriptions", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -1019,7 +1075,7 @@ describe("API Endpoints - Transcriptions", () => {
 			expect(Array.isArray(data.jobs)).toBe(true);
 		});
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const response = await fetch(`${BASE_URL}/api/transcriptions`);
 
 			expect(response.status).toBe(401);
@@ -1027,7 +1083,7 @@ describe("API Endpoints - Transcriptions", () => {
 	});
 
 	describe("POST /api/transcriptions", () => {
-		serverTest("should upload audio file and start transcription", async () => {
+		test("should upload audio file and start transcription", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -1065,7 +1121,7 @@ describe("API Endpoints - Transcriptions", () => {
 			expect(data.message).toContain("Upload successful");
 		});
 
-		serverTest("should reject non-audio files", async () => {
+		test("should reject non-audio files", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -1098,7 +1154,7 @@ describe("API Endpoints - Transcriptions", () => {
 			expect(response.status).toBe(400);
 		});
 
-		serverTest("should reject files exceeding size limit", async () => {
+		test("should reject files exceeding size limit", async () => {
 			// Register user
 			const hashedPassword = await clientHashPassword(
 				TEST_USER.email,
@@ -1135,7 +1191,7 @@ describe("API Endpoints - Transcriptions", () => {
 			expect(data.error).toContain("File size must be less than");
 		});
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const audioBlob = new Blob(["fake audio data"], { type: "audio/mp3" });
 			const formData = new FormData();
 			formData.append("audio", audioBlob, "test.mp3");
@@ -1156,7 +1212,6 @@ describe("API Endpoints - Admin", () => {
 	let userId: number;
 
 	beforeEach(async () => {
-		if (!serverAvailable) return;
 
 		// Create admin user
 		const adminHash = await clientHashPassword(
@@ -1203,7 +1258,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("GET /api/admin/users", () => {
-		serverTest("should return all users for admin", async () => {
+		test("should return all users for admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users`,
 				adminCookie,
@@ -1215,7 +1270,7 @@ describe("API Endpoints - Admin", () => {
 			expect(data.length).toBeGreaterThan(0);
 		});
 
-		serverTest("should reject non-admin users", async () => {
+		test("should reject non-admin users", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users`,
 				userCookie,
@@ -1224,7 +1279,7 @@ describe("API Endpoints - Admin", () => {
 			expect(response.status).toBe(403);
 		});
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const response = await fetch(`${BASE_URL}/api/admin/users`);
 
 			expect(response.status).toBe(401);
@@ -1232,7 +1287,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("GET /api/admin/transcriptions", () => {
-		serverTest("should return all transcriptions for admin", async () => {
+		test("should return all transcriptions for admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/transcriptions`,
 				adminCookie,
@@ -1243,7 +1298,7 @@ describe("API Endpoints - Admin", () => {
 			expect(Array.isArray(data)).toBe(true);
 		});
 
-		serverTest("should reject non-admin users", async () => {
+		test("should reject non-admin users", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/transcriptions`,
 				userCookie,
@@ -1254,7 +1309,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("DELETE /api/admin/users/:id", () => {
-		serverTest("should delete user as admin", async () => {
+		test("should delete user as admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}`,
 				adminCookie,
@@ -1275,7 +1330,7 @@ describe("API Endpoints - Admin", () => {
 			expect(verifyResponse.status).toBe(401);
 		});
 
-		serverTest("should reject non-admin users", async () => {
+		test("should reject non-admin users", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}`,
 				userCookie,
@@ -1289,7 +1344,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("PUT /api/admin/users/:id/role", () => {
-		serverTest("should update user role as admin", async () => {
+		test("should update user role as admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/role`,
 				adminCookie,
@@ -1313,7 +1368,7 @@ describe("API Endpoints - Admin", () => {
 			expect(meData.role).toBe("admin");
 		});
 
-		serverTest("should reject invalid roles", async () => {
+		test("should reject invalid roles", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/role`,
 				adminCookie,
@@ -1329,7 +1384,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("GET /api/admin/users/:id/details", () => {
-		serverTest("should return user details for admin", async () => {
+		test("should return user details for admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/details`,
 				adminCookie,
@@ -1343,7 +1398,7 @@ describe("API Endpoints - Admin", () => {
 			expect(data).toHaveProperty("sessions");
 		});
 
-		serverTest("should reject non-admin users", async () => {
+		test("should reject non-admin users", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/details`,
 				userCookie,
@@ -1354,7 +1409,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("PUT /api/admin/users/:id/name", () => {
-		serverTest("should update user name as admin", async () => {
+		test("should update user name as admin", async () => {
 			const newName = "Admin Updated Name";
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/name`,
@@ -1371,7 +1426,7 @@ describe("API Endpoints - Admin", () => {
 			expect(data.success).toBe(true);
 		});
 
-		serverTest("should reject empty names", async () => {
+		test("should reject empty names", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/name`,
 				adminCookie,
@@ -1387,7 +1442,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("PUT /api/admin/users/:id/email", () => {
-		serverTest("should update user email as admin", async () => {
+		test("should update user email as admin", async () => {
 			const newEmail = "newemail@admin.com";
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/email`,
@@ -1404,7 +1459,7 @@ describe("API Endpoints - Admin", () => {
 			expect(data.success).toBe(true);
 		});
 
-		serverTest("should reject duplicate emails", async () => {
+		test("should reject duplicate emails", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/email`,
 				adminCookie,
@@ -1422,7 +1477,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("GET /api/admin/users/:id/sessions", () => {
-		serverTest("should return user sessions as admin", async () => {
+		test("should return user sessions as admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/sessions`,
 				adminCookie,
@@ -1435,7 +1490,7 @@ describe("API Endpoints - Admin", () => {
 	});
 
 	describe("DELETE /api/admin/users/:id/sessions", () => {
-		serverTest("should delete all user sessions as admin", async () => {
+		test("should delete all user sessions as admin", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/admin/users/${userId}/sessions`,
 				adminCookie,
@@ -1462,7 +1517,6 @@ describe("API Endpoints - Passkeys", () => {
 	let sessionCookie: string;
 
 	beforeEach(async () => {
-		if (!serverAvailable) return;
 
 		// Register user
 		const hashedPassword = await clientHashPassword(
@@ -1481,7 +1535,7 @@ describe("API Endpoints - Passkeys", () => {
 	});
 
 	describe("GET /api/passkeys", () => {
-		serverTest("should return user passkeys", async () => {
+		test("should return user passkeys", async () => {
 			const response = await authRequest(
 				`${BASE_URL}/api/passkeys`,
 				sessionCookie,
@@ -1493,7 +1547,7 @@ describe("API Endpoints - Passkeys", () => {
 			expect(Array.isArray(data.passkeys)).toBe(true);
 		});
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const response = await fetch(`${BASE_URL}/api/passkeys`);
 
 			expect(response.status).toBe(401);
@@ -1501,7 +1555,7 @@ describe("API Endpoints - Passkeys", () => {
 	});
 
 	describe("POST /api/passkeys/register/options", () => {
-		serverTest(
+		test(
 			"should return registration options for authenticated user",
 			async () => {
 				const response = await authRequest(
@@ -1520,7 +1574,7 @@ describe("API Endpoints - Passkeys", () => {
 			},
 		);
 
-		serverTest("should require authentication", async () => {
+		test("should require authentication", async () => {
 			const response = await fetch(
 				`${BASE_URL}/api/passkeys/register/options`,
 				{
@@ -1533,7 +1587,7 @@ describe("API Endpoints - Passkeys", () => {
 	});
 
 	describe("POST /api/passkeys/authenticate/options", () => {
-		serverTest("should return authentication options for email", async () => {
+		test("should return authentication options for email", async () => {
 			const response = await fetch(
 				`${BASE_URL}/api/passkeys/authenticate/options`,
 				{
@@ -1548,7 +1602,7 @@ describe("API Endpoints - Passkeys", () => {
 			expect(data).toHaveProperty("challenge");
 		});
 
-		serverTest("should handle non-existent email", async () => {
+		test("should handle non-existent email", async () => {
 			const response = await fetch(
 				`${BASE_URL}/api/passkeys/authenticate/options`,
 				{

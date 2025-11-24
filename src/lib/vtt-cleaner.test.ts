@@ -55,9 +55,19 @@ test("cleanVTT preserves VTT format when AI key not available", async () => {
 
 test("cleanVTT preserves empty VTT", async () => {
 	const emptyVTT = "WEBVTT\n\n";
+	
+	// Save and remove API key to avoid burning tokens
+	const originalKey = process.env.LLM_API_KEY;
+	delete process.env.LLM_API_KEY;
+	
 	const result = await cleanVTT("test-empty", emptyVTT);
 
 	expect(result).toBe(emptyVTT);
+	
+	// Restore original key
+	if (originalKey) {
+		process.env.LLM_API_KEY = originalKey;
+	}
 });
 
 // AI integration test - skip by default to avoid burning credits

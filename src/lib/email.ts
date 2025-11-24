@@ -25,6 +25,12 @@ interface SendEmailOptions {
  * Send an email via MailChannels
  */
 export async function sendEmail(options: SendEmailOptions): Promise<void> {
+	// Skip sending emails in test mode
+	if (process.env.NODE_ENV === "test" || process.env.SKIP_EMAILS === "true") {
+		console.log(`[Email] SKIPPED (test mode): "${options.subject}" to ${typeof options.to === "string" ? options.to : options.to.email}`);
+		return;
+	}
+
 	const fromEmail = process.env.SMTP_FROM_EMAIL || "noreply@thistle.app";
 	const fromName = process.env.SMTP_FROM_NAME || "Thistle";
 	const dkimDomain = process.env.DKIM_DOMAIN || "thistle.app";

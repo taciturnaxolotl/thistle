@@ -27,14 +27,17 @@ describe("Email Verification", () => {
 	});
 
 	test("creates verification token", () => {
-		const token = createEmailVerificationToken(userId);
-		expect(token).toBeDefined();
-		expect(typeof token).toBe("string");
-		expect(token.length).toBeGreaterThan(0);
+		const result = createEmailVerificationToken(userId);
+		expect(result).toBeDefined();
+		expect(typeof result).toBe("object");
+		expect(typeof result.code).toBe("string");
+		expect(typeof result.token).toBe("string");
+		expect(typeof result.sentAt).toBe("number");
+		expect(result.code.length).toBe(6);
 	});
 
 	test("verifies valid token", () => {
-		const token = createEmailVerificationToken(userId);
+		const { token } = createEmailVerificationToken(userId);
 		const result = verifyEmailToken(token);
 
 		expect(result).not.toBeNull();
@@ -50,7 +53,7 @@ describe("Email Verification", () => {
 	});
 
 	test("token is one-time use", () => {
-		const token = createEmailVerificationToken(userId);
+		const { token } = createEmailVerificationToken(userId);
 
 		// First use succeeds
 		const firstResult = verifyEmailToken(token);
@@ -62,7 +65,7 @@ describe("Email Verification", () => {
 	});
 
 	test("rejects expired token", () => {
-		const token = createEmailVerificationToken(userId);
+		const { token } = createEmailVerificationToken(userId);
 
 		// Manually expire the token
 		db.run(
@@ -75,8 +78,8 @@ describe("Email Verification", () => {
 	});
 
 	test("replaces existing token when creating new one", () => {
-		const token1 = createEmailVerificationToken(userId);
-		const token2 = createEmailVerificationToken(userId);
+		const { token: token1 } = createEmailVerificationToken(userId);
+		const { token: token2 } = createEmailVerificationToken(userId);
 
 		// First token should be invalidated
 		expect(verifyEmailToken(token1)).toBeNull();

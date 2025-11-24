@@ -338,6 +338,12 @@ export async function cleanVTT(
 		`[VTTCleaner] Processing ${segments.length} segments for ${transcriptionId}`,
 	);
 
+	// Check if API key is available, return original if not
+	if (!process.env.LLM_API_KEY) {
+		console.warn("[VTTCleaner] LLM_API_KEY not set, returning original VTT");
+		return vttContent;
+	}
+
 	// Validated at startup
 	const apiKey = process.env.LLM_API_KEY as string;
 	const apiBaseUrl = process.env.LLM_API_BASE_URL as string;

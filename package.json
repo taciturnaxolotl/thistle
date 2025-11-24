@@ -6,8 +6,8 @@
 	"scripts": {
 		"dev": "bun run src/index.ts --hot",
 		"clean": "rm -rf transcripts uploads thistle.db",
-		"test": "bun test",
-		"test:integration": "bun test src/index.test.ts",
+		"test": "NODE_ENV=test bun test",
+		"test:integration": "NODE_ENV=test bun test src/index.test.ts",
 		"ngrok": "ngrok http 3000 --domain casual-renewing-reptile.ngrok-free.app"
 	},
 	"devDependencies": {

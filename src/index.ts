@@ -173,6 +173,11 @@ async function syncUserSubscriptionsFromPolar(
 	userId: number,
 	email: string,
 ): Promise<void> {
+	// Skip Polar sync in test mode
+	if (process.env.NODE_ENV === "test" || process.env.SKIP_POLAR_SYNC === "true") {
+		return;
+	}
+
 	try {
 		const { polar } = await import("./lib/polar");
 
@@ -299,7 +304,9 @@ const fileCleanupInterval = setInterval(
 );
 
 const server = Bun.serve({
-	port: process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000,
+	port: process.env.NODE_ENV === "test" 
+		? 3001 
+		: (process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000),
 	idleTimeout: 120, // 120 seconds for SSE connections
 	routes: {
 		"/": indexHTML,

@@ -1,6 +1,10 @@
 import { Database } from "bun:sqlite";
 
-export const db = new Database("thistle.db");
+// Use test database when NODE_ENV is test
+const dbPath = process.env.NODE_ENV === "test" ? "thistle.test.db" : "thistle.db";
+export const db = new Database(dbPath);
+
+console.log(`[Database] Using database: ${dbPath}`);
 
 // Schema version tracking
 db.run(`

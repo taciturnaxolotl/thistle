@@ -29,7 +29,7 @@ describe("subscription-protected routes", () => {
 			headers: { Cookie: sessionCookie },
 		});
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(403);
 		const data = await response.json();
 		expect(data.error).toContain("subscription");
 	});
@@ -74,7 +74,7 @@ describe("subscription-protected routes", () => {
 			body: formData,
 		});
 
-		expect(response.status).toBe(500);
+		expect(response.status).toBe(403);
 		const data = await response.json();
 		expect(data.error).toContain("subscription");
 	});

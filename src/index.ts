@@ -175,7 +175,10 @@ async function syncUserSubscriptionsFromPolar(
 	email: string,
 ): Promise<void> {
 	// Skip Polar sync in test mode
-	if (process.env.NODE_ENV === "test" || process.env.SKIP_POLAR_SYNC === "true") {
+	if (
+		process.env.NODE_ENV === "test" ||
+		process.env.SKIP_POLAR_SYNC === "true"
+	) {
 		return;
 	}
 
@@ -305,9 +308,12 @@ const fileCleanupInterval = setInterval(
 );
 
 const server = Bun.serve({
-	port: process.env.NODE_ENV === "test" 
-		? 3001 
-		: (process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000),
+	port:
+		process.env.NODE_ENV === "test"
+			? 3001
+			: process.env.PORT
+				? Number.parseInt(process.env.PORT, 10)
+				: 3000,
 	idleTimeout: 120, // 120 seconds for SSE connections
 	routes: {
 		"/": indexHTML,
@@ -895,7 +901,8 @@ const server = Bun.serve({
 						role: user.role,
 						has_subscription: !!subscription,
 						email_verified: isEmailVerified(user.id),
-						email_notifications_enabled: prefs?.email_notifications_enabled === 1,
+						email_notifications_enabled:
+							prefs?.email_notifications_enabled === 1,
 					});
 				} catch (err) {
 					return handleError(err);
@@ -1092,7 +1099,10 @@ const server = Bun.serve({
 				try {
 					const sessionId = getSessionFromRequest(req);
 					if (!sessionId) {
-						return Response.json({ error: "Not authenticated" }, { status: 401 });
+						return Response.json(
+							{ error: "Not authenticated" },
+							{ status: 401 },
+						);
 					}
 					const user = getUserBySession(sessionId);
 					if (!user) {
@@ -1117,7 +1127,10 @@ const server = Bun.serve({
 				try {
 					const currentSessionId = getSessionFromRequest(req);
 					if (!currentSessionId) {
-						return Response.json({ error: "Not authenticated" }, { status: 401 });
+						return Response.json(
+							{ error: "Not authenticated" },
+							{ status: 401 },
+						);
 					}
 					const user = getUserBySession(currentSessionId);
 					if (!user) {
@@ -1301,7 +1314,10 @@ const server = Bun.serve({
 					const body = await req.json();
 					const { password } = body;
 					if (!password) {
-						return Response.json({ error: "Password required" }, { status: 400 });
+						return Response.json(
+							{ error: "Password required" },
+							{ status: 400 },
+						);
 					}
 					// Validate password format (client-side hashed PBKDF2)
 					const passwordValidation = validatePasswordHash(password);
@@ -1646,10 +1662,7 @@ const server = Bun.serve({
 
 					// Allow access if: owner, admin, or enrolled in the class
 					if (!isOwner && !isAdmin && !isClassMember) {
-						return Response.json(
-							{ error: "Forbidden" },
-							{ status: 403 },
-						);
+						return Response.json({ error: "Forbidden" }, { status: 403 });
 					}
 
 					// Require subscription only if accessing own transcription (not class)
@@ -1889,10 +1902,7 @@ const server = Bun.serve({
 
 					// Allow access if: owner, admin, or enrolled in the class
 					if (!isOwner && !isAdmin && !isClassMember) {
-						return Response.json(
-							{ error: "Forbidden" },
-							{ status: 403 },
-						);
+						return Response.json({ error: "Forbidden" }, { status: 403 });
 					}
 
 					// Require subscription only if accessing own transcription (not class)
@@ -1997,10 +2007,7 @@ const server = Bun.serve({
 
 					// Allow access if: owner, admin, or enrolled in the class
 					if (!isOwner && !isAdmin && !isClassMember) {
-						return Response.json(
-							{ error: "Forbidden" },
-							{ status: 403 },
-						);
+						return Response.json({ error: "Forbidden" }, { status: 403 });
 					}
 
 					// Require subscription only if accessing own transcription (not class)
@@ -3359,7 +3366,10 @@ const server = Bun.serve({
 					// Verify meeting exists
 					const existingMeeting = getMeetingById(meetingId);
 					if (!existingMeeting) {
-						return Response.json({ error: "Meeting not found" }, { status: 404 });
+						return Response.json(
+							{ error: "Meeting not found" },
+							{ status: 404 },
+						);
 					}
 
 					updateMeetingTime(meetingId, label);
@@ -3376,7 +3386,10 @@ const server = Bun.serve({
 					// Verify meeting exists
 					const existingMeeting = getMeetingById(meetingId);
 					if (!existingMeeting) {
-						return Response.json({ error: "Meeting not found" }, { status: 404 });
+						return Response.json(
+							{ error: "Meeting not found" },
+							{ status: 404 },
+						);
 					}
 
 					deleteMeetingTime(meetingId);
@@ -3435,13 +3448,10 @@ const server = Bun.serve({
 			},
 		},
 	},
-	development: {
-		hmr: true,
-		console: true,
-	},
+	development: process.env.NODE_ENV === "dev",
 	fetch(req, server) {
 		const response = server.fetch(req);
-		
+
 		// Add security headers to all responses
 		if (response instanceof Response) {
 			const headers = new Headers(response.headers);
@@ -3449,21 +3459,21 @@ const server = Bun.serve({
 			headers.set("X-Content-Type-Options", "nosniff");
 			headers.set("X-Frame-Options", "DENY");
 			headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-			
+
 			// Set CSP that allows inline styles with unsafe-inline (needed for Lit components)
 			// and script-src 'self' for bundled scripts
 			headers.set(
 				"Content-Security-Policy",
-				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://hostedboringavatars.vercel.app; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none';"
+				"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://hostedboringavatars.vercel.app; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none';",
 			);
-			
+
 			return new Response(response.body, {
 				status: response.status,
 				statusText: response.statusText,
 				headers,
 			});
 		}
-		
+
 		return response;
 	},
 });

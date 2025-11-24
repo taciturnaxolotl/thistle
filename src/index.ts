@@ -48,6 +48,7 @@ import {
 	getClassById,
 	getClassesForUser,
 	getClassMembers,
+	getMeetingById,
 	getMeetingTimesForClass,
 	getTranscriptionsForClass,
 	isUserEnrolledInClass,
@@ -3191,6 +3192,12 @@ const server = Bun.serve({
 					requireAdmin(req);
 					const classId = req.params.id;
 
+					// Verify class exists
+					const existingClass = getClassById(classId);
+					if (!existingClass) {
+						return Response.json({ error: "Class not found" }, { status: 404 });
+					}
+
 					deleteClass(classId);
 					return Response.json({ success: true });
 				} catch (error) {
@@ -3211,6 +3218,12 @@ const server = Bun.serve({
 							{ error: "archived must be a boolean" },
 							{ status: 400 },
 						);
+					}
+
+					// Verify class exists
+					const existingClass = getClassById(classId);
+					if (!existingClass) {
+						return Response.json({ error: "Class not found" }, { status: 404 });
 					}
 
 					toggleClassArchive(classId, archived);
@@ -3243,6 +3256,12 @@ const server = Bun.serve({
 						return Response.json({ error: "Email required" }, { status: 400 });
 					}
 
+					// Verify class exists
+					const existingClass = getClassById(classId);
+					if (!existingClass) {
+						return Response.json({ error: "Class not found" }, { status: 404 });
+					}
+
 					const user = getUserByEmail(email);
 					if (!user) {
 						return Response.json({ error: "User not found" }, { status: 404 });
@@ -3264,6 +3283,12 @@ const server = Bun.serve({
 
 					if (Number.isNaN(userId)) {
 						return Response.json({ error: "Invalid user ID" }, { status: 400 });
+					}
+
+					// Verify class exists
+					const existingClass = getClassById(classId);
+					if (!existingClass) {
+						return Response.json({ error: "Class not found" }, { status: 404 });
 					}
 
 					removeUserFromClass(userId, classId);
@@ -3305,6 +3330,12 @@ const server = Bun.serve({
 						return Response.json({ error: "Label required" }, { status: 400 });
 					}
 
+					// Verify class exists
+					const existingClass = getClassById(classId);
+					if (!existingClass) {
+						return Response.json({ error: "Class not found" }, { status: 404 });
+					}
+
 					const meetingTime = createMeetingTime(classId, label);
 					return Response.json(meetingTime);
 				} catch (error) {
@@ -3324,6 +3355,12 @@ const server = Bun.serve({
 						return Response.json({ error: "Label required" }, { status: 400 });
 					}
 
+					// Verify meeting exists
+					const existingMeeting = getMeetingById(meetingId);
+					if (!existingMeeting) {
+						return Response.json({ error: "Meeting not found" }, { status: 404 });
+					}
+
 					updateMeetingTime(meetingId, label);
 					return Response.json({ success: true });
 				} catch (error) {
@@ -3334,6 +3371,12 @@ const server = Bun.serve({
 				try {
 					requireAdmin(req);
 					const meetingId = req.params.id;
+
+					// Verify meeting exists
+					const existingMeeting = getMeetingById(meetingId);
+					if (!existingMeeting) {
+						return Response.json({ error: "Meeting not found" }, { status: 404 });
+					}
 
 					deleteMeetingTime(meetingId);
 					return Response.json({ success: true });

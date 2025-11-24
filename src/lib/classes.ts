@@ -338,6 +338,16 @@ export function getMeetingTimesForClass(classId: string): MeetingTime[] {
 }
 
 /**
+ * Get a single meeting time by ID
+ */
+export function getMeetingById(meetingId: string): MeetingTime | null {
+	const result = db
+		.query<MeetingTime, [string]>("SELECT * FROM meeting_times WHERE id = ?")
+		.get(meetingId);
+	return result ?? null;
+}
+
+/**
  * Update a meeting time label
  */
 export function updateMeetingTime(meetingId: string, label: string): void {

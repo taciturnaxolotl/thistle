@@ -6,8 +6,8 @@ import {
 	expect,
 	test,
 } from "bun:test";
-import { hashPasswordClient } from "./lib/client-auth";
 import type { Subprocess } from "bun";
+import { hashPasswordClient } from "./lib/client-auth";
 
 // Test server configuration
 const TEST_PORT = 3001;
@@ -54,7 +54,7 @@ beforeAll(async () => {
 	const stdoutReader = serverProcess.stdout.getReader();
 	const stderrReader = serverProcess.stderr.getReader();
 	const decoder = new TextDecoder();
-	
+
 	(async () => {
 		try {
 			while (true) {
@@ -65,7 +65,7 @@ beforeAll(async () => {
 			}
 		} catch {}
 	})();
-	
+
 	(async () => {
 		try {
 			while (true) {
@@ -123,7 +123,7 @@ afterAll(async () => {
 // Clear database between each test
 beforeEach(async () => {
 	const db = require("bun:sqlite").Database.open(TEST_DB_PATH);
-	
+
 	// Delete all data from tables (preserve schema)
 	db.run("DELETE FROM rate_limit_attempts");
 	db.run("DELETE FROM email_change_tokens");
@@ -138,7 +138,7 @@ beforeEach(async () => {
 	db.run("DELETE FROM classes");
 	db.run("DELETE FROM class_waitlist");
 	db.run("DELETE FROM users WHERE id != 0"); // Keep ghost user
-	
+
 	db.close();
 });
 
@@ -194,7 +194,11 @@ function authRequest(
 }
 
 // Helper to register a user, verify email, and get session via login
-async function registerAndLogin(user: { email: string; password: string; name?: string }): Promise<string> {
+async function registerAndLogin(user: {
+	email: string;
+	password: string;
+	name?: string;
+}): Promise<string> {
 	const hashedPassword = await clientHashPassword(user.email, user.password);
 
 	// Register the user
@@ -242,15 +246,17 @@ async function registerAndLogin(user: { email: string; password: string; name?: 
 // Helper to add active subscription to a user
 function addSubscription(userEmail: string): void {
 	const db = require("bun:sqlite").Database.open(TEST_DB_PATH);
-	const user = db.query("SELECT id FROM users WHERE email = ?").get(userEmail) as { id: number };
+	const user = db
+		.query("SELECT id FROM users WHERE email = ?")
+		.get(userEmail) as { id: number };
 	if (!user) {
 		db.close();
 		throw new Error(`User ${userEmail} not found`);
 	}
-	
+
 	db.run(
 		"INSERT INTO subscriptions (id, user_id, customer_id, status) VALUES (?, ?, ?, ?)",
-		[`test-sub-${user.id}`, user.id, `test-customer-${user.id}`, "active"]
+		[`test-sub-${user.id}`, user.id, `test-customer-${user.id}`, "active"],
 	);
 	db.close();
 }
@@ -281,7 +287,7 @@ describe("API Endpoints - Authentication", () => {
 			}
 
 			expect(response.status).toBe(201);
-			
+
 			const data = await response.json();
 			expect(data.user).toBeDefined();
 			expect(data.user.email).toBe(TEST_USER.email);
@@ -302,23 +308,20 @@ describe("API Endpoints - Authentication", () => {
 			expect(data.error).toBe("Email and password required");
 		});
 
-		test(
-			"should reject registration with invalid password format",
-			async () => {
-				const response = await fetch(`${BASE_URL}/api/auth/register`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						email: TEST_USER.email,
-						password: "short",
-					}),
-				});
+		test("should reject registration with invalid password format", async () => {
+			const response = await fetch(`${BASE_URL}/api/auth/register`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					email: TEST_USER.email,
+					password: "short",
+				}),
+			});
 
-				expect(response.status).toBe(400);
-				const data = await response.json();
-				expect(data.error).toBe("Invalid password format");
-			},
-		);
+			expect(response.status).toBe(400);
+			const data = await response.json();
+			expect(data.error).toBe("Invalid password format");
+		});
 
 		test("should reject duplicate email registration", async () => {
 			const hashedPassword = await clientHashPassword(
@@ -473,9 +476,18 @@ describe("API Endpoints - User Management", () => {
 
 			// Manually complete the email change in the database (simulating verification)
 			const db = require("bun:sqlite").Database.open(TEST_DB_PATH);
-			const tokenData = db.query("SELECT user_id, new_email FROM email_change_tokens ORDER BY created_at DESC LIMIT 1").get() as { user_id: number, new_email: string };
-			db.run("UPDATE users SET email = ?, email_verified = 1 WHERE id = ?", [tokenData.new_email, tokenData.user_id]);
-			db.run("DELETE FROM email_change_tokens WHERE user_id = ?", [tokenData.user_id]);
+			const tokenData = db
+				.query(
+					"SELECT user_id, new_email FROM email_change_tokens ORDER BY created_at DESC LIMIT 1",
+				)
+				.get() as { user_id: number; new_email: string };
+			db.run("UPDATE users SET email = ?, email_verified = 1 WHERE id = ?", [
+				tokenData.new_email,
+				tokenData.user_id,
+			]);
+			db.run("DELETE FROM email_change_tokens WHERE user_id = ?", [
+				tokenData.user_id,
+			]);
 			db.close();
 
 			// Verify email updated
@@ -646,21 +658,18 @@ describe("API Endpoints - User Management", () => {
 
 describe("API Endpoints - Health", () => {
 	describe("GET /api/health", () => {
-		test(
-			"should return service health status with details",
-			async () => {
-				const response = await fetch(`${BASE_URL}/api/health`);
+		test("should return service health status with details", async () => {
+			const response = await fetch(`${BASE_URL}/api/health`);
 
-				expect(response.status).toBe(200);
-				const data = await response.json();
-				expect(data).toHaveProperty("status");
-				expect(data).toHaveProperty("timestamp");
-				expect(data).toHaveProperty("services");
-				expect(data.services).toHaveProperty("database");
-				expect(data.services).toHaveProperty("whisper");
-				expect(data.services).toHaveProperty("storage");
-			},
-		);
+			expect(response.status).toBe(200);
+			const data = await response.json();
+			expect(data).toHaveProperty("status");
+			expect(data).toHaveProperty("timestamp");
+			expect(data).toHaveProperty("services");
+			expect(data.services).toHaveProperty("database");
+			expect(data.services).toHaveProperty("whisper");
+			expect(data.services).toHaveProperty("storage");
+		});
 	});
 });
 
@@ -669,7 +678,7 @@ describe("API Endpoints - Transcriptions", () => {
 		test("should return user transcriptions", async () => {
 			// Register and login
 			const sessionCookie = await registerAndLogin(TEST_USER);
-			
+
 			// Add subscription
 			addSubscription(TEST_USER.email);
 
@@ -696,7 +705,7 @@ describe("API Endpoints - Transcriptions", () => {
 		test("should upload audio file and start transcription", async () => {
 			// Register and login
 			const sessionCookie = await registerAndLogin(TEST_USER);
-			
+
 			// Add subscription
 			addSubscription(TEST_USER.email);
 
@@ -725,7 +734,7 @@ describe("API Endpoints - Transcriptions", () => {
 		test("should reject non-audio files", async () => {
 			// Register and login
 			const sessionCookie = await registerAndLogin(TEST_USER);
-			
+
 			// Add subscription
 			addSubscription(TEST_USER.email);
 
@@ -749,7 +758,7 @@ describe("API Endpoints - Transcriptions", () => {
 		test("should reject files exceeding size limit", async () => {
 			// Register and login
 			const sessionCookie = await registerAndLogin(TEST_USER);
-			
+
 			// Add subscription
 			addSubscription(TEST_USER.email);
 
@@ -797,7 +806,7 @@ describe("API Endpoints - Admin", () => {
 	beforeEach(async () => {
 		// Create admin user
 		adminCookie = await registerAndLogin(TEST_ADMIN);
-		
+
 		// Manually set admin role in database
 		const db = require("bun:sqlite").Database.open(TEST_DB_PATH);
 		db.run("UPDATE users SET role = 'admin' WHERE email = ?", [
@@ -812,7 +821,7 @@ describe("API Endpoints - Admin", () => {
 			.query<{ id: number }, [string]>("SELECT id FROM users WHERE email = ?")
 			.get(TEST_USER.email);
 		userId = userIdResult?.id;
-		
+
 		db.close();
 	});
 
@@ -1095,24 +1104,21 @@ describe("API Endpoints - Passkeys", () => {
 	});
 
 	describe("POST /api/passkeys/register/options", () => {
-		test(
-			"should return registration options for authenticated user",
-			async () => {
-				const response = await authRequest(
-					`${BASE_URL}/api/passkeys/register/options`,
-					sessionCookie,
-					{
-						method: "POST",
-					},
-				);
+		test("should return registration options for authenticated user", async () => {
+			const response = await authRequest(
+				`${BASE_URL}/api/passkeys/register/options`,
+				sessionCookie,
+				{
+					method: "POST",
+				},
+			);
 
-				expect(response.status).toBe(200);
-				const data = await response.json();
-				expect(data).toHaveProperty("challenge");
-				expect(data).toHaveProperty("rp");
-				expect(data).toHaveProperty("user");
-			},
-		);
+			expect(response.status).toBe(200);
+			const data = await response.json();
+			expect(data).toHaveProperty("challenge");
+			expect(data).toHaveProperty("rp");
+			expect(data).toHaveProperty("user");
+		});
 
 		test("should require authentication", async () => {
 			const response = await fetch(

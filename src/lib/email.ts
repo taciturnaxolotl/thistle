@@ -27,7 +27,9 @@ interface SendEmailOptions {
 export async function sendEmail(options: SendEmailOptions): Promise<void> {
 	// Skip sending emails in test mode
 	if (process.env.NODE_ENV === "test" || process.env.SKIP_EMAILS === "true") {
-		console.log(`[Email] SKIPPED (test mode): "${options.subject}" to ${typeof options.to === "string" ? options.to : options.to.email}`);
+		console.log(
+			`[Email] SKIPPED (test mode): "${options.subject}" to ${typeof options.to === "string" ? options.to : options.to.email}`,
+		);
 		return;
 	}
 

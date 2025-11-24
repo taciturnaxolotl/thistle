@@ -869,39 +869,36 @@ const server = Bun.serve({
 		},
 		"/api/auth/me": {
 			GET: (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				try {
+					const user = requireAuth(req);
+
+					// Check subscription status
+					const subscription = db
+						.query<{ status: string }, [number]>(
+							"SELECT status FROM subscriptions WHERE user_id = ? AND status IN ('active', 'trialing', 'past_due') ORDER BY created_at DESC LIMIT 1",
+						)
+						.get(user.id);
+
+					// Get notification preferences
+					const prefs = db
+						.query<{ email_notifications_enabled: number }, [number]>(
+							"SELECT email_notifications_enabled FROM users WHERE id = ?",
+						)
+						.get(user.id);
+
+					return Response.json({
+						email: user.email,
+						name: user.name,
+						avatar: user.avatar,
+						created_at: user.created_at,
+						role: user.role,
+						has_subscription: !!subscription,
+						email_verified: isEmailVerified(user.id),
+						email_notifications_enabled: prefs?.email_notifications_enabled === 1,
+					});
+				} catch (err) {
+					return handleError(err);
 				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
-				// Check subscription status
-				const subscription = db
-					.query<{ status: string }, [number]>(
-						"SELECT status FROM subscriptions WHERE user_id = ? AND status IN ('active', 'trialing', 'past_due') ORDER BY created_at DESC LIMIT 1",
-					)
-					.get(user.id);
-
-				// Get notification preferences
-				const prefs = db
-					.query<{ email_notifications_enabled: number }, [number]>(
-						"SELECT email_notifications_enabled FROM users WHERE id = ?",
-					)
-					.get(user.id);
-
-				return Response.json({
-					email: user.email,
-					name: user.name,
-					avatar: user.avatar,
-					created_at: user.created_at,
-					role: user.role,
-					has_subscription: !!subscription,
-					email_verified: isEmailVerified(user.id),
-					email_notifications_enabled: prefs?.email_notifications_enabled === 1,
-				});
 			},
 		},
 		"/api/passkeys/register/options": {
@@ -1091,159 +1088,161 @@ const server = Bun.serve({
 		},
 		"/api/sessions": {
 			GET: (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
+				try {
+					const sessionId = getSessionFromRequest(req);
+					if (!sessionId) {
+						return Response.json({ error: "Not authenticated" }, { status: 401 });
+					}
+					const user = getUserBySession(sessionId);
+					if (!user) {
+						return Response.json({ error: "Invalid session" }, { status: 401 });
+					}
+					const sessions = getUserSessionsForUser(user.id);
+					return Response.json({
+						sessions: sessions.map((s) => ({
+							id: s.id,
+							ip_address: s.ip_address,
+							user_agent: s.user_agent,
+							created_at: s.created_at,
+							expires_at: s.expires_at,
+							is_current: s.id === sessionId,
+						})),
+					});
+				} catch (err) {
+					return handleError(err);
 				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-				const sessions = getUserSessionsForUser(user.id);
-				return Response.json({
-					sessions: sessions.map((s) => ({
-						id: s.id,
-						ip_address: s.ip_address,
-						user_agent: s.user_agent,
-						created_at: s.created_at,
-						expires_at: s.expires_at,
-						is_current: s.id === sessionId,
-					})),
-				});
 			},
 			DELETE: async (req) => {
-				const currentSessionId = getSessionFromRequest(req);
-				if (!currentSessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(currentSessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
+				try {
+					const currentSessionId = getSessionFromRequest(req);
+					if (!currentSessionId) {
+						return Response.json({ error: "Not authenticated" }, { status: 401 });
+					}
+					const user = getUserBySession(currentSessionId);
+					if (!user) {
+						return Response.json({ error: "Invalid session" }, { status: 401 });
+					}
 
-				const rateLimitError = enforceRateLimit(req, "delete-session", {
-					ip: { max: 20, windowSeconds: 60 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
+					const rateLimitError = enforceRateLimit(req, "delete-session", {
+						ip: { max: 20, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
 
-				const body = await req.json();
-				const targetSessionId = body.sessionId;
-				if (!targetSessionId) {
-					return Response.json(
-						{ error: "Session ID required" },
-						{ status: 400 },
-					);
+					const body = await req.json();
+					const targetSessionId = body.sessionId;
+					if (!targetSessionId) {
+						return Response.json(
+							{ error: "Session ID required" },
+							{ status: 400 },
+						);
+					}
+					// Prevent deleting current session
+					if (targetSessionId === currentSessionId) {
+						return Response.json(
+							{ error: "Cannot kill current session. Use logout instead." },
+							{ status: 400 },
+						);
+					}
+					// Verify the session belongs to the user
+					const targetSession = getSession(targetSessionId);
+					if (!targetSession || targetSession.user_id !== user.id) {
+						return Response.json({ error: "Session not found" }, { status: 404 });
+					}
+					deleteSession(targetSessionId);
+					return Response.json({ success: true });
+				} catch (err) {
+					return handleError(err);
 				}
-				// Prevent deleting current session
-				if (targetSessionId === currentSessionId) {
-					return Response.json(
-						{ error: "Cannot kill current session. Use logout instead." },
-						{ status: 400 },
-					);
-				}
-				// Verify the session belongs to the user
-				const targetSession = getSession(targetSessionId);
-				if (!targetSession || targetSession.user_id !== user.id) {
-					return Response.json({ error: "Session not found" }, { status: 404 });
-				}
-				deleteSession(targetSessionId);
-				return Response.json({ success: true });
 			},
 		},
 		"/api/user": {
 			DELETE: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
+				try {
+					const user = requireAuth(req);
 
-				// Rate limiting
-				const rateLimitError = enforceRateLimit(req, "delete-user", {
-					ip: { max: 3, windowSeconds: 60 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
+					// Rate limiting
+					const rateLimitError = enforceRateLimit(req, "delete-user", {
+						ip: { max: 3, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
 
-				await deleteUser(user.id);
-				return Response.json(
-					{ success: true },
-					{
-						headers: {
-							"Set-Cookie":
-								"session=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=Lax",
+					await deleteUser(user.id);
+					return Response.json(
+						{ success: true },
+						{
+							headers: {
+								"Set-Cookie":
+									"session=; HttpOnly; Secure; Path=/; Max-Age=0; SameSite=Lax",
+							},
 						},
-					},
-				);
+					);
+				} catch (err) {
+					return handleError(err);
+				}
 			},
 		},
 		"/api/user/email": {
 			PUT: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
-				// Rate limiting
-				const rateLimitError = enforceRateLimit(req, "update-email", {
-					ip: { max: 5, windowSeconds: 60 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
-
-				const body = await req.json();
-				const { email } = body;
-				if (!email) {
-					return Response.json({ error: "Email required" }, { status: 400 });
-				}
-
-				// Check if email is already in use
-				const existingUser = getUserByEmail(email);
-				if (existingUser) {
-					return Response.json(
-						{ error: "Email already in use" },
-						{ status: 400 },
-					);
-				}
-
 				try {
-					// Create email change token
-					const token = createEmailChangeToken(user.id, email);
+					const user = requireAuth(req);
 
-					// Send verification email to the CURRENT address
-					const origin = process.env.ORIGIN || "http://localhost:3000";
-					const verifyUrl = `${origin}/api/user/email/verify?token=${token}`;
-
-					await sendEmail({
-						to: user.email,
-						subject: "Verify your email change",
-						html: emailChangeTemplate({
-							name: user.name,
-							currentEmail: user.email,
-							newEmail: email,
-							verifyLink: verifyUrl,
-						}),
+					// Rate limiting
+					const rateLimitError = enforceRateLimit(req, "update-email", {
+						ip: { max: 5, windowSeconds: 60 * 60 },
 					});
+					if (rateLimitError) return rateLimitError;
 
-					return Response.json({
-						success: true,
-						message: `Verification email sent to ${user.email}`,
-						pendingEmail: email,
-					});
-				} catch (error) {
-					console.error(
-						"[Email] Failed to send email change verification:",
-						error,
-					);
-					return Response.json(
-						{ error: "Failed to send verification email" },
-						{ status: 500 },
-					);
+					const body = await req.json();
+					const { email } = body;
+					if (!email) {
+						return Response.json({ error: "Email required" }, { status: 400 });
+					}
+
+					// Check if email is already in use
+					const existingUser = getUserByEmail(email);
+					if (existingUser) {
+						return Response.json(
+							{ error: "Email already in use" },
+							{ status: 400 },
+						);
+					}
+
+					try {
+						// Create email change token
+						const token = createEmailChangeToken(user.id, email);
+
+						// Send verification email to the CURRENT address
+						const origin = process.env.ORIGIN || "http://localhost:3000";
+						const verifyUrl = `${origin}/api/user/email/verify?token=${token}`;
+
+						await sendEmail({
+							to: user.email,
+							subject: "Verify your email change",
+							html: emailChangeTemplate({
+								name: user.name,
+								currentEmail: user.email,
+								newEmail: email,
+								verifyLink: verifyUrl,
+							}),
+						});
+
+						return Response.json({
+							success: true,
+							message: `Verification email sent to ${user.email}`,
+							pendingEmail: email,
+						});
+					} catch (error) {
+						console.error(
+							"[Email] Failed to send email change verification:",
+							error,
+						);
+						return Response.json(
+							{ error: "Failed to send verification email" },
+							{ status: 500 },
+						);
+					}
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
@@ -1291,159 +1290,140 @@ const server = Bun.serve({
 		},
 		"/api/user/password": {
 			PUT: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
-				// Rate limiting
-				const rateLimitError = enforceRateLimit(req, "update-password", {
-					ip: { max: 5, windowSeconds: 60 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
-
-				const body = await req.json();
-				const { password } = body;
-				if (!password) {
-					return Response.json({ error: "Password required" }, { status: 400 });
-				}
-				// Validate password format (client-side hashed PBKDF2)
-				const passwordValidation = validatePasswordHash(password);
-				if (!passwordValidation.valid) {
-					return Response.json(
-						{ error: passwordValidation.error },
-						{ status: 400 },
-					);
-				}
 				try {
-					await updateUserPassword(user.id, password);
-					return Response.json({ success: true });
-				} catch {
-					return Response.json(
-						{ error: "Failed to update password" },
-						{ status: 500 },
-					);
+					const user = requireAuth(req);
+
+					// Rate limiting
+					const rateLimitError = enforceRateLimit(req, "update-password", {
+						ip: { max: 5, windowSeconds: 60 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					const body = await req.json();
+					const { password } = body;
+					if (!password) {
+						return Response.json({ error: "Password required" }, { status: 400 });
+					}
+					// Validate password format (client-side hashed PBKDF2)
+					const passwordValidation = validatePasswordHash(password);
+					if (!passwordValidation.valid) {
+						return Response.json(
+							{ error: passwordValidation.error },
+							{ status: 400 },
+						);
+					}
+					try {
+						await updateUserPassword(user.id, password);
+						return Response.json({ success: true });
+					} catch {
+						return Response.json(
+							{ error: "Failed to update password" },
+							{ status: 500 },
+						);
+					}
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
 		"/api/user/name": {
 			PUT: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
-				const rateLimitError = enforceRateLimit(req, "update-name", {
-					ip: { max: 10, windowSeconds: 5 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
-
-				const body = await req.json();
-				const { name } = body;
-				if (!name) {
-					return Response.json({ error: "Name required" }, { status: 400 });
-				}
 				try {
-					updateUserName(user.id, name);
-					return Response.json({ success: true });
-				} catch {
-					return Response.json(
-						{ error: "Failed to update name" },
-						{ status: 500 },
-					);
+					const user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "update-name", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					const body = await req.json();
+					const { name } = body;
+					if (!name) {
+						return Response.json({ error: "Name required" }, { status: 400 });
+					}
+					try {
+						updateUserName(user.id, name);
+						return Response.json({ success: true });
+					} catch {
+						return Response.json(
+							{ error: "Failed to update name" },
+							{ status: 500 },
+						);
+					}
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
 		"/api/user/avatar": {
 			PUT: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
-				const rateLimitError = enforceRateLimit(req, "update-avatar", {
-					ip: { max: 10, windowSeconds: 5 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
-
-				const body = await req.json();
-				const { avatar } = body;
-				if (!avatar) {
-					return Response.json({ error: "Avatar required" }, { status: 400 });
-				}
 				try {
-					updateUserAvatar(user.id, avatar);
-					return Response.json({ success: true });
-				} catch {
-					return Response.json(
-						{ error: "Failed to update avatar" },
-						{ status: 500 },
-					);
+					const user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "update-avatar", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					const body = await req.json();
+					const { avatar } = body;
+					if (!avatar) {
+						return Response.json({ error: "Avatar required" }, { status: 400 });
+					}
+					try {
+						updateUserAvatar(user.id, avatar);
+						return Response.json({ success: true });
+					} catch {
+						return Response.json(
+							{ error: "Failed to update avatar" },
+							{ status: 500 },
+						);
+					}
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
 		"/api/user/notifications": {
 			PUT: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
-				const rateLimitError = enforceRateLimit(req, "update-notifications", {
-					ip: { max: 10, windowSeconds: 5 * 60 },
-				});
-				if (rateLimitError) return rateLimitError;
-
-				const body = await req.json();
-				const { email_notifications_enabled } = body;
-				if (typeof email_notifications_enabled !== "boolean") {
-					return Response.json(
-						{ error: "email_notifications_enabled must be a boolean" },
-						{ status: 400 },
-					);
-				}
 				try {
-					db.run(
-						"UPDATE users SET email_notifications_enabled = ? WHERE id = ?",
-						[email_notifications_enabled ? 1 : 0, user.id],
-					);
-					return Response.json({ success: true });
-				} catch {
-					return Response.json(
-						{ error: "Failed to update notification settings" },
-						{ status: 500 },
-					);
+					const user = requireAuth(req);
+
+					const rateLimitError = enforceRateLimit(req, "update-notifications", {
+						ip: { max: 10, windowSeconds: 5 * 60 },
+					});
+					if (rateLimitError) return rateLimitError;
+
+					const body = await req.json();
+					const { email_notifications_enabled } = body;
+					if (typeof email_notifications_enabled !== "boolean") {
+						return Response.json(
+							{ error: "email_notifications_enabled must be a boolean" },
+							{ status: 400 },
+						);
+					}
+					try {
+						db.run(
+							"UPDATE users SET email_notifications_enabled = ? WHERE id = ?",
+							[email_notifications_enabled ? 1 : 0, user.id],
+						);
+						return Response.json({ success: true });
+					} catch {
+						return Response.json(
+							{ error: "Failed to update notification settings" },
+							{ status: 500 },
+						);
+					}
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
 		"/api/billing/checkout": {
 			POST: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
 				try {
+					const user = requireAuth(req);
+
 					const { polar } = await import("./lib/polar");
 
 					// Validated at startup
@@ -1462,27 +1442,16 @@ const server = Bun.serve({
 					});
 
 					return Response.json({ url: checkout.url });
-				} catch (error) {
-					console.error("Failed to create checkout:", error);
-					return Response.json(
-						{ error: "Failed to create checkout session" },
-						{ status: 500 },
-					);
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
 		"/api/billing/subscription": {
 			GET: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
 				try {
+					const user = requireAuth(req);
+
 					// Get subscription from database
 					const subscription = db
 						.query<
@@ -1505,27 +1474,16 @@ const server = Bun.serve({
 					}
 
 					return Response.json({ subscription });
-				} catch (error) {
-					console.error("Failed to fetch subscription:", error);
-					return Response.json(
-						{ error: "Failed to fetch subscription" },
-						{ status: 500 },
-					);
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},
 		"/api/billing/portal": {
 			POST: async (req) => {
-				const sessionId = getSessionFromRequest(req);
-				if (!sessionId) {
-					return Response.json({ error: "Not authenticated" }, { status: 401 });
-				}
-				const user = getUserBySession(sessionId);
-				if (!user) {
-					return Response.json({ error: "Invalid session" }, { status: 401 });
-				}
-
 				try {
+					const user = requireAuth(req);
+
 					const { polar } = await import("./lib/polar");
 
 					// Get subscription to find customer ID
@@ -1553,12 +1511,8 @@ const server = Bun.serve({
 					});
 
 					return Response.json({ url: session.customerPortalUrl });
-				} catch (error) {
-					console.error("Failed to create portal session:", error);
-					return Response.json(
-						{ error: "Failed to create portal session" },
-						{ status: 500 },
-					);
+				} catch (err) {
+					return handleError(err);
 				}
 			},
 		},

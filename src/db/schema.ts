@@ -253,6 +253,31 @@ const migrations = [
 			CREATE INDEX IF NOT EXISTS idx_transcriptions_section_id ON transcriptions(section_id);
 		`,
 	},
+	{
+		version: 3,
+		name: "Add voting system for collaborative recording selection",
+		sql: `
+			-- Add vote count to transcriptions
+			ALTER TABLE transcriptions ADD COLUMN vote_count INTEGER NOT NULL DEFAULT 0;
+
+			-- Add auto-submitted flag to track if transcription was auto-selected
+			ALTER TABLE transcriptions ADD COLUMN auto_submitted BOOLEAN DEFAULT 0;
+
+			-- Create votes table to track who voted for which recording
+			CREATE TABLE IF NOT EXISTS recording_votes (
+				id TEXT PRIMARY KEY,
+				transcription_id TEXT NOT NULL,
+				user_id INTEGER NOT NULL,
+				created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+				FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE CASCADE,
+				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+				UNIQUE(transcription_id, user_id)
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_recording_votes_transcription_id ON recording_votes(transcription_id);
+			CREATE INDEX IF NOT EXISTS idx_recording_votes_user_id ON recording_votes(user_id);
+		`,
+	},
 ];
 
 function getCurrentVersion(): number {

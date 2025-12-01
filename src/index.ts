@@ -92,10 +92,19 @@ import {
 	WhisperServiceManager,
 } from "./lib/transcription";
 import {
-	extractAudioCreationDate,
 	findMatchingMeetingTime,
 	getDayName,
 } from "./lib/audio-metadata";
+import {
+	checkAutoSubmit,
+	deletePendingRecording,
+	getEnrolledUserCount,
+	getPendingRecordings,
+	getUserVoteForMeeting,
+	markAsAutoSubmitted,
+	removeVote,
+	voteForRecording,
+} from "./lib/voting";
 import {
 	validateClassId,
 	validateCourseCode,
@@ -2113,36 +2122,14 @@ const server = Bun.serve({
 
 					let creationDate: Date | null = null;
 
-					// Try client-provided timestamp first (most accurate - from original file)
+					// Use client-provided timestamp (from File.lastModified)
 					if (fileTimestampStr) {
 						const timestamp = Number.parseInt(fileTimestampStr, 10);
 						if (!Number.isNaN(timestamp)) {
 							creationDate = new Date(timestamp);
 							console.log(
-								`[Upload] Using client-provided file timestamp: ${creationDate.toISOString()}`,
+								`[Upload] Using file timestamp: ${creationDate.toISOString()}`,
 							);
-						}
-					}
-
-					// Fallback: extract from audio file metadata
-					if (!creationDate) {
-						// Save file temporarily
-						const tempId = crypto.randomUUID();
-						const fileExtension = file.name.split(".").pop()?.toLowerCase();
-						const tempFilename = `temp-${tempId}.${fileExtension}`;
-						const tempPath = `./uploads/${tempFilename}`;
-
-						await Bun.write(tempPath, file);
-
-						try {
-							creationDate = await extractAudioCreationDate(tempPath);
-						} finally {
-							// Clean up temp file
-							try {
-								await Bun.$`rm ${tempPath}`.quiet();
-							} catch {
-								// Ignore cleanup errors
-							}
 						}
 					}
 
@@ -2150,7 +2137,7 @@ const server = Bun.serve({
 						return Response.json({
 							detected: false,
 							meeting_time_id: null,
-							message: "Could not extract creation date from audio file",
+							message: "Could not extract creation date from file",
 						});
 					}
 
@@ -2189,6 +2176,239 @@ const server = Bun.serve({
 						date: creationDate.toISOString(),
 						message: `No meeting time matches ${dayName}`,
 					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/transcriptions/:id/meeting-time": {
+			PATCH: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const transcriptionId = req.params.id;
+
+					const body = await req.json();
+					const meetingTimeId = body.meeting_time_id;
+
+					if (!meetingTimeId) {
+						return Response.json(
+							{ error: "meeting_time_id required" },
+							{ status: 400 },
+						);
+					}
+
+					// Verify transcription ownership
+					const transcription = db
+						.query<
+							{ id: string; user_id: number; class_id: string | null },
+							[string]
+						>("SELECT id, user_id, class_id FROM transcriptions WHERE id = ?")
+						.get(transcriptionId);
+
+					if (!transcription) {
+						return Response.json(
+							{ error: "Transcription not found" },
+							{ status: 404 },
+						);
+					}
+
+					if (transcription.user_id !== user.id && user.role !== "admin") {
+						return Response.json({ error: "Forbidden" }, { status: 403 });
+					}
+
+					// Verify meeting time belongs to the class
+					if (transcription.class_id) {
+						const meetingTime = db
+							.query<{ id: string }, [string, string]>(
+								"SELECT id FROM meeting_times WHERE id = ? AND class_id = ?",
+							)
+							.get(meetingTimeId, transcription.class_id);
+
+						if (!meetingTime) {
+							return Response.json(
+								{
+									error:
+										"Meeting time does not belong to the class for this transcription",
+								},
+								{ status: 400 },
+							);
+						}
+					}
+
+					// Update meeting time
+					db.run(
+						"UPDATE transcriptions SET meeting_time_id = ? WHERE id = ?",
+						[meetingTimeId, transcriptionId],
+					);
+
+					return Response.json({
+						success: true,
+						message: "Meeting time updated successfully",
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:classId/meetings/:meetingTimeId/recordings": {
+			GET: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const classId = req.params.classId;
+					const meetingTimeId = req.params.meetingTimeId;
+
+					// Verify user is enrolled in the class
+					const enrolled = isUserEnrolledInClass(user.id, classId);
+					if (!enrolled && user.role !== "admin") {
+						return Response.json(
+							{ error: "Not enrolled in this class" },
+							{ status: 403 },
+						);
+					}
+
+					// Get user's section for filtering (admins see all)
+					const userSection =
+						user.role === "admin" ? null : getUserSection(user.id, classId);
+
+					const recordings = getPendingRecordings(
+						classId,
+						meetingTimeId,
+						userSection,
+					);
+					const totalUsers = getEnrolledUserCount(classId);
+					const userVote = getUserVoteForMeeting(
+						user.id,
+						classId,
+						meetingTimeId,
+					);
+
+					// Check if any recording should be auto-submitted
+					const winningId = checkAutoSubmit(
+						classId,
+						meetingTimeId,
+						userSection,
+					);
+
+					return Response.json({
+						recordings,
+						total_users: totalUsers,
+						user_vote: userVote,
+						vote_threshold: Math.ceil(totalUsers * 0.4),
+						winning_recording_id: winningId,
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/recordings/:id/vote": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const recordingId = req.params.id;
+
+					// Verify user is enrolled in the recording's class
+					const recording = db
+						.query<
+							{ class_id: string; meeting_time_id: string; status: string },
+							[string]
+						>(
+							"SELECT class_id, meeting_time_id, status FROM transcriptions WHERE id = ?",
+						)
+						.get(recordingId);
+
+					if (!recording) {
+						return Response.json(
+							{ error: "Recording not found" },
+							{ status: 404 },
+						);
+					}
+
+					if (recording.status !== "pending") {
+						return Response.json(
+							{ error: "Can only vote on pending recordings" },
+							{ status: 400 },
+						);
+					}
+
+					const enrolled = isUserEnrolledInClass(user.id, recording.class_id);
+					if (!enrolled && user.role !== "admin") {
+						return Response.json(
+							{ error: "Not enrolled in this class" },
+							{ status: 403 },
+						);
+					}
+
+					// Remove existing vote for this meeting time
+					const existingVote = getUserVoteForMeeting(
+						user.id,
+						recording.class_id,
+						recording.meeting_time_id,
+					);
+					if (existingVote) {
+						removeVote(existingVote, user.id);
+					}
+
+					// Add new vote
+					const success = voteForRecording(recordingId, user.id);
+
+					// Get user's section for auto-submit check
+					const userSection =
+						user.role === "admin"
+							? null
+							: getUserSection(user.id, recording.class_id);
+
+					// Check if auto-submit threshold reached
+					const winningId = checkAutoSubmit(
+						recording.class_id,
+						recording.meeting_time_id,
+						userSection,
+					);
+					if (winningId) {
+						markAsAutoSubmitted(winningId);
+						// Start transcription
+						const winningRecording = db
+							.query<{ filename: string }, [string]>(
+								"SELECT filename FROM transcriptions WHERE id = ?",
+							)
+							.get(winningId);
+						if (winningRecording) {
+							whisperService.startTranscription(
+								winningId,
+								winningRecording.filename,
+							);
+						}
+					}
+
+					return Response.json({
+						success,
+						winning_recording_id: winningId,
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/recordings/:id": {
+			DELETE: async (req) => {
+				try {
+					const user = requireAuth(req);
+					const recordingId = req.params.id;
+
+					const success = deletePendingRecording(
+						recordingId,
+						user.id,
+						user.role === "admin",
+					);
+
+					if (!success) {
+						return Response.json(
+							{ error: "Cannot delete this recording" },
+							{ status: 403 },
+						);
+					}
+
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}
@@ -2336,9 +2556,6 @@ const server = Bun.serve({
 					const formData = await req.formData();
 					const file = formData.get("audio") as File;
 					const classId = formData.get("class_id") as string | null;
-					const meetingTimeId = formData.get("meeting_time_id") as
-						| string
-						| null;
 					const sectionId = formData.get("section_id") as string | null;
 
 					if (!file) throw ValidationErrors.missingField("audio");
@@ -2406,57 +2623,14 @@ const server = Bun.serve({
 					const uploadDir = "./uploads";
 					await Bun.write(`${uploadDir}/${filename}`, file);
 
-					// Auto-detect meeting time from audio metadata if class provided and no meeting_time_id
-					let finalMeetingTimeId = meetingTimeId;
-					if (classId && !meetingTimeId) {
-						try {
-							// Extract creation date from audio file
-							const creationDate = await extractAudioCreationDate(
-								`${uploadDir}/${filename}`,
-							);
-
-							if (creationDate) {
-								// Get meeting times for this class
-								const meetingTimes = getMeetingTimesForClass(classId);
-
-								if (meetingTimes.length > 0) {
-									// Find matching meeting time based on day of week
-									const matchedId = findMatchingMeetingTime(
-										creationDate,
-										meetingTimes,
-									);
-
-									if (matchedId) {
-										finalMeetingTimeId = matchedId;
-										const dayName = getDayName(creationDate);
-										console.log(
-											`[Upload] Auto-detected meeting time for ${dayName} (${creationDate.toISOString()}) -> ${matchedId}`,
-										);
-									} else {
-										const dayName = getDayName(creationDate);
-										console.log(
-											`[Upload] No meeting time matches ${dayName}, leaving unassigned`,
-										);
-									}
-								}
-							}
-						} catch (error) {
-							// Non-fatal: just log and continue without auto-detection
-							console.warn(
-								"[Upload] Failed to auto-detect meeting time:",
-								error instanceof Error ? error.message : "Unknown error",
-							);
-						}
-					}
-
-					// Create database record
+					// Create database record (without meeting_time_id - will be set later via PATCH)
 					db.run(
 						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, section_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 						[
 							transcriptionId,
 							user.id,
 							classId,
-							finalMeetingTimeId,
+							null, // meeting_time_id will be set via PATCH endpoint
 							sectionId,
 							filename,
 							file.name,
@@ -2470,7 +2644,6 @@ const server = Bun.serve({
 					return Response.json(
 						{
 							id: transcriptionId,
-							meeting_time_id: finalMeetingTimeId,
 							message: "Upload successful",
 						},
 						{ status: 201 },

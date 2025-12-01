@@ -2,6 +2,7 @@ import { css, html, LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import "./upload-recording-modal.ts";
 import "./vtt-viewer.ts";
+import "./pending-recordings-view.ts";
 
 interface Class {
 	id: string;
@@ -492,6 +493,9 @@ export class ClassView extends LitElement {
 			);
 		}
 
+		// Exclude pending recordings (they're shown in the voting section)
+		filtered = filtered.filter((t) => t.status !== "pending");
+
 		return filtered;
 	}
 
@@ -630,6 +634,29 @@ export class ClassView extends LitElement {
           </button>
         </div>
 
+        <!-- Pending Recordings for Voting -->
+        ${
+					this.meetingTimes.map((meeting) => {
+						const pendingCount = this.transcriptions.filter(
+							(t) => t.meeting_time_id === meeting.id && t.status === "pending",
+						).length;
+
+						// Only show if there are pending recordings
+						if (pendingCount === 0) return "";
+
+						return html`
+            <div style="margin-bottom: 2rem;">
+              <pending-recordings-view
+                .classId=${this.classId}
+                .meetingTimeId=${meeting.id}
+                .meetingTimeLabel=${meeting.label}
+              ></pending-recordings-view>
+            </div>
+          `;
+					})
+				}
+
+        <!-- Completed/Processing Transcriptions -->
         ${
 					this.filteredTranscriptions.length === 0
 						? html`

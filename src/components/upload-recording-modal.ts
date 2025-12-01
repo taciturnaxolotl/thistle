@@ -23,9 +23,13 @@ export class UploadRecordingModal extends LitElement {
 	@state() private selectedMeetingTimeId: string | null = null;
 	@state() private selectedSectionId: string | null = null;
 	@state() private uploading = false;
+	@state() private uploadProgress = 0;
 	@state() private error: string | null = null;
 	@state() private detectedMeetingTime: string | null = null;
 	@state() private detectingMeetingTime = false;
+	@state() private uploadComplete = false;
+	@state() private uploadedTranscriptionId: string | null = null;
+	@state() private submitting = false;
 
 	static override styles = css`
     :host {
@@ -285,11 +289,73 @@ export class UploadRecordingModal extends LitElement {
 			this.error = null;
 			this.detectedMeetingTime = null;
 			this.selectedMeetingTimeId = null;
+			this.uploadComplete = false;
+			this.uploadedTranscriptionId = null;
+			this.submitting = false;
 
-			// Auto-detect meeting time from file metadata
 			if (this.selectedFile && this.classId) {
-				await this.detectMeetingTime();
+				// Start both detection and upload in parallel
+				this.detectMeetingTime();
+				this.startBackgroundUpload();
 			}
+		}
+	}
+
+	private async startBackgroundUpload() {
+		if (!this.selectedFile) return;
+
+		this.uploading = true;
+		this.uploadProgress = 0;
+
+		try {
+			const formData = new FormData();
+			formData.append("audio", this.selectedFile);
+			formData.append("class_id", this.classId);
+
+			// Use user's section by default, or allow override
+			const sectionToUse = this.selectedSectionId || this.userSection;
+			if (sectionToUse) {
+				formData.append("section_id", sectionToUse);
+			}
+
+			const xhr = new XMLHttpRequest();
+
+			// Track upload progress
+			xhr.upload.addEventListener("progress", (e) => {
+				if (e.lengthComputable) {
+					this.uploadProgress = Math.round((e.loaded / e.total) * 100);
+				}
+			});
+
+			// Handle completion
+			xhr.addEventListener("load", () => {
+				if (xhr.status >= 200 && xhr.status < 300) {
+					this.uploadComplete = true;
+					this.uploading = false;
+					const response = JSON.parse(xhr.responseText);
+					this.uploadedTranscriptionId = response.id;
+				} else {
+					this.uploading = false;
+					const response = JSON.parse(xhr.responseText);
+					this.error = response.error || "Upload failed";
+				}
+			});
+
+			// Handle errors
+			xhr.addEventListener("error", () => {
+				this.uploading = false;
+				this.error = "Upload failed. Please try again.";
+			});
+
+			xhr.open("POST", "/api/transcriptions");
+			xhr.send(formData);
+		} catch (error) {
+			console.error("Upload failed:", error);
+			this.uploading = false;
+			this.error =
+				error instanceof Error
+					? error.message
+					: "Upload failed. Please try again.";
 		}
 	}
 
@@ -344,8 +410,43 @@ export class UploadRecordingModal extends LitElement {
 		this.selectedSectionId = select.value || null;
 	}
 
+	private async handleSubmit() {
+		if (!this.uploadedTranscriptionId || !this.selectedMeetingTimeId) return;
+
+		this.submitting = true;
+		this.error = null;
+
+		try {
+			const response = await fetch(
+				`/api/transcriptions/${this.uploadedTranscriptionId}/meeting-time`,
+				{
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						meeting_time_id: this.selectedMeetingTimeId,
+					}),
+				},
+			);
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to update meeting time";
+				this.submitting = false;
+				return;
+			}
+
+			// Success - close modal and refresh
+			this.dispatchEvent(new CustomEvent("upload-success"));
+			this.handleClose();
+		} catch (error) {
+			console.error("Failed to update meeting time:", error);
+			this.error = "Failed to update meeting time";
+			this.submitting = false;
+		}
+	}
+
 	private handleClose() {
-		if (this.uploading) return;
+		if (this.uploading || this.submitting) return;
 		this.open = false;
 		this.selectedFile = null;
 		this.selectedMeetingTimeId = null;
@@ -353,57 +454,11 @@ export class UploadRecordingModal extends LitElement {
 		this.error = null;
 		this.detectedMeetingTime = null;
 		this.detectingMeetingTime = false;
+		this.uploadComplete = false;
+		this.uploadProgress = 0;
+		this.uploadedTranscriptionId = null;
+		this.submitting = false;
 		this.dispatchEvent(new CustomEvent("close"));
-	}
-
-	private async handleUpload() {
-		if (!this.selectedFile) {
-			this.error = "Please select a file to upload";
-			return;
-		}
-
-		if (!this.selectedMeetingTimeId) {
-			this.error = "Please select a meeting time";
-			return;
-		}
-
-		this.uploading = true;
-		this.error = null;
-
-		try {
-			const formData = new FormData();
-			formData.append("audio", this.selectedFile);
-			formData.append("class_id", this.classId);
-			formData.append("meeting_time_id", this.selectedMeetingTimeId);
-
-			// Use user's section by default, or allow override
-			const sectionToUse = this.selectedSectionId || this.userSection;
-			if (sectionToUse) {
-				formData.append("section_id", sectionToUse);
-			}
-
-			const response = await fetch("/api/transcriptions", {
-				method: "POST",
-				body: formData,
-			});
-
-			if (!response.ok) {
-				const data = await response.json();
-				throw new Error(data.error || "Upload failed");
-			}
-
-			// Success
-			this.dispatchEvent(new CustomEvent("upload-success"));
-			this.handleClose();
-		} catch (error) {
-			console.error("Upload failed:", error);
-			this.error =
-				error instanceof Error
-					? error.message
-					: "Upload failed. Please try again.";
-		} finally {
-			this.uploading = false;
-		}
 	}
 
 	override render() {
@@ -508,23 +563,45 @@ export class UploadRecordingModal extends LitElement {
               `
 								: ""
 						}
+
+            ${
+							this.uploading || this.uploadComplete
+								? html`
+                <div class="form-group">
+                  <label>Upload Status</label>
+                  <div style="background: color-mix(in srgb, var(--primary) 5%, transparent); border-radius: 8px; padding: 1rem;">
+                    ${
+											this.uploadComplete
+												? html`
+                      <div style="color: green; font-weight: 500;">
+                        ✓ Upload complete! Select a meeting time to continue.
+                      </div>
+                    `
+												: html`
+                      <div style="color: var(--text); font-weight: 500; margin-bottom: 0.5rem;">
+                        Uploading... ${this.uploadProgress}%
+                      </div>
+                      <div style="background: var(--secondary); border-radius: 4px; height: 8px; overflow: hidden;">
+                        <div style="background: var(--accent); height: 100%; width: ${this.uploadProgress}%; transition: width 0.3s;"></div>
+                      </div>
+                    `
+										}
+                  </div>
+                </div>
+              `
+								: ""
+						}
           </form>
 
           <div class="modal-footer">
-            <button class="btn-cancel" @click=${this.handleClose} ?disabled=${this.uploading}>
+            <button class="btn-cancel" @click=${this.handleClose} ?disabled=${this.uploading || this.submitting}>
               Cancel
             </button>
-            <button
-              class="btn-upload"
-              @click=${this.handleUpload}
-              ?disabled=${this.uploading || !this.selectedFile || !this.selectedMeetingTimeId}
-            >
-              ${
-								this.uploading
-									? html`<span class="uploading-text">Uploading...</span>`
-									: "Upload"
-							}
-            </button>
+            ${this.uploadComplete && this.selectedMeetingTimeId ? html`
+              <button class="btn-upload" @click=${this.handleSubmit} ?disabled=${this.submitting}>
+                ${this.submitting ? "Submitting..." : "Confirm & Submit"}
+              </button>
+            ` : ""}
           </div>
         </div>
       </div>

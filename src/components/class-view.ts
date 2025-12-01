@@ -637,9 +637,22 @@ export class ClassView extends LitElement {
         <!-- Pending Recordings for Voting -->
         ${
 					this.meetingTimes.map((meeting) => {
-						const pendingCount = this.transcriptions.filter(
-							(t) => t.meeting_time_id === meeting.id && t.status === "pending",
-						).length;
+						// Apply section filtering to pending recordings
+						const sectionFilter = this.selectedSectionFilter || this.userSection;
+						
+						const pendingCount = this.transcriptions.filter((t) => {
+							if (t.meeting_time_id !== meeting.id || t.status !== "pending") {
+								return false;
+							}
+							
+							// Filter by section if applicable
+							if (this.sections.length > 0 && sectionFilter) {
+								// Show recordings from user's section or no section (unassigned)
+								return t.section_id === sectionFilter || t.section_id === null;
+							}
+							
+							return true;
+						}).length;
 
 						// Only show if there are pending recordings
 						if (pendingCount === 0) return "";
@@ -650,6 +663,7 @@ export class ClassView extends LitElement {
                 .classId=${this.classId}
                 .meetingTimeId=${meeting.id}
                 .meetingTimeLabel=${meeting.label}
+                .sectionId=${sectionFilter}
               ></pending-recordings-view>
             </div>
           `;

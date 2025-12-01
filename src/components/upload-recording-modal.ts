@@ -316,11 +316,17 @@ export class UploadRecordingModal extends LitElement {
 			formData.append("audio", this.selectedFile);
 			formData.append("class_id", this.classId);
 
-			// Use user's section by default, or allow override
-			const sectionToUse = this.selectedSectionId || this.userSection;
-			if (sectionToUse) {
-				formData.append("section_id", sectionToUse);
+			// Send recording date (from date picker or file timestamp)
+			if (this.selectedDate) {
+				// Convert YYYY-MM-DD to timestamp (noon local time)
+				const date = new Date(`${this.selectedDate}T12:00:00`);
+				formData.append("recording_date", Math.floor(date.getTime() / 1000).toString());
+			} else if (this.selectedFile.lastModified) {
+				// Use file's lastModified as recording date
+				formData.append("recording_date", Math.floor(this.selectedFile.lastModified / 1000).toString());
 			}
+
+			// Don't send section_id yet - will be set via PATCH when user confirms
 
 			const xhr = new XMLHttpRequest();
 
@@ -434,6 +440,9 @@ export class UploadRecordingModal extends LitElement {
 		this.error = null;
 
 		try {
+			// Get section to use (selected override or user's section)
+			const sectionToUse = this.selectedSectionId || this.userSection;
+
 			const response = await fetch(
 				`/api/transcriptions/${this.uploadedTranscriptionId}/meeting-time`,
 				{
@@ -441,6 +450,7 @@ export class UploadRecordingModal extends LitElement {
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						meeting_time_id: this.selectedMeetingTimeId,
+						section_id: sectionToUse,
 					}),
 				},
 			);

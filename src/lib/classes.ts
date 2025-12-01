@@ -406,7 +406,7 @@ export function getTranscriptionsForClass(classId: string) {
 			`SELECT id, user_id, meeting_time_id, section_id, filename, original_filename, status, progress, error_message, created_at, updated_at
        FROM transcriptions
        WHERE class_id = ?
-       ORDER BY created_at DESC`,
+       ORDER BY recording_date DESC, created_at DESC`,
 		)
 		.all(classId);
 }

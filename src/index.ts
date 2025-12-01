@@ -2189,6 +2189,7 @@ const server = Bun.serve({
 
 					const body = await req.json();
 					const meetingTimeId = body.meeting_time_id;
+					const sectionId = body.section_id;
 
 					if (!meetingTimeId) {
 						return Response.json(
@@ -2235,11 +2236,18 @@ const server = Bun.serve({
 						}
 					}
 
-					// Update meeting time
-					db.run(
-						"UPDATE transcriptions SET meeting_time_id = ? WHERE id = ?",
-						[meetingTimeId, transcriptionId],
-					);
+					// Update meeting time and optionally section_id
+					if (sectionId !== undefined) {
+						db.run(
+							"UPDATE transcriptions SET meeting_time_id = ?, section_id = ? WHERE id = ?",
+							[meetingTimeId, sectionId, transcriptionId],
+						);
+					} else {
+						db.run(
+							"UPDATE transcriptions SET meeting_time_id = ? WHERE id = ?",
+							[meetingTimeId, transcriptionId],
+						);
+					}
 
 					return Response.json({
 						success: true,
@@ -2266,14 +2274,20 @@ const server = Bun.serve({
 						);
 					}
 
-					// Get user's section for filtering (admins see all)
-					const userSection =
-						user.role === "admin" ? null : getUserSection(user.id, classId);
+					// Get section filter from query params or use user's section
+					const url = new URL(req.url);
+					const sectionParam = url.searchParams.get("section_id");
+					const sectionFilter =
+						sectionParam !== null
+							? sectionParam || null // empty string becomes null
+							: user.role === "admin"
+								? null
+								: getUserSection(user.id, classId);
 
 					const recordings = getPendingRecordings(
 						classId,
 						meetingTimeId,
-						userSection,
+						sectionFilter,
 					);
 					const totalUsers = getEnrolledUserCount(classId);
 					const userVote = getUserVoteForMeeting(
@@ -2286,7 +2300,7 @@ const server = Bun.serve({
 					const winningId = checkAutoSubmit(
 						classId,
 						meetingTimeId,
-						userSection,
+						sectionFilter,
 					);
 
 					return Response.json({
@@ -2557,6 +2571,9 @@ const server = Bun.serve({
 					const file = formData.get("audio") as File;
 					const classId = formData.get("class_id") as string | null;
 					const sectionId = formData.get("section_id") as string | null;
+					const recordingDateStr = formData.get("recording_date") as
+						| string
+						| null;
 
 					if (!file) throw ValidationErrors.missingField("audio");
 
@@ -2623,9 +2640,14 @@ const server = Bun.serve({
 					const uploadDir = "./uploads";
 					await Bun.write(`${uploadDir}/${filename}`, file);
 
+					// Parse recording date (default to current time if not provided)
+					const recordingDate = recordingDateStr
+						? Number.parseInt(recordingDateStr, 10)
+						: Math.floor(Date.now() / 1000);
+
 					// Create database record (without meeting_time_id - will be set later via PATCH)
 					db.run(
-						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, section_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, section_id, filename, original_filename, status, recording_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 						[
 							transcriptionId,
 							user.id,
@@ -2635,6 +2657,7 @@ const server = Bun.serve({
 							filename,
 							file.name,
 							"pending",
+							recordingDate,
 						],
 					);
 

@@ -278,6 +278,21 @@ const migrations = [
 			CREATE INDEX IF NOT EXISTS idx_recording_votes_user_id ON recording_votes(user_id);
 		`,
 	},
+	{
+		version: 4,
+		name: "Add recording_date to transcriptions for chronological ordering",
+		sql: `
+			-- Add recording_date (timestamp when the recording was made, not uploaded)
+			-- Defaults to created_at for existing records
+			ALTER TABLE transcriptions ADD COLUMN recording_date INTEGER;
+			
+			-- Set recording_date to created_at for existing records
+			UPDATE transcriptions SET recording_date = created_at WHERE recording_date IS NULL;
+
+			-- Create index for ordering by recording date
+			CREATE INDEX IF NOT EXISTS idx_transcriptions_recording_date ON transcriptions(recording_date);
+		`,
+	},
 ];
 
 function getCurrentVersion(): number {

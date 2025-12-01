@@ -23,6 +23,7 @@ export class PendingRecordingsView extends LitElement {
 	@property({ type: String }) classId = "";
 	@property({ type: String }) meetingTimeId = "";
 	@property({ type: String }) meetingTimeLabel = "";
+	@property({ type: String }) sectionId: string | null = null;
 
 	@state() private recordings: PendingRecording[] = [];
 	@state() private userVote: string | null = null;
@@ -241,9 +242,16 @@ export class PendingRecordingsView extends LitElement {
 		this.loadingInProgress = true;
 
 		try {
-			const response = await fetch(
+			// Build URL with optional section_id parameter
+			const url = new URL(
 				`/api/classes/${this.classId}/meetings/${this.meetingTimeId}/recordings`,
+				window.location.origin,
 			);
+			if (this.sectionId !== null) {
+				url.searchParams.set("section_id", this.sectionId);
+			}
+
+			const response = await fetch(url.toString());
 
 			if (!response.ok) {
 				throw new Error("Failed to load recordings");

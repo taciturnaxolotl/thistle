@@ -30,6 +30,7 @@ export class UploadRecordingModal extends LitElement {
 	@state() private uploadComplete = false;
 	@state() private uploadedTranscriptionId: string | null = null;
 	@state() private submitting = false;
+	@state() private selectedDate: string = "";
 
 	static override styles = css`
     :host {
@@ -230,7 +231,6 @@ export class UploadRecordingModal extends LitElement {
 
     .meeting-time-selector {
       display: flex;
-      flex-direction: column;
       gap: 0.5rem;
     }
 
@@ -292,8 +292,12 @@ export class UploadRecordingModal extends LitElement {
 			this.uploadComplete = false;
 			this.uploadedTranscriptionId = null;
 			this.submitting = false;
+			this.selectedDate = "";
 
 			if (this.selectedFile && this.classId) {
+				// Set initial date from file
+				const fileDate = new Date(this.selectedFile.lastModified);
+				this.selectedDate = fileDate.toISOString().split("T")[0] || "";
 				// Start both detection and upload in parallel
 				this.detectMeetingTime();
 				this.startBackgroundUpload();
@@ -360,23 +364,27 @@ export class UploadRecordingModal extends LitElement {
 	}
 
 	private async detectMeetingTime() {
-		if (!this.selectedFile || !this.classId) return;
+		if (!this.classId) return;
 
 		this.detectingMeetingTime = true;
 
 		try {
 			const formData = new FormData();
-			formData.append("audio", this.selectedFile);
 			formData.append("class_id", this.classId);
 
-			// Send the file's original lastModified timestamp (preserved by browser)
-			// This is more accurate than server-side file timestamps
-			if (this.selectedFile.lastModified) {
-				formData.append(
-					"file_timestamp",
-					this.selectedFile.lastModified.toString(),
-				);
+			// Use selected date or file's lastModified timestamp
+			let timestamp: number;
+			if (this.selectedDate) {
+				// Convert YYYY-MM-DD to timestamp (noon local time to avoid timezone issues)
+				const date = new Date(`${this.selectedDate}T12:00:00`);
+				timestamp = date.getTime();
+			} else if (this.selectedFile?.lastModified) {
+				timestamp = this.selectedFile.lastModified;
+			} else {
+				return;
 			}
+
+			formData.append("file_timestamp", timestamp.toString());
 
 			const response = await fetch("/api/transcriptions/detect-meeting-time", {
 				method: "POST",
@@ -403,6 +411,15 @@ export class UploadRecordingModal extends LitElement {
 
 	private handleMeetingTimeSelect(meetingTimeId: string) {
 		this.selectedMeetingTimeId = meetingTimeId;
+	}
+
+	private handleDateChange(e: Event) {
+		const input = e.target as HTMLInputElement;
+		this.selectedDate = input.value;
+		// Re-detect meeting time when date changes
+		if (this.selectedDate && this.classId) {
+			this.detectMeetingTime();
+		}
 	}
 
 	private handleSectionChange(e: Event) {
@@ -458,6 +475,7 @@ export class UploadRecordingModal extends LitElement {
 		this.uploadProgress = 0;
 		this.uploadedTranscriptionId = null;
 		this.submitting = false;
+		this.selectedDate = "";
 		this.dispatchEvent(new CustomEvent("close"));
 	}
 
@@ -506,6 +524,21 @@ export class UploadRecordingModal extends LitElement {
 							this.selectedFile
 								? html`
                 <div class="form-group">
+                  <label for="date">Recording Date</label>
+                  <input
+                    type="date"
+                    id="date"
+                    .value=${this.selectedDate}
+                    @change=${this.handleDateChange}
+                    ?disabled=${this.uploading}
+                    style="padding: 0.75rem; border: 1px solid var(--secondary); border-radius: 4px; font-size: 0.875rem; color: var(--text); background: var(--background);"
+                  />
+                  <div class="help-text">
+                    Change the date to detect the correct meeting time
+                  </div>
+                </div>
+
+                <div class="form-group">
                   <label>Meeting Time</label>
                   ${
 										this.detectingMeetingTime
@@ -540,24 +573,27 @@ export class UploadRecordingModal extends LitElement {
 						}
 
             ${
-							this.sections.length > 1 && this.selectedFile
+							this.sections.length > 0 && this.selectedFile
 								? html`
                 <div class="form-group">
-                  <label for="section">Section (optional)</label>
+                  <label for="section">Section</label>
                   <select
                     id="section"
                     @change=${this.handleSectionChange}
                     ?disabled=${this.uploading}
+                    .value=${this.selectedSectionId || this.userSection || ""}
                   >
                     <option value="">Use my section ${this.userSection ? `(${this.sections.find((s) => s.id === this.userSection)?.section_number})` : ""}</option>
-                    ${this.sections.map(
-											(section) => html`
+                    ${this.sections
+											.filter((section) => section.id !== this.userSection)
+											.map(
+												(section) => html`
                       <option value=${section.id}>${section.section_number}</option>
                     `,
-										)}
+											)}
                   </select>
                   <div class="help-text">
-                    Override which section this recording is for
+                    Select which section this recording is for (defaults to your section)
                   </div>
                 </div>
               `
@@ -597,11 +633,15 @@ export class UploadRecordingModal extends LitElement {
             <button class="btn-cancel" @click=${this.handleClose} ?disabled=${this.uploading || this.submitting}>
               Cancel
             </button>
-            ${this.uploadComplete && this.selectedMeetingTimeId ? html`
+            ${
+							this.uploadComplete && this.selectedMeetingTimeId
+								? html`
               <button class="btn-upload" @click=${this.handleSubmit} ?disabled=${this.submitting}>
                 ${this.submitting ? "Submitting..." : "Confirm & Submit"}
               </button>
-            ` : ""}
+            `
+								: ""
+						}
           </div>
         </div>
       </div>

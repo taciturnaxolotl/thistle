@@ -92,6 +92,11 @@ import {
 	WhisperServiceManager,
 } from "./lib/transcription";
 import {
+	extractAudioCreationDate,
+	findMatchingMeetingTime,
+	getDayName,
+} from "./lib/audio-metadata";
+import {
 	validateClassId,
 	validateCourseCode,
 	validateCourseName,
@@ -2082,6 +2087,113 @@ const server = Bun.serve({
 				}
 			},
 		},
+		"/api/transcriptions/detect-meeting-time": {
+			POST: async (req) => {
+				try {
+					const user = requireAuth(req);
+
+					const formData = await req.formData();
+					const file = formData.get("audio") as File;
+					const classId = formData.get("class_id") as string | null;
+					const fileTimestampStr = formData.get("file_timestamp") as
+						| string
+						| null;
+
+					if (!file) throw ValidationErrors.missingField("audio");
+					if (!classId) throw ValidationErrors.missingField("class_id");
+
+					// Verify user is enrolled in the class
+					const enrolled = isUserEnrolledInClass(user.id, classId);
+					if (!enrolled && user.role !== "admin") {
+						return Response.json(
+							{ error: "Not enrolled in this class" },
+							{ status: 403 },
+						);
+					}
+
+					let creationDate: Date | null = null;
+
+					// Try client-provided timestamp first (most accurate - from original file)
+					if (fileTimestampStr) {
+						const timestamp = Number.parseInt(fileTimestampStr, 10);
+						if (!Number.isNaN(timestamp)) {
+							creationDate = new Date(timestamp);
+							console.log(
+								`[Upload] Using client-provided file timestamp: ${creationDate.toISOString()}`,
+							);
+						}
+					}
+
+					// Fallback: extract from audio file metadata
+					if (!creationDate) {
+						// Save file temporarily
+						const tempId = crypto.randomUUID();
+						const fileExtension = file.name.split(".").pop()?.toLowerCase();
+						const tempFilename = `temp-${tempId}.${fileExtension}`;
+						const tempPath = `./uploads/${tempFilename}`;
+
+						await Bun.write(tempPath, file);
+
+						try {
+							creationDate = await extractAudioCreationDate(tempPath);
+						} finally {
+							// Clean up temp file
+							try {
+								await Bun.$`rm ${tempPath}`.quiet();
+							} catch {
+								// Ignore cleanup errors
+							}
+						}
+					}
+
+					if (!creationDate) {
+						return Response.json({
+							detected: false,
+							meeting_time_id: null,
+							message: "Could not extract creation date from audio file",
+						});
+					}
+
+					// Get meeting times for this class
+					const meetingTimes = getMeetingTimesForClass(classId);
+
+					if (meetingTimes.length === 0) {
+						return Response.json({
+							detected: false,
+							meeting_time_id: null,
+							message: "No meeting times configured for this class",
+						});
+					}
+
+					// Find matching meeting time based on day of week
+					const matchedId = findMatchingMeetingTime(
+						creationDate,
+						meetingTimes,
+					);
+
+					if (matchedId) {
+						const dayName = getDayName(creationDate);
+						return Response.json({
+							detected: true,
+							meeting_time_id: matchedId,
+							day: dayName,
+							date: creationDate.toISOString(),
+						});
+					}
+
+					const dayName = getDayName(creationDate);
+					return Response.json({
+						detected: false,
+						meeting_time_id: null,
+						day: dayName,
+						date: creationDate.toISOString(),
+						message: `No meeting time matches ${dayName}`,
+					});
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
 		"/api/transcriptions": {
 			GET: async (req) => {
 				try {
@@ -2294,6 +2406,49 @@ const server = Bun.serve({
 					const uploadDir = "./uploads";
 					await Bun.write(`${uploadDir}/${filename}`, file);
 
+					// Auto-detect meeting time from audio metadata if class provided and no meeting_time_id
+					let finalMeetingTimeId = meetingTimeId;
+					if (classId && !meetingTimeId) {
+						try {
+							// Extract creation date from audio file
+							const creationDate = await extractAudioCreationDate(
+								`${uploadDir}/${filename}`,
+							);
+
+							if (creationDate) {
+								// Get meeting times for this class
+								const meetingTimes = getMeetingTimesForClass(classId);
+
+								if (meetingTimes.length > 0) {
+									// Find matching meeting time based on day of week
+									const matchedId = findMatchingMeetingTime(
+										creationDate,
+										meetingTimes,
+									);
+
+									if (matchedId) {
+										finalMeetingTimeId = matchedId;
+										const dayName = getDayName(creationDate);
+										console.log(
+											`[Upload] Auto-detected meeting time for ${dayName} (${creationDate.toISOString()}) -> ${matchedId}`,
+										);
+									} else {
+										const dayName = getDayName(creationDate);
+										console.log(
+											`[Upload] No meeting time matches ${dayName}, leaving unassigned`,
+										);
+									}
+								}
+							}
+						} catch (error) {
+							// Non-fatal: just log and continue without auto-detection
+							console.warn(
+								"[Upload] Failed to auto-detect meeting time:",
+								error instanceof Error ? error.message : "Unknown error",
+							);
+						}
+					}
+
 					// Create database record
 					db.run(
 						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, section_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2301,7 +2456,7 @@ const server = Bun.serve({
 							transcriptionId,
 							user.id,
 							classId,
-							meetingTimeId,
+							finalMeetingTimeId,
 							sectionId,
 							filename,
 							file.name,
@@ -2315,6 +2470,7 @@ const server = Bun.serve({
 					return Response.json(
 						{
 							id: transcriptionId,
+							meeting_time_id: finalMeetingTimeId,
 							message: "Upload successful",
 						},
 						{ status: 201 },

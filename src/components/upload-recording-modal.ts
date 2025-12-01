@@ -24,6 +24,8 @@ export class UploadRecordingModal extends LitElement {
 	@state() private selectedSectionId: string | null = null;
 	@state() private uploading = false;
 	@state() private error: string | null = null;
+	@state() private detectedMeetingTime: string | null = null;
+	@state() private detectingMeetingTime = false;
 
 	static override styles = css`
     :host {
@@ -221,19 +223,120 @@ export class UploadRecordingModal extends LitElement {
       align-items: center;
       gap: 0.5rem;
     }
+
+    .meeting-time-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .meeting-time-button {
+      padding: 0.75rem 1rem;
+      background: var(--background);
+      border: 2px solid var(--secondary);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      color: var(--text);
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .meeting-time-button:hover {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 5%, transparent);
+    }
+
+    .meeting-time-button.selected {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .meeting-time-button.detected {
+      border-color: var(--accent);
+    }
+
+    .meeting-time-button.detected::after {
+      content: "✨ Auto-detected";
+      margin-left: auto;
+      font-size: 0.75rem;
+      opacity: 0.8;
+    }
+
+    .detecting-text {
+      font-size: 0.875rem;
+      color: var(--paynes-gray);
+      padding: 0.5rem;
+      text-align: center;
+      font-style: italic;
+    }
   `;
 
-	private handleFileSelect(e: Event) {
+	private async handleFileSelect(e: Event) {
 		const input = e.target as HTMLInputElement;
 		if (input.files && input.files.length > 0) {
 			this.selectedFile = input.files[0] ?? null;
 			this.error = null;
+			this.detectedMeetingTime = null;
+			this.selectedMeetingTimeId = null;
+
+			// Auto-detect meeting time from file metadata
+			if (this.selectedFile && this.classId) {
+				await this.detectMeetingTime();
+			}
 		}
 	}
 
-	private handleMeetingTimeChange(e: Event) {
-		const select = e.target as HTMLSelectElement;
-		this.selectedMeetingTimeId = select.value || null;
+	private async detectMeetingTime() {
+		if (!this.selectedFile || !this.classId) return;
+
+		this.detectingMeetingTime = true;
+
+		try {
+			const formData = new FormData();
+			formData.append("audio", this.selectedFile);
+			formData.append("class_id", this.classId);
+
+			// Send the file's original lastModified timestamp (preserved by browser)
+			// This is more accurate than server-side file timestamps
+			if (this.selectedFile.lastModified) {
+				formData.append(
+					"file_timestamp",
+					this.selectedFile.lastModified.toString(),
+				);
+			}
+
+			const response = await fetch("/api/transcriptions/detect-meeting-time", {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!response.ok) {
+				console.warn("Failed to detect meeting time");
+				return;
+			}
+
+			const data = await response.json();
+
+			if (data.detected && data.meeting_time_id) {
+				this.detectedMeetingTime = data.meeting_time_id;
+				this.selectedMeetingTimeId = data.meeting_time_id;
+			}
+		} catch (error) {
+			console.warn("Error detecting meeting time:", error);
+		} finally {
+			this.detectingMeetingTime = false;
+		}
+	}
+
+	private handleMeetingTimeSelect(meetingTimeId: string) {
+		this.selectedMeetingTimeId = meetingTimeId;
 	}
 
 	private handleSectionChange(e: Event) {
@@ -248,6 +351,8 @@ export class UploadRecordingModal extends LitElement {
 		this.selectedMeetingTimeId = null;
 		this.selectedSectionId = null;
 		this.error = null;
+		this.detectedMeetingTime = null;
+		this.detectingMeetingTime = false;
 		this.dispatchEvent(new CustomEvent("close"));
 	}
 
@@ -287,7 +392,7 @@ export class UploadRecordingModal extends LitElement {
 				throw new Error(data.error || "Upload failed");
 			}
 
-			// Success - close modal and notify parent
+			// Success
 			this.dispatchEvent(new CustomEvent("upload-success"));
 			this.handleClose();
 		} catch (error) {
@@ -342,28 +447,45 @@ export class UploadRecordingModal extends LitElement {
               <div class="help-text">Maximum file size: 100MB</div>
             </div>
 
-            <div class="form-group">
-              <label for="meeting-time">Meeting Time</label>
-              <select
-                id="meeting-time"
-                @change=${this.handleMeetingTimeChange}
-                ?disabled=${this.uploading}
-                required
-              >
-                <option value="">Select a meeting time...</option>
-                ${this.meetingTimes.map(
-									(meeting) => html`
-                  <option value=${meeting.id}>${meeting.label}</option>
-                `,
-								)}
-              </select>
-              <div class="help-text">
-                Select which meeting this recording is for
-              </div>
-            </div>
+            ${
+							this.selectedFile
+								? html`
+                <div class="form-group">
+                  <label>Meeting Time</label>
+                  ${
+										this.detectingMeetingTime
+											? html`<div class="detecting-text">Detecting meeting time from audio metadata...</div>`
+											: html`
+                      <div class="meeting-time-selector">
+                        ${this.meetingTimes.map(
+													(meeting) => html`
+                          <button
+                            type="button"
+                            class="meeting-time-button ${this.selectedMeetingTimeId === meeting.id ? "selected" : ""} ${this.detectedMeetingTime === meeting.id ? "detected" : ""}"
+                            @click=${() => this.handleMeetingTimeSelect(meeting.id)}
+                            ?disabled=${this.uploading}
+                          >
+                            ${meeting.label}
+                          </button>
+                        `,
+												)}
+                      </div>
+                    `
+									}
+                  <div class="help-text">
+                    ${
+											this.detectedMeetingTime
+												? "Auto-detected based on recording date. You can change if needed."
+												: "Select which meeting this recording is for"
+										}
+                  </div>
+                </div>
+              `
+								: ""
+						}
 
             ${
-							this.sections.length > 1
+							this.sections.length > 1 && this.selectedFile
 								? html`
                 <div class="form-group">
                   <label for="section">Section (optional)</label>

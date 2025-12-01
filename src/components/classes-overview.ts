@@ -232,6 +232,7 @@ export class ClassesOverview extends LitElement {
 	}
 
 	private async handleClassJoined() {
+		this.showRegistrationModal = false;
 		await this.loadClasses();
 	}
 

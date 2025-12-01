@@ -9,6 +9,14 @@ export interface Class {
 	semester: string;
 	year: number;
 	archived: boolean;
+	section_number?: string | null;
+	created_at: number;
+}
+
+export interface ClassSection {
+	id: string;
+	class_id: string;
+	section_number: string;
 	created_at: number;
 }
 
@@ -22,6 +30,7 @@ export interface MeetingTime {
 export interface ClassMember {
 	class_id: string;
 	user_id: number;
+	section_id: string | null;
 	enrolled_at: number;
 }
 
@@ -204,6 +213,7 @@ export function createClass(data: {
 	semester: string;
 	year: number;
 	meeting_times?: string[];
+	sections?: string[];
 }): Class {
 	const id = nanoid();
 	const now = Math.floor(Date.now() / 1000);
@@ -225,6 +235,13 @@ export function createClass(data: {
 	if (data.meeting_times && data.meeting_times.length > 0) {
 		for (const label of data.meeting_times) {
 			createMeetingTime(id, label);
+		}
+	}
+
+	// Create sections if provided
+	if (data.sections && data.sections.length > 0) {
+		for (const sectionNumber of data.sections) {
+			createClassSection(id, sectionNumber);
 		}
 	}
 
@@ -264,11 +281,15 @@ export function deleteClass(classId: string): void {
 /**
  * Enroll a user in a class
  */
-export function enrollUserInClass(userId: number, classId: string): void {
+export function enrollUserInClass(
+	userId: number,
+	classId: string,
+	sectionId?: string | null,
+): void {
 	const now = Math.floor(Date.now() / 1000);
 	db.run(
-		"INSERT OR IGNORE INTO class_members (class_id, user_id, enrolled_at) VALUES (?, ?, ?)",
-		[classId, userId, now],
+		"INSERT OR IGNORE INTO class_members (class_id, user_id, section_id, enrolled_at) VALUES (?, ?, ?, ?)",
+		[classId, userId, sectionId ?? null, now],
 	);
 }
 
@@ -371,6 +392,7 @@ export function getTranscriptionsForClass(classId: string) {
 				id: string;
 				user_id: number;
 				meeting_time_id: string | null;
+				section_id: string | null;
 				filename: string;
 				original_filename: string;
 				status: string;
@@ -381,7 +403,7 @@ export function getTranscriptionsForClass(classId: string) {
 			},
 			[string]
 		>(
-			`SELECT id, user_id, meeting_time_id, filename, original_filename, status, progress, error_message, created_at, updated_at
+			`SELECT id, user_id, meeting_time_id, section_id, filename, original_filename, status, progress, error_message, created_at, updated_at
        FROM transcriptions
        WHERE class_id = ?
        ORDER BY created_at DESC`,
@@ -409,6 +431,7 @@ export function searchClassesByCourseCode(courseCode: string): Class[] {
 export function joinClass(
 	classId: string,
 	userId: number,
+	sectionId?: string | null,
 ): { success: boolean; error?: string } {
 	// Find class by ID
 	const cls = db
@@ -434,12 +457,79 @@ export function joinClass(
 		return { success: false, error: "Already enrolled in this class" };
 	}
 
+	// Check if class has sections and require one to be selected
+	const sections = getClassSections(classId);
+	if (sections.length > 0 && !sectionId) {
+		return { success: false, error: "Please select a section" };
+	}
+
+	// If section provided, validate it exists and belongs to this class
+	if (sectionId) {
+		const section = sections.find((s) => s.id === sectionId);
+		if (!section) {
+			return { success: false, error: "Invalid section selected" };
+		}
+	}
+
 	// Enroll user
 	db.query(
-		"INSERT INTO class_members (class_id, user_id, enrolled_at) VALUES (?, ?, ?)",
-	).run(cls.id, userId, Math.floor(Date.now() / 1000));
+		"INSERT INTO class_members (class_id, user_id, section_id, enrolled_at) VALUES (?, ?, ?, ?)",
+	).run(cls.id, userId, sectionId ?? null, Math.floor(Date.now() / 1000));
 
 	return { success: true };
+}
+
+/**
+ * Create a section for a class
+ */
+export function createClassSection(
+	classId: string,
+	sectionNumber: string,
+): ClassSection {
+	const id = nanoid();
+	const now = Math.floor(Date.now() / 1000);
+
+	db.run(
+		"INSERT INTO class_sections (id, class_id, section_number, created_at) VALUES (?, ?, ?, ?)",
+		[id, classId, sectionNumber, now],
+	);
+
+	return {
+		id,
+		class_id: classId,
+		section_number: sectionNumber,
+		created_at: now,
+	};
+}
+
+/**
+ * Get all sections for a class
+ */
+export function getClassSections(classId: string): ClassSection[] {
+	return db
+		.query<ClassSection, [string]>(
+			"SELECT * FROM class_sections WHERE class_id = ? ORDER BY section_number ASC",
+		)
+		.all(classId);
+}
+
+/**
+ * Delete a class section
+ */
+export function deleteClassSection(sectionId: string): void {
+	db.run("DELETE FROM class_sections WHERE id = ?", [sectionId]);
+}
+
+/**
+ * Get user's enrolled section for a class
+ */
+export function getUserSection(userId: number, classId: string): string | null {
+	const result = db
+		.query<{ section_id: string | null }, [string, number]>(
+			"SELECT section_id FROM class_members WHERE class_id = ? AND user_id = ?",
+		)
+		.get(classId, userId);
+	return result?.section_id ?? null;
 }
 
 /**

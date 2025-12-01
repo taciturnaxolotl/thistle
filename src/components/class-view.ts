@@ -24,6 +24,7 @@ interface Transcription {
 	id: string;
 	user_id: number;
 	meeting_time_id: string | null;
+	section_id: string | null;
 	filename: string;
 	original_filename: string;
 	status:
@@ -42,11 +43,19 @@ interface Transcription {
 	audioUrl?: string;
 }
 
+interface ClassSection {
+	id: string;
+	section_number: string;
+}
+
 @customElement("class-view")
 export class ClassView extends LitElement {
 	@state() classId = "";
 	@state() classInfo: Class | null = null;
 	@state() meetingTimes: MeetingTime[] = [];
+	@state() sections: ClassSection[] = [];
+	@state() userSection: string | null = null;
+	@state() selectedSectionFilter: string | null = null;
 	@state() transcriptions: Transcription[] = [];
 	@state() isLoading = true;
 	@state() error: string | null = null;
@@ -363,7 +372,14 @@ export class ClassView extends LitElement {
 			const data = await response.json();
 			this.classInfo = data.class;
 			this.meetingTimes = data.meetingTimes || [];
+			this.sections = data.sections || [];
+			this.userSection = data.userSection || null;
 			this.transcriptions = data.transcriptions || [];
+
+			// Default to user's section for filtering
+			if (this.userSection && !this.selectedSectionFilter) {
+				this.selectedSectionFilter = this.userSection;
+			}
 
 			// Load VTT for completed transcriptions
 			await this.loadVTTForCompleted();
@@ -450,12 +466,33 @@ export class ClassView extends LitElement {
 	}
 
 	private get filteredTranscriptions() {
-		if (!this.searchQuery) return this.transcriptions;
+		let filtered = this.transcriptions;
 
-		const query = this.searchQuery.toLowerCase();
-		return this.transcriptions.filter((t) =>
-			t.original_filename.toLowerCase().includes(query),
-		);
+		// Filter by selected section (or user's section by default)
+		const sectionFilter = this.selectedSectionFilter || this.userSection;
+		
+		// Only filter by section if:
+		// 1. There are sections in the class
+		// 2. User has a section OR has selected one
+		if (this.sections.length > 0 && sectionFilter) {
+			// For admins: show all transcriptions
+			// For users: show their section + transcriptions with no section (legacy/unassigned)
+			if (!this.isAdmin) {
+				filtered = filtered.filter(
+					(t) => t.section_id === sectionFilter || t.section_id === null,
+				);
+			}
+		}
+
+		// Filter by search query
+		if (this.searchQuery) {
+			const query = this.searchQuery.toLowerCase();
+			filtered = filtered.filter((t) =>
+				t.original_filename.toLowerCase().includes(query),
+			);
+		}
+
+		return filtered;
 	}
 
 	private formatDate(timestamp: number): string {
@@ -521,7 +558,14 @@ export class ClassView extends LitElement {
             <div class="course-code">${this.classInfo.course_code}</div>
             <h1>${this.classInfo.name}</h1>
             <div class="professor">Professor: ${this.classInfo.professor}</div>
-            <div class="semester">${this.classInfo.semester} ${this.classInfo.year}</div>
+            <div class="semester">
+              ${this.classInfo.semester} ${this.classInfo.year}
+              ${
+								this.userSection
+									? ` • Section ${this.sections.find((s) => s.id === this.userSection)?.section_number || ""}`
+									: ""
+							}
+            </div>
           </div>
         </div>
 
@@ -549,6 +593,25 @@ export class ClassView extends LitElement {
         `
 						: html`
         <div class="search-upload">
+          ${
+						this.sections.length > 1
+							? html`
+              <select
+                style="padding: 0.5rem 0.75rem; border: 1px solid var(--secondary); border-radius: 4px; font-size: 0.875rem; color: var(--text); background: var(--background);"
+                @change=${(e: Event) => {
+									this.selectedSectionFilter =
+										(e.target as HTMLSelectElement).value || null;
+								}}
+                .value=${this.selectedSectionFilter || ""}
+              >
+                ${this.sections.map(
+									(s) =>
+										html`<option value=${s.id} ?selected=${s.id === this.selectedSectionFilter}>${s.section_number}</option>`,
+								)}
+              </select>
+            `
+							: ""
+					}
           <input
             type="text"
             class="search-box"
@@ -631,6 +694,8 @@ export class ClassView extends LitElement {
         ?open=${this.uploadModalOpen}
         .classId=${this.classId}
         .meetingTimes=${this.meetingTimes.map((m) => ({ id: m.id, label: m.label }))}
+        .sections=${this.sections}
+        .userSection=${this.userSection}
         @close=${this.handleModalClose}
         @upload-success=${this.handleUploadSuccess}
       ></upload-recording-modal>

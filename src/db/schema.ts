@@ -225,6 +225,34 @@ const migrations = [
       VALUES (0, 'ghosty@thistle.internal', NULL, 'Ghosty', '👻', 'user', strftime('%s', 'now'));
     `,
 	},
+	{
+		version: 2,
+		name: "Add sections support to classes and class members",
+		sql: `
+			-- Add section_number to classes (nullable for existing classes)
+			ALTER TABLE classes ADD COLUMN section_number TEXT;
+
+			-- Add section_id to class_members (nullable - NULL means default section)
+			ALTER TABLE class_members ADD COLUMN section_id TEXT;
+
+			-- Create sections table to track all available sections for a class
+			CREATE TABLE IF NOT EXISTS class_sections (
+				id TEXT PRIMARY KEY,
+				class_id TEXT NOT NULL,
+				section_number TEXT NOT NULL,
+				created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+				FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+				UNIQUE(class_id, section_number)
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_class_sections_class_id ON class_sections(class_id);
+
+			-- Add section_id to transcriptions to track which section uploaded it
+			ALTER TABLE transcriptions ADD COLUMN section_id TEXT;
+
+			CREATE INDEX IF NOT EXISTS idx_transcriptions_section_id ON transcriptions(section_id);
+		`,
+	},
 ];
 
 function getCurrentVersion(): number {

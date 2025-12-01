@@ -6,14 +6,22 @@ interface MeetingTime {
 	label: string;
 }
 
+interface ClassSection {
+	id: string;
+	section_number: string;
+}
+
 @customElement("upload-recording-modal")
 export class UploadRecordingModal extends LitElement {
 	@property({ type: Boolean }) open = false;
 	@property({ type: String }) classId = "";
 	@property({ type: Array }) meetingTimes: MeetingTime[] = [];
+	@property({ type: Array }) sections: ClassSection[] = [];
+	@property({ type: String }) userSection: string | null = null;
 
 	@state() private selectedFile: File | null = null;
 	@state() private selectedMeetingTimeId: string | null = null;
+	@state() private selectedSectionId: string | null = null;
 	@state() private uploading = false;
 	@state() private error: string | null = null;
 
@@ -228,11 +236,17 @@ export class UploadRecordingModal extends LitElement {
 		this.selectedMeetingTimeId = select.value || null;
 	}
 
+	private handleSectionChange(e: Event) {
+		const select = e.target as HTMLSelectElement;
+		this.selectedSectionId = select.value || null;
+	}
+
 	private handleClose() {
 		if (this.uploading) return;
 		this.open = false;
 		this.selectedFile = null;
 		this.selectedMeetingTimeId = null;
+		this.selectedSectionId = null;
 		this.error = null;
 		this.dispatchEvent(new CustomEvent("close"));
 	}
@@ -256,6 +270,12 @@ export class UploadRecordingModal extends LitElement {
 			formData.append("audio", this.selectedFile);
 			formData.append("class_id", this.classId);
 			formData.append("meeting_time_id", this.selectedMeetingTimeId);
+
+			// Use user's section by default, or allow override
+			const sectionToUse = this.selectedSectionId || this.userSection;
+			if (sectionToUse) {
+				formData.append("section_id", sectionToUse);
+			}
 
 			const response = await fetch("/api/transcriptions", {
 				method: "POST",
@@ -341,6 +361,31 @@ export class UploadRecordingModal extends LitElement {
                 Select which meeting this recording is for
               </div>
             </div>
+
+            ${
+							this.sections.length > 1
+								? html`
+                <div class="form-group">
+                  <label for="section">Section (optional)</label>
+                  <select
+                    id="section"
+                    @change=${this.handleSectionChange}
+                    ?disabled=${this.uploading}
+                  >
+                    <option value="">Use my section ${this.userSection ? `(${this.sections.find((s) => s.id === this.userSection)?.section_number})` : ""}</option>
+                    ${this.sections.map(
+											(section) => html`
+                      <option value=${section.id}>${section.section_number}</option>
+                    `,
+										)}
+                  </select>
+                  <div class="help-text">
+                    Override which section this recording is for
+                  </div>
+                </div>
+              `
+								: ""
+						}
           </form>
 
           <div class="modal-footer">

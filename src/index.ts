@@ -48,15 +48,18 @@ import {
 	getClassById,
 	getClassesForUser,
 	getClassMembers,
+	getClassSections,
 	getMeetingById,
 	getMeetingTimesForClass,
 	getTranscriptionsForClass,
+	getUserSection,
 	isUserEnrolledInClass,
 	joinClass,
 	removeUserFromClass,
 	searchClassesByCourseCode,
 	toggleClassArchive,
 	updateMeetingTime,
+	createClassSection,
 } from "./lib/classes";
 import { sendEmail } from "./lib/email";
 import {
@@ -2224,6 +2227,7 @@ const server = Bun.serve({
 					const meetingTimeId = formData.get("meeting_time_id") as
 						| string
 						| null;
+					const sectionId = formData.get("section_id") as string | null;
 
 					if (!file) throw ValidationErrors.missingField("audio");
 
@@ -2292,12 +2296,13 @@ const server = Bun.serve({
 
 					// Create database record
 					db.run(
-						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+						"INSERT INTO transcriptions (id, user_id, class_id, meeting_time_id, section_id, filename, original_filename, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 						[
 							transcriptionId,
 							user.id,
 							classId,
 							meetingTimeId,
+							sectionId,
 							filename,
 							file.name,
 							"pending",
@@ -2915,12 +2920,7 @@ const server = Bun.serve({
 						cursor,
 					);
 
-					// For admin, return flat array. For users, group by semester/year
-					if (user.role === "admin") {
-						return Response.json(result.data);
-					}
-
-					// Group by semester/year for regular users
+					// Group by semester/year for all users
 					const grouped: Record<
 						string,
 						Array<{
@@ -3019,6 +3019,7 @@ const server = Bun.serve({
 						semester,
 						year,
 						meeting_times,
+						sections: body.sections,
 					});
 
 					return Response.json(newClass, { status: 201 });
@@ -3048,10 +3049,11 @@ const server = Bun.serve({
 						.all(user.id)
 						.map((row) => row.class_id);
 
-					// Add is_enrolled flag to each class
+					// Add is_enrolled flag and sections to each class
 					const classesWithEnrollment = classes.map((cls) => ({
 						...cls,
 						is_enrolled: enrolledClassIds.includes(cls.id),
+						sections: getClassSections(cls.id),
 					}));
 
 					return Response.json({ classes: classesWithEnrollment });
@@ -3066,6 +3068,7 @@ const server = Bun.serve({
 					const user = requireAuth(req);
 					const body = await req.json();
 					const classId = body.class_id;
+					const sectionId = body.section_id || null;
 
 					const classIdValidation = validateClassId(classId);
 					if (!classIdValidation.valid) {
@@ -3075,7 +3078,7 @@ const server = Bun.serve({
 						);
 					}
 
-					const result = joinClass(classId, user.id);
+					const result = joinClass(classId, user.id, sectionId);
 
 					if (!result.success) {
 						return Response.json({ error: result.error }, { status: 400 });
@@ -3184,11 +3187,15 @@ const server = Bun.serve({
 					}
 
 					const meetingTimes = getMeetingTimesForClass(classId);
+					const sections = getClassSections(classId);
 					const transcriptions = getTranscriptionsForClass(classId);
+					const userSection = getUserSection(user.id, classId);
 
 					return Response.json({
 						class: classInfo,
 						meetingTimes,
+						sections,
+						userSection,
 						transcriptions,
 					});
 				} catch (error) {
@@ -3346,6 +3353,52 @@ const server = Bun.serve({
 
 					const meetingTime = createMeetingTime(classId, label);
 					return Response.json(meetingTime, { status: 201 });
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:id/sections": {
+			POST: async (req) => {
+				try {
+					requireAdmin(req);
+					const classId = req.params.id;
+					const body = await req.json();
+					const { section_number } = body;
+
+					if (!section_number) {
+						return Response.json({ error: "Section number required" }, { status: 400 });
+					}
+
+					const section = createClassSection(classId, section_number);
+					return Response.json(section);
+				} catch (error) {
+					return handleError(error);
+				}
+			},
+		},
+		"/api/classes/:classId/sections/:sectionId": {
+			DELETE: async (req) => {
+				try {
+					requireAdmin(req);
+					const sectionId = req.params.sectionId;
+
+					// Check if any students are in this section
+					const studentsInSection = db
+						.query<{ count: number }, [string]>(
+							"SELECT COUNT(*) as count FROM class_members WHERE section_id = ?",
+						)
+						.get(sectionId);
+
+					if (studentsInSection && studentsInSection.count > 0) {
+						return Response.json(
+							{ error: "Cannot delete section with enrolled students" },
+							{ status: 400 },
+						);
+					}
+
+					db.run("DELETE FROM class_sections WHERE id = ?", [sectionId]);
+					return new Response(null, { status: 204 });
 				} catch (error) {
 					return handleError(error);
 				}

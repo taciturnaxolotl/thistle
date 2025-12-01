@@ -40,7 +40,13 @@ export class AdminClasses extends LitElement {
 	@state() activeTab: "classes" | "waitlist" = "classes";
 	@state() approvingEntry: WaitlistEntry | null = null;
 	@state() showModal = false;
+	@state() showClassSettingsModal = false;
+	@state() editingClassId: string | null = null;
+	@state() editingClassInfo: Class | null = null;
+	@state() editingClassSections: { id: string; section_number: string }[] = [];
+	@state() newSectionNumber = "";
 	@state() meetingTimes: MeetingTime[] = [];
+	@state() sections: string[] = [];
 	@state() editingClass = {
 		courseCode: "",
 		courseName: "",
@@ -664,6 +670,76 @@ export class AdminClasses extends LitElement {
 		this.showModal = true;
 	}
 
+	private async handleEditSections(classId: string) {
+		try {
+			const response = await fetch(`/api/classes/${classId}`);
+			if (!response.ok) throw new Error("Failed to load class");
+			
+			const data = await response.json();
+			this.editingClassId = classId;
+			this.editingClassInfo = data.class;
+			this.editingClassSections = data.sections || [];
+			this.newSectionNumber = "";
+			this.showClassSettingsModal = true;
+		} catch {
+			this.error = "Failed to load class details";
+		}
+	}
+
+	private async handleAddSection() {
+		if (!this.newSectionNumber.trim() || !this.editingClassId) return;
+
+		try {
+			const response = await fetch(`/api/classes/${this.editingClassId}/sections`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ section_number: this.newSectionNumber.trim() }),
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to add section";
+				return;
+			}
+
+			const newSection = await response.json();
+			this.editingClassSections = [...this.editingClassSections, newSection];
+			this.newSectionNumber = "";
+		} catch {
+			this.error = "Failed to add section";
+		}
+	}
+
+	private async handleDeleteSection(sectionId: string) {
+		if (!this.editingClassId) return;
+
+		try {
+			const response = await fetch(`/api/classes/${this.editingClassId}/sections/${sectionId}`, {
+				method: "DELETE",
+			});
+
+			if (!response.ok) {
+				const data = await response.json();
+				this.error = data.error || "Failed to delete section";
+				return;
+			}
+
+			this.editingClassSections = this.editingClassSections.filter(s => s.id !== sectionId);
+		} catch {
+			this.error = "Failed to delete section";
+		}
+	}
+
+	private handleCloseSectionsModal() {
+		this.showClassSettingsModal = false;
+		this.editingClassId = null;
+		this.editingClassInfo = null;
+		this.editingClassSections = [];
+		this.newSectionNumber = "";
+		this.loadData();
+	}
+
+
 	private getFilteredClasses() {
 		if (!this.searchTerm) return this.classes;
 
@@ -714,6 +790,7 @@ export class AdminClasses extends LitElement {
 			}
 
       ${this.showModal ? this.renderApprovalModal() : ""}
+      ${this.showClassSettingsModal ? this.renderClassSettingsModal() : ""}
     `;
 	}
 
@@ -743,7 +820,11 @@ export class AdminClasses extends LitElement {
           <div class="classes-grid">
             ${filteredClasses.map(
 							(cls) => html`
-              <div class="class-card ${cls.archived ? "archived" : ""}">
+              <div 
+                class="class-card ${cls.archived ? "archived" : ""}"
+                @click=${() => this.handleEditSections(cls.id)}
+                style="cursor: pointer;"
+              >
                 <div class="class-header">
                   <div class="class-info">
                     <div class="course-code">${cls.course_code}</div>
@@ -756,20 +837,6 @@ export class AdminClasses extends LitElement {
                       ${cls.archived ? html`<span class="badge archived">Archived</span>` : ""}
                     </div>
                   </div>
-                  <div class="actions">
-                    <button
-                      class="btn-archive"
-                      @click=${() => this.handleToggleArchive(cls.id)}
-                    >
-                      ${cls.archived ? "Unarchive" : "Archive"}
-                    </button>
-                    <button
-                      class="btn-delete"
-                      @click=${() => this.handleDeleteClick(cls.id, "class")}
-                    >
-                      ${this.getDeleteButtonText(cls.id, "class")}
-                    </button>
-                  </div>
                 </div>
               </div>
             `,
@@ -777,6 +844,119 @@ export class AdminClasses extends LitElement {
           </div>
         `
 			}
+    `;
+	}
+
+	private renderClassSettingsModal() {
+		if (!this.showClassSettingsModal || !this.editingClassInfo) return html``;
+
+		return html`
+      <div class="modal-overlay" @click=${this.handleCloseSectionsModal}>
+        <div class="modal" @click=${(e: Event) => e.stopPropagation()} style="max-width: 48rem;">
+          <div class="modal-header">
+            <h2 class="modal-title">${this.editingClassInfo.course_code} - ${this.editingClassInfo.name}</h2>
+            <button class="close-btn" @click=${this.handleCloseSectionsModal} type="button">×</button>
+          </div>
+
+          <div class="tabs" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--secondary);">
+              <button
+                style="padding: 0.75rem 1.5rem; background: transparent; color: var(--primary); border: none; border-bottom: 2px solid var(--primary); font-weight: 600; cursor: pointer; margin-bottom: -2px;"
+              >
+                Sections
+              </button>
+            </div>
+          </div>
+
+          <!-- Sections Tab -->
+          <div style="margin-bottom: 1.5rem;">
+            <h3 style="margin-bottom: 1rem; color: var(--text);">Manage Sections</h3>
+            
+            <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
+              <input
+                type="text"
+                placeholder="Section number (e.g., 01, 02, A, B)"
+                .value=${this.newSectionNumber}
+                @input=${(e: Event) => {
+									this.newSectionNumber = (e.target as HTMLInputElement).value;
+								}}
+                @keypress=${(e: KeyboardEvent) => {
+									if (e.key === "Enter") {
+										e.preventDefault();
+										this.handleAddSection();
+									}
+								}}
+                style="flex: 1; padding: 0.75rem; border: 2px solid var(--secondary); border-radius: 6px; font-size: 1rem; background: var(--background); color: var(--text);"
+              />
+              <button
+                @click=${this.handleAddSection}
+                ?disabled=${!this.newSectionNumber.trim()}
+                style="padding: 0.75rem 1.5rem; background: var(--primary); color: white; border: 2px solid var(--primary); border-radius: 6px; font-weight: 500; cursor: pointer; white-space: nowrap;"
+              >
+                Add Section
+              </button>
+            </div>
+
+            ${
+							this.editingClassSections.length === 0
+								? html`<p style="color: var(--paynes-gray); text-align: center; padding: 2rem;">No sections yet. Add one above.</p>`
+								: html`
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                  ${this.editingClassSections.map(
+										(section) => html`
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: color-mix(in srgb, var(--secondary) 30%, transparent); border-radius: 6px;">
+                      <span style="font-weight: 500;">Section ${section.section_number}</span>
+                      <button
+                        @click=${(e: Event) => {
+													e.stopPropagation();
+													this.handleDeleteSection(section.id);
+												}}
+                        style="padding: 0.5rem 1rem; background: transparent; color: red; border: 2px solid red; border-radius: 4px; font-size: 0.875rem; cursor: pointer;"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  `,
+									)}
+                </div>
+              `
+						}
+          </div>
+
+          <!-- Actions -->
+          <div style="display: flex; gap: 0.75rem; justify-content: space-between; padding-top: 1.5rem; border-top: 2px solid var(--secondary);">
+            <div style="display: flex; gap: 0.75rem;">
+              <button
+                @click=${(e: Event) => {
+									e.stopPropagation();
+									this.handleToggleArchive(this.editingClassId!);
+									this.handleCloseSectionsModal();
+								}}
+                style="padding: 0.75rem 1.5rem; background: transparent; color: var(--primary); border: 2px solid var(--primary); border-radius: 6px; font-weight: 500; cursor: pointer;"
+              >
+                ${this.editingClassInfo.archived ? "Unarchive" : "Archive"} Class
+              </button>
+              <button
+                @click=${(e: Event) => {
+									e.stopPropagation();
+									this.handleDeleteClick(this.editingClassId!, "class");
+								}}
+                style="padding: 0.75rem 1.5rem; background: transparent; color: red; border: 2px solid red; border-radius: 6px; font-weight: 500; cursor: pointer;"
+              >
+                ${this.getDeleteButtonText(this.editingClassId!, "class")}
+              </button>
+            </div>
+            <button
+              @click=${this.handleCloseSectionsModal}
+              style="padding: 0.75rem 1.5rem; background: var(--primary); color: white; border: 2px solid var(--primary); border-radius: 6px; font-weight: 500; cursor: pointer;"
+            >
+              Done
+            </button>
+          </div>
+
+          ${this.error ? html`<div style="color: red; margin-top: 1rem; padding: 0.75rem; background: color-mix(in srgb, red 10%, transparent); border-radius: 6px;">${this.error}</div>` : ""}
+        </div>
+      </div>
     `;
 	}
 
@@ -865,6 +1045,14 @@ export class AdminClasses extends LitElement {
 		this.meetingTimes = e.detail;
 	}
 
+	private handleSectionsChange(e: Event) {
+		const value = (e.target as HTMLInputElement).value;
+		this.sections = value
+			.split(",")
+			.map((s) => s.trim())
+			.filter((s) => s);
+	}
+
 	private handleClassFieldInput(field: string, e: Event) {
 		const value = (e.target as HTMLInputElement | HTMLSelectElement).value;
 		this.editingClass = { ...this.editingClass, [field]: value };
@@ -874,6 +1062,7 @@ export class AdminClasses extends LitElement {
 		this.showModal = false;
 		this.approvingEntry = null;
 		this.meetingTimes = [];
+		this.sections = [];
 		this.editingClass = {
 			courseCode: "",
 			courseName: "",
@@ -903,6 +1092,7 @@ export class AdminClasses extends LitElement {
 					semester: this.editingClass.semester,
 					year: this.editingClass.year,
 					meeting_times: labels,
+					sections: this.sections.length > 0 ? this.sections : undefined,
 				}),
 			});
 
@@ -1018,6 +1208,16 @@ export class AdminClasses extends LitElement {
                 .value=${this.meetingTimes}
                 @change=${this.handleMeetingTimesChange}
               ></meeting-time-picker>
+            </div>
+            <div class="form-group form-group-full">
+              <label>Sections (optional)</label>
+              <input
+                type="text"
+                placeholder="e.g., 01, 02, 03 or A, B, C"
+                .value=${this.sections.join(", ")}
+                @input=${this.handleSectionsChange}
+              />
+              <div class="help-text">Comma-separated list of section numbers. Leave blank if no sections.</div>
             </div>
           </div>
 

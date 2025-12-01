@@ -10,6 +10,7 @@ interface ClassResult {
 	professor: string;
 	semester: string;
 	year: number;
+	sections?: { id: string; section_number: string }[];
 	is_enrolled?: boolean;
 }
 
@@ -23,6 +24,7 @@ export class ClassRegistrationModal extends LitElement {
 	@state() error = "";
 	@state() hasSearched = false;
 	@state() showWaitlistForm = false;
+	@state() selectedSections: Map<string, string> = new Map();
 	@state() waitlistData = {
 		courseCode: "",
 		courseName: "",
@@ -417,6 +419,7 @@ export class ClassRegistrationModal extends LitElement {
 		this.error = "";
 		this.hasSearched = false;
 		this.showWaitlistForm = false;
+		this.selectedSections = new Map();
 		this.waitlistData = {
 			courseCode: "",
 			courseName: "",
@@ -468,7 +471,18 @@ export class ClassRegistrationModal extends LitElement {
 		}
 	}
 
-	private async handleJoin(classId: string) {
+	private async handleJoin(
+		classId: string,
+		sections?: { id: string; section_number: string }[],
+	) {
+		// If class has sections, require section selection
+		const selectedSection = this.selectedSections.get(classId);
+		if (sections && sections.length > 0 && !selectedSection) {
+			this.error = "Please select a section";
+			this.requestUpdate();
+			return;
+		}
+
 		this.isJoining = true;
 		this.error = "";
 
@@ -476,22 +490,28 @@ export class ClassRegistrationModal extends LitElement {
 			const response = await fetch("/api/classes/join", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ class_id: classId }),
+				body: JSON.stringify({
+					class_id: classId,
+					section_id: selectedSection || null,
+				}),
 			});
 
 			if (!response.ok) {
 				const data = await response.json();
 				this.error = data.error || "Failed to join class";
+				this.isJoining = false;
+				this.requestUpdate();
 				return;
 			}
 
 			// Success - notify parent and close
 			this.dispatchEvent(new CustomEvent("class-joined"));
 			this.handleClose();
-		} catch {
+		} catch (error) {
+			console.error("Failed to join class:", error);
 			this.error = "Failed to join class. Please try again.";
-		} finally {
 			this.isJoining = false;
+			this.requestUpdate();
 		}
 	}
 
@@ -706,11 +726,7 @@ export class ClassRegistrationModal extends LitElement {
                     <div class="results-grid">
                       ${this.results.map(
 												(cls) => html`
-                        <button
-                          class="class-card ${cls.is_enrolled ? "enrolled" : ""}"
-                          @click=${() => !cls.is_enrolled && this.handleJoin(cls.id)}
-                          ?disabled=${this.isJoining || cls.is_enrolled}
-                        >
+                        <div class="class-card ${cls.is_enrolled ? "enrolled" : ""}">
                           <div class="class-header">
                             <div class="class-info">
                               <div class="course-code">
@@ -722,6 +738,38 @@ export class ClassRegistrationModal extends LitElement {
                                 <span>👤 ${cls.professor}</span>
                                 <span>📅 ${cls.semester} ${cls.year}</span>
                               </div>
+                              ${
+																!cls.is_enrolled &&
+																cls.sections &&
+																cls.sections.length > 0
+																	? html`
+                                <div style="margin-top: 0.75rem;">
+                                  <label style="font-size: 0.75rem; margin-bottom: 0.25rem;">Select Section *</label>
+                                  <select
+                                    style="width: 100%; padding: 0.5rem; border: 2px solid var(--secondary); border-radius: 4px; font-size: 0.875rem; background: var(--background); color: var(--text);"
+                                    @change=${(e: Event) => {
+																			const sectionId = (
+																				e.target as HTMLSelectElement
+																			).value;
+																			if (sectionId) {
+																				this.selectedSections.set(cls.id, sectionId);
+																			} else {
+																				this.selectedSections.delete(cls.id);
+																			}
+																			this.error = "";
+																			this.requestUpdate();
+																		}}
+                                  >
+                                    <option value="">Choose a section...</option>
+                                    ${cls.sections.map(
+																			(s) =>
+																				html`<option value="${s.id}" ?selected=${this.selectedSections.get(cls.id) === s.id}>${s.section_number}</option>`,
+																		)}
+                                  </select>
+                                </div>
+                              `
+																	: ""
+															}
                             </div>
                             ${
 															!cls.is_enrolled
@@ -731,7 +779,8 @@ export class ClassRegistrationModal extends LitElement {
                                 ?disabled=${this.isJoining}
                                 @click=${(e: Event) => {
 																	e.stopPropagation();
-																	this.handleJoin(cls.id);
+																	console.log('Join button clicked for class:', cls.id, 'sections:', cls.sections);
+																	this.handleJoin(cls.id, cls.sections);
 																}}
                               >
                                 ${this.isJoining ? "Joining..." : "Join"}
@@ -740,7 +789,7 @@ export class ClassRegistrationModal extends LitElement {
 																: ""
 														}
                           </div>
-                        </button>
+                        </div>
                       `,
 											)}
                     </div>

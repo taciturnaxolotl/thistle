@@ -45,6 +45,7 @@ cd whisper-server
 ```
 
 Or manually:
+
 ```bash
 cd whisper-server
 pip install -r requirements.txt
@@ -134,5 +135,5 @@ Oh last two points. Please please please use standard commits for my sanity and 
 </p>
 
 <p align="center">
-	<a href="https://github.com/taciturnaxolotl/thistle/blob/main/LICENSE.md"><img src="https://img.shields.io/static/v1.svg?style=for-the-badge&label=License&message=MIT&logoColor=d9e0ee&colorA=363a4f&colorB=b7bdf8"/></a>
+	<a href="https://github.com/taciturnaxolotl/thistle/blob/main/LICENSE.md"><img src="https://img.shields.io/static/v1.svg?style=for-the-badge&label=License&message=O'Saasy&logoColor=d9e0ee&colorA=363a4f&colorB=b7bdf8"/></a>
 </p>
